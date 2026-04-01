@@ -1,0 +1,101 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: af-hub-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: af_hub
+      POSTGRES_PASSWORD: af_hub_pass
+      POSTGRES_DB: af_hub
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U af_hub"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: af-hub-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: af-hub-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: af-hub-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://af_hub:af_hub_pass@postgres:5432/af_hub?schema=public
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: af-hub
+      MINIO_USE_SSL: "false"
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      NODE_ENV: production
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: af-hub-worker
+    restart: unless-stopped
+    command: ["node", "dist/modules/automations/worker.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://af_hub:af_hub_pass@postgres:5432/af_hub?schema=public
+      REDIS_URL: redis://redis:6379
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      NODE_ENV: production
+
+volumes:
+  pg_data:
+  redis_data:
+  minio_data:
