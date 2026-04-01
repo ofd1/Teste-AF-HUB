@@ -1,0 +1,320 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── AUTH & USERS ───────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  MANAGER
+  ANALYST
+  VIEWER
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         Role     @default(ANALYST)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  apps           App[]
+  appVersions    AppVersion[]
+  conversations  Conversation[]
+  automations    Automation[]
+  auditLogs      AuditLog[]
+  dataSchemas    DataSchema[]
+
+  @@map("users")
+}
+
+// ─── APPS & MARKETPLACE ────────────────────────────────────
+
+enum AppStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AppCategory {
+  BALANCETE
+  PITCH
+  DISTRIBUICAO
+  MERCADO
+  CUSTOM
+}
+
+model App {
+  id          String      @id @default(uuid())
+  name        String
+  slug        String      @unique
+  description String?
+  category    AppCategory @default(CUSTOM)
+  status      AppStatus   @default(DRAFT)
+  icon        String?
+  tags        String[]    @default([])
+  isPublic    Boolean     @default(false) @map("is_public")
+
+  authorId String @map("author_id")
+  author   User   @relation(fields: [authorId], references: [id])
+
+  currentVersionId String?     @unique @map("current_version_id")
+  currentVersion   AppVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+
+  versions    AppVersion[] @relation("AppVersions")
+  deployments Deployment[]
+  auditLogs   AuditLog[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("apps")
+}
+
+model AppVersion {
+  id          String @id @default(uuid())
+  version     String // semver e.g. "1.0.0"
+  changelog   String?
+  sourceCode  String @map("source_code") // JSON blob with all files
+  config      Json?  // app configuration
+  aiGenerated Boolean @default(false) @map("ai_generated")
+
+  appId String @map("app_id")
+  app   App    @relation("AppVersions", fields: [appId], references: [id], onDelete: Cascade)
+
+  currentOfApp App? @relation("CurrentVersion")
+
+  authorId String @map("author_id")
+  author   User   @relation(fields: [authorId], references: [id])
+
+  deployments Deployment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([appId, version])
+  @@map("app_versions")
+}
+
+model Deployment {
+  id            String @id @default(uuid())
+  containerId   String? @map("container_id")
+  containerPort Int?    @map("container_port")
+  status        String  @default("pending") // pending, building, running, stopped, failed
+  url           String?
+  logs          String?
+  environment   Json?
+
+  appId      String     @map("app_id")
+  app        App        @relation(fields: [appId], references: [id], onDelete: Cascade)
+  versionId  String     @map("version_id")
+  version    AppVersion @relation(fields: [versionId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("deployments")
+}
+
+// ─── AI ORCHESTRATOR ────────────────────────────────────────
+
+enum ConversationStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+}
+
+model Conversation {
+  id       String             @id @default(uuid())
+  title    String?
+  status   ConversationStatus @default(ACTIVE)
+  context  Json?              // accumulated context for the AI
+  metadata Json?
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  messages Message[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("conversations")
+}
+
+model Message {
+  id      String @id @default(uuid())
+  role    String // user, assistant, system
+  content String
+  metadata Json? // tokens used, model, latency, etc.
+
+  conversationId String       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("messages")
+}
+
+// ─── TEMPLATES ──────────────────────────────────────────────
+
+model Template {
+  id          String      @id @default(uuid())
+  name        String
+  slug        String      @unique
+  description String?
+  category    AppCategory
+  schema      Json        // input fields definition
+  promptTemplate String   @map("prompt_template") // prompt with {{variables}}
+  outputFormat   String   @default("json") @map("output_format")
+  isActive    Boolean     @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("templates")
+}
+
+// ─── DATA SERVICE ───────────────────────────────────────────
+
+model DataSchema {
+  id          String @id @default(uuid())
+  name        String
+  slug        String @unique
+  description String?
+  tableName   String @unique @map("table_name")
+  columns     Json   // column definitions [{name, type, nullable, default, ...}]
+  indexes     Json?  // index definitions
+  metadata    Json?
+
+  authorId String @map("author_id")
+  author   User   @relation(fields: [authorId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("data_schemas")
+}
+
+// ─── INTEGRATIONS ───────────────────────────────────────────
+
+model Integration {
+  id          String  @id @default(uuid())
+  name        String
+  slug        String  @unique
+  provider    String  // b3, cvm, bloomberg, google, slack
+  config      Json    // connection config (encrypted secrets)
+  isActive    Boolean @default(true) @map("is_active")
+  lastSyncAt  DateTime? @map("last_sync_at")
+  syncStatus  String?   @map("sync_status")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("integrations")
+}
+
+// ─── AUTOMATIONS ────────────────────────────────────────────
+
+enum AutomationTrigger {
+  CRON
+  EVENT
+  WEBHOOK
+  MANUAL
+}
+
+enum AutomationStatus {
+  ACTIVE
+  PAUSED
+  FAILED
+  COMPLETED
+}
+
+model Automation {
+  id          String            @id @default(uuid())
+  name        String
+  description String?
+  trigger     AutomationTrigger
+  triggerConfig Json?           @map("trigger_config") // cron expression, event name, etc.
+  actions     Json              // array of action steps
+  status      AutomationStatus  @default(ACTIVE)
+  lastRunAt   DateTime?         @map("last_run_at")
+  lastRunStatus String?         @map("last_run_status")
+
+  authorId String @map("author_id")
+  author   User   @relation(fields: [authorId], references: [id])
+
+  runs AutomationRun[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("automations")
+}
+
+model AutomationRun {
+  id        String   @id @default(uuid())
+  status    String   @default("running") // running, completed, failed
+  input     Json?
+  output    Json?
+  error     String?
+  duration  Int?     // ms
+  logs      String?
+
+  automationId String     @map("automation_id")
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  startedAt   DateTime @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@map("automation_runs")
+}
+
+// ─── POLICY & AUDIT ─────────────────────────────────────────
+
+model PolicyRule {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  resource    String  // app, data, integration, automation
+  action      String  // create, read, update, delete, deploy, execute
+  conditions  Json    // rule conditions
+  effect      String  @default("deny") // allow, deny
+  priority    Int     @default(0)
+  isActive    Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("policy_rules")
+}
+
+model AuditLog {
+  id       String @id @default(uuid())
+  action   String // e.g. app.create, app.deploy, data.query, ai.generate
+  resource String // e.g. app:uuid, data:table_name
+  details  Json?
+  ip       String?
+  userAgent String? @map("user_agent")
+
+  userId String? @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id])
+
+  appId String? @map("app_id")
+  app   App?    @relation(fields: [appId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([action])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
