@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fundição Unibrás | Peças fundidas em Cláudio, MG</title>
+<meta name="description" content="Fundição de ferro em Cláudio, MG, desde 2001. Peças para fitness, agrícola, civil, industrial e mecânico, com controle técnico em cada lote.">
+<meta name="theme-color" content="#14110D">
+<meta property="og:title" content="Fundição Unibrás">
+<meta property="og:description" content="Fundição de ferro em Cláudio, MG, desde 2001. Peças para fitness, agrícola, civil, industrial e mecânico.">
+<meta property="og:type" content="website">
+<!-- DEPLOY STEP: trocar por og:image e og:url absolutos quando o site tiver um endereço no ar -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2314110D'/%3E%3Ccircle cx='32' cy='32' r='19' fill='none' stroke='%23FF7A29' stroke-width='6'/%3E%3Ccircle cx='32' cy='32' r='6' fill='%23FF7A29'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --canvas:#14110D;
+  --panel:#1E1913;
+  --panel-2:#28221A;
+  --accent:#FF7A29;
+  --accent-hover:#FF9247;
+  --accent-muted:rgba(255,122,41,.32);
+  --iron:#4B4740;
+  --iron-light:#9A9182;
+  --brand-green:#5EA35A;
+  --text-primary:#F4EEE3;
+  --text-secondary:#B7AC9B;
+  --line:rgba(244,238,227,.14);
+  --tshadow:0 1px 2px rgba(5,5,10,.95),0 3px 12px rgba(5,5,10,.78),0 10px 44px rgba(5,5,10,.8);
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --ease-in:cubic-bezier(.6,.04,.98,.34);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{overflow-x:clip;scroll-behavior:smooth}
+html,body{overflow-x:hidden}
+body{
+  margin:0;
+  overflow-x:clip;
+  background:var(--canvas);
+  color:var(--text-primary);
+  font-family:'IBM Plex Sans',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{font-family:'Anton',system-ui,sans-serif;font-weight:400;letter-spacing:.01em;margin:0;line-height:1.02}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace}
+p{margin:0}
+a{color:inherit}
+img{max-width:100%;display:block}
+.skip-link{position:absolute;left:12px;top:-60px;background:var(--accent);color:#14110D;padding:.7em 1.1em;border-radius:8px;z-index:200;transition:top .25s var(--ease);font-weight:600;text-decoration:none}
+.skip-link:focus{top:12px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+::selection{background:var(--accent);color:#14110D}
+
+/* ambient background layer */
+.ambient{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(60% 40% at 18% 8%,rgba(255,122,41,.07),transparent 60%),
+    radial-gradient(50% 35% at 86% 78%,rgba(94,163,90,.05),transparent 65%);
+  animation:ambientDrift 70s ease-in-out infinite alternate;
+}
+@keyframes ambientDrift{from{opacity:.7;transform:translateY(0)}to{opacity:1;transform:translateY(-18px)}}
+
+/* ---------- nav ---------- */
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;
+  padding:18px clamp(18px,4vw,48px);
+  background:linear-gradient(rgba(20,17,13,.75),rgba(20,17,13,0));
+  backdrop-filter:blur(6px);
+}
+.brand{display:flex;align-items:baseline;gap:.5em;text-decoration:none}
+.brand-mark{font-family:'Anton';font-size:clamp(19px,2.4vw,24px);letter-spacing:.02em}
+.brand-tag{font-size:10px;letter-spacing:.22em;color:var(--text-secondary)}
+.nav-links{display:flex;align-items:baseline;gap:clamp(14px,2.4vw,30px);list-style:none;margin:0;padding:0}
+.nav-links a{font-size:14px;text-decoration:none;color:var(--text-secondary);transition:color .3s var(--ease)}
+.nav-links a:hover{color:var(--text-primary)}
+.nav-cta{display:inline-flex;align-items:center;gap:.5em;background:var(--accent);color:#14110D;font-weight:600;font-size:13.5px;
+  padding:.62em 1.1em;border-radius:999px;text-decoration:none;transition:background .25s var(--ease),transform .25s var(--ease)}
+.nav-cta:hover{background:var(--accent-hover);transform:translateY(-1px)}
+@media (max-width:760px){.nav-links{display:none}}
+
+/* ---------- hero ---------- */
+.hero{position:relative;height:700vh}
+@media (max-width:720px){.hero{height:560vh}}
+.stage{position:sticky;top:0;height:100vh;overflow:hidden;background:var(--canvas)}
+.stage-art{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.stage-art svg{width:min(148vh,180vw);height:148vh;max-width:none}
+.scrim{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 130% 90% at 50% 48%,rgba(10,9,7,0) 30%,rgba(10,9,7,.6) 100%);
+}
+.hero-inner{position:absolute;inset:0;pointer-events:none}
+.hero-cols{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;pointer-events:none}
+.band{position:absolute;top:0;bottom:0;width:100%;display:flex;flex-direction:column;justify-content:center;padding:0 clamp(20px,5vw,64px);opacity:0;pointer-events:none}
+.band::before{content:"";position:absolute;inset:-6% -4%;pointer-events:none;
+  opacity:calc(.3 + .7*var(--k,1));
+  background:radial-gradient(ellipse 82% 60% at 50% 50%,rgba(6,5,4,.68) 0%,rgba(6,5,4,.42) 48%,rgba(6,5,4,0) 78%);
+}
+.band-l{left:0;align-items:flex-start;text-align:left}
+.band-r{right:0;align-items:flex-end;text-align:right}
+.band-c{left:0;right:0;align-items:center;text-align:center;padding:0 clamp(20px,6vw,80px)}
+.band > *{position:relative;text-shadow:var(--tshadow)}
+.kicker{font-family:'IBM Plex Mono';font-size:clamp(11px,1.3vw,13px);letter-spacing:.2em;color:var(--accent);margin-bottom:.9em}
+.band h2{font-size:clamp(28px,5.4vw,58px);max-width:12ch}
+.band .sub{margin-top:.6em;font-size:clamp(14.5px,1.7vw,18px);color:var(--text-secondary);max-width:32ch;font-weight:400}
+.band-r .sub{margin-left:auto}
+.band-final{gap:0}
+.band-final .cta-row{margin-top:1.3em;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;pointer-events:auto}
+
+.btn{display:inline-flex;align-items:center;gap:.55em;font-family:'IBM Plex Sans';font-weight:600;font-size:15px;
+  padding:.85em 1.5em;border-radius:999px;text-decoration:none;border:1px solid transparent;cursor:pointer;
+  transition:background .28s var(--ease),transform .28s var(--ease),border-color .28s var(--ease),color .28s var(--ease);
+  text-shadow:none;
+}
+.btn-primary{background:var(--accent);color:#14110D}
+.btn-primary:hover{background:var(--accent-hover);transform:translateY(-2px)}
+.btn-ghost{background:rgba(244,238,227,.06);border-color:var(--line);color:var(--text-primary)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+@media (pointer:coarse){.btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}}
+
+.scroll-cue{position:absolute;left:50%;bottom:5vh;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;
+  color:var(--text-secondary);opacity:var(--cue-op,1);transition:opacity .4s var(--ease)}
+.scroll-cue .line{width:1px;height:34px;background:linear-gradient(var(--text-secondary),transparent);animation:cueMove 1.8s ease-in-out infinite}
+.scroll-cue span{font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.22em}
+@keyframes cueMove{0%{transform:scaleY(0);transform-origin:top}50%{transform:scaleY(1);transform-origin:top}51%{transform-origin:bottom}100%{transform:scaleY(0);transform-origin:bottom}}
+@media (max-height:560px){.scroll-cue{display:none}}
+
+.ld-ring{position:absolute;left:50%;top:50%;width:56px;height:56px;transform:translate(-50%,-50%);opacity:var(--ldo,0);transition:opacity .3s var(--ease);pointer-events:none}
+.ld-ring circle{transform-origin:center;transform:rotate(-90deg)}
+
+/* ---------- sections ---------- */
+main{position:relative;z-index:1;background:var(--canvas)}
+section{position:relative;padding:clamp(70px,11vw,130px) clamp(20px,6vw,64px);scroll-margin-top:84px}
+.wrap{max-width:1180px;margin:0 auto}
+.section-kicker{font-family:'IBM Plex Mono';font-size:12px;letter-spacing:.2em;color:var(--accent);display:block;margin-bottom:1em}
+
+.reveal{opacity:0;transform:translateY(26px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
+.reveal.in{opacity:1;transform:translateY(0)}
+.stagger .r-item{opacity:0;transform:translateY(20px);transition:opacity .7s var(--ease),transform .7s var(--ease)}
+.stagger.in .r-item{opacity:1;transform:translateY(0)}
+.stagger.in .r-item:nth-child(1){transition-delay:0s}
+.stagger.in .r-item:nth-child(2){transition-delay:.09s}
+.stagger.in .r-item:nth-child(3){transition-delay:.18s}
+.stagger.in .r-item:nth-child(4){transition-delay:.27s}
+.stagger .r-item:nth-child(1),.stagger .r-item:nth-child(2),.stagger .r-item:nth-child(3),.stagger .r-item:nth-child(4){transition-delay:0s!important}
+.stagger.in .r-item:nth-child(1){transition-delay:0s!important}
+.stagger.in .r-item:nth-child(2){transition-delay:.09s!important}
+.stagger.in .r-item:nth-child(3){transition-delay:.18s!important}
+.stagger.in .r-item:nth-child(4){transition-delay:.27s!important}
+
+/* premise */
+.premise{text-align:center}
+.premise .wrap{max-width:800px}
+.premise p{font-size:clamp(22px,3.4vw,34px);font-family:'IBM Plex Sans';font-weight:500;line-height:1.32;letter-spacing:-.01em}
+.premise strong{color:var(--accent);font-weight:600}
+.rule{height:1px;background:linear-gradient(90deg,transparent,var(--line) 20%,var(--line) 80%,transparent);border:0;margin:0 auto}
+
+/* segments */
+.seg-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:18px;overflow:hidden;margin-top:2.4em}
+@media (max-width:940px){.seg-grid{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.seg-grid{grid-template-columns:1fr}}
+.seg-card{background:var(--panel);padding:clamp(24px,3vw,34px) clamp(20px,2.6vw,28px);display:flex;flex-direction:column;gap:.9em;min-height:230px}
+.seg-icon{width:42px;height:42px;color:var(--accent)}
+.seg-card h3{font-family:'IBM Plex Sans';font-weight:700;font-size:19px;letter-spacing:0}
+.seg-card p{color:var(--text-secondary);font-size:14.5px;line-height:1.55}
+.seg-kicker{font-family:'IBM Plex Mono';font-size:10.5px;letter-spacing:.18em;color:var(--text-secondary)}
+
+/* process */
+.process{background:var(--panel)}
+.p-list{margin-top:2.6em;display:flex;flex-direction:column}
+.p-row{display:grid;grid-template-columns:90px 1fr;gap:20px;padding:26px 0;border-top:1px solid var(--line);align-items:baseline}
+.p-row:last-child{border-bottom:1px solid var(--line)}
+.p-num{font-family:'IBM Plex Mono';color:var(--accent);font-size:15px}
+.p-row h3{font-family:'IBM Plex Sans';font-weight:600;font-size:19px;margin-bottom:.35em}
+.p-row p{color:var(--text-secondary);font-size:15px;max-width:56ch;line-height:1.55}
+@media (max-width:640px){.p-row{grid-template-columns:1fr}}
+
+/* why claudio */
+.why{display:grid;grid-template-columns:1.1fr .9fr;gap:clamp(30px,5vw,70px);align-items:center}
+@media (max-width:880px){.why{grid-template-columns:1fr}}
+.why h2{font-size:clamp(30px,4.2vw,46px);max-width:14ch}
+.why p{margin-top:1em;color:var(--text-secondary);font-size:16px;line-height:1.65;max-width:56ch}
+.badge-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.badge{background:var(--panel-2);padding:22px;display:flex;flex-direction:column;gap:.4em;min-height:110px;justify-content:center}
+.badge .num{font-family:'Anton';font-size:15px;color:var(--accent)}
+.badge .lbl{font-size:12.5px;color:var(--text-secondary);line-height:1.4}
+
+/* interactive pour */
+.pour-section{background:var(--panel);text-align:center}
+.pour-box{margin-top:2.6em;display:grid;grid-template-columns:220px 1fr;gap:clamp(24px,5vw,60px);align-items:center;text-align:left}
+@media (max-width:760px){.pour-box{grid-template-columns:1fr;text-align:center;justify-items:center}}
+.mini-mold{width:200px;height:200px}
+.hold-wrap{display:flex;flex-direction:column;gap:1.1em;align-items:flex-start}
+@media (max-width:760px){.hold-wrap{align-items:center}}
+.hold-btn{position:relative;overflow:hidden;background:var(--panel-2);border:1px solid var(--line);color:var(--text-primary);
+  padding:1em 1.9em;border-radius:999px;font-family:'IBM Plex Sans';font-weight:600;font-size:15px;cursor:pointer;
+  -webkit-user-select:none;user-select:none;touch-action:none}
+.hold-btn::before{content:"";position:absolute;inset:0;left:0;width:calc(var(--hp,0)*100%);background:var(--accent-muted);transition:width .08s linear;z-index:0}
+.hold-btn span{position:relative;z-index:1}
+.chip-row{display:flex;flex-wrap:wrap;gap:10px}
+.chip{font-family:'IBM Plex Mono';font-size:12px;background:rgba(255,122,41,.08);border:1px solid var(--accent-muted);color:var(--accent);
+  padding:.55em .9em;border-radius:999px;opacity:0;transform:translateY(8px);transition:opacity .5s var(--ease),transform .5s var(--ease)}
+.chip.show{opacity:1;transform:translateY(0)}
+
+/* testimonials */
+.rating-row{display:flex;align-items:center;gap:14px;margin-top:1.2em}
+.stars{display:flex;gap:3px}
+.stars svg{width:18px;height:18px;color:var(--accent)}
+.rating-num{font-family:'Anton';font-size:22px}
+.rating-sub{color:var(--text-secondary);font-size:13.5px}
+.t-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-top:2.2em}
+@media (max-width:760px){.t-grid{grid-template-columns:1fr}}
+.t-card{background:var(--panel);padding:28px;display:flex;flex-direction:column;gap:1em}
+.t-card p{font-size:17px;line-height:1.55;font-weight:500}
+.t-card cite{font-style:normal;color:var(--text-secondary);font-size:13px}
+
+/* faq */
+.faq-list{margin-top:2.2em;border-top:1px solid var(--line)}
+.faq-item{border-bottom:1px solid var(--line)}
+.faq-q{width:100%;background:none;border:0;color:var(--text-primary);text-align:left;padding:22px 4px;display:flex;justify-content:space-between;
+  align-items:center;gap:16px;font-family:'IBM Plex Sans';font-weight:600;font-size:16.5px;cursor:pointer}
+.faq-q .plus{flex:none;width:20px;height:20px;position:relative}
+.faq-q .plus::before,.faq-q .plus::after{content:"";position:absolute;background:var(--accent);border-radius:2px}
+.faq-q .plus::before{left:0;top:9px;width:20px;height:2px}
+.faq-q .plus::after{left:9px;top:0;width:2px;height:20px;transition:transform .35s var(--ease)}
+.faq-item[data-open="true"] .plus::after{transform:rotate(90deg)}
+.faq-a{max-height:0;overflow:hidden;transition:max-height .4s var(--ease)}
+.faq-a p{padding:0 4px 22px;color:var(--text-secondary);font-size:15px;line-height:1.6;max-width:62ch}
+
+/* contact */
+.contact{background:var(--panel)}
+.c-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(30px,5vw,70px)}
+@media (max-width:880px){.c-grid{grid-template-columns:1fr}}
+.c-info h2{font-size:clamp(28px,4vw,42px);max-width:12ch}
+.c-info p{margin-top:1em;color:var(--text-secondary);font-size:16px;max-width:44ch;line-height:1.6}
+.c-list{margin-top:2em;display:flex;flex-direction:column;gap:1.1em}
+.c-list a,.c-list div{display:flex;flex-direction:column;gap:.15em;text-decoration:none}
+.c-list .lbl{font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.15em;color:var(--text-secondary)}
+.c-list .val{font-size:15.5px}
+.c-list a .val{color:var(--text-primary);transition:color .25s var(--ease)}
+.c-list a:hover .val{color:var(--accent)}
+
+form.c-form{background:var(--panel-2);border:1px solid var(--line);border-radius:18px;padding:clamp(22px,3vw,32px);display:flex;flex-direction:column;gap:16px}
+.field{display:flex;flex-direction:column;gap:.5em}
+.field label{font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.14em;color:var(--text-secondary)}
+.field input,.field textarea{background:var(--canvas);border:1px solid var(--line);border-radius:10px;color:var(--text-primary);
+  padding:.85em 1em;font-family:'IBM Plex Sans';font-size:15px;resize:vertical}
+.field input:focus,.field textarea:focus{border-color:var(--accent)}
+.c-form .btn{width:100%;justify-content:center;margin-top:4px}
+.form-note{font-size:12.5px;color:var(--text-secondary);text-align:center}
+.form-success{display:none;flex-direction:column;gap:10px;text-align:center;padding:20px 0}
+.form-success.show{display:flex}
+.form-success h3{font-family:'IBM Plex Sans';font-size:19px;font-weight:700}
+.form-success p{color:var(--text-secondary);font-size:14.5px}
+
+/* footer */
+footer{padding:50px clamp(20px,6vw,64px) 40px;border-top:1px solid var(--line)}
+.f-grid{max-width:1180px;margin:0 auto;display:flex;flex-wrap:wrap;justify-content:space-between;gap:28px}
+.f-brand{max-width:280px}
+.f-brand p{margin-top:.8em;color:var(--text-secondary);font-size:13.5px;line-height:1.6}
+.f-cols{display:flex;gap:clamp(30px,6vw,80px);flex-wrap:wrap}
+.f-col h4{font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.15em;color:var(--text-secondary);margin-bottom:1em}
+.f-col a{display:block;text-decoration:none;color:var(--text-primary);font-size:14px;margin-bottom:.75em;transition:color .25s var(--ease)}
+.f-col a:hover{color:var(--accent)}
+.f-bottom{max-width:1180px;margin:34px auto 0;padding-top:20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;
+  flex-wrap:wrap;gap:10px;color:var(--text-secondary);font-size:12.5px}
+
+/* particles */
+.ember{position:absolute;border-radius:50%;background:var(--accent);filter:blur(.3px);will-change:transform,opacity}
+
+/* reduced motion & pause */
+body.paused *,body.paused *::before,body.paused *::after{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Pular para o conteúdo</a>
+<div class="ambient" aria-hidden="true"></div>
+
+<nav class="nav">
+  <a class="brand" href="#main">
+    <span class="brand-mark">UNIBRÁS</span>
+    <span class="brand-tag mono">FUNDIÇÃO</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#segmentos">Segmentos</a></li>
+    <li><a href="#processo">Processo</a></li>
+    <li><a href="#depoimentos">Depoimentos</a></li>
+    <li><a href="#contato">Contato</a></li>
+  </ul>
+  <a class="nav-cta" href="https://wa.me/5537998707538" target="_blank" rel="noopener">WhatsApp</a>
+</nav>
+
+<div class="hero" id="hero">
+  <div class="stage" id="stage" inert>
+    <div class="stage-art" aria-hidden="true">
+      <svg id="art" viewBox="0 0 1000 1500" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="10" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glowSoft" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="18"/>
+          </filter>
+          <linearGradient id="ladleGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#3b362d"/>
+            <stop offset="100%" stop-color="#211c15"/>
+          </linearGradient>
+          <clipPath id="clipPlate"><path id="plateShape" d="M120,1230 a95,95 0 1,0 190,0 a95,95 0 1,0 -190,0 M170,1230 a45,45 0 1,1 90,0 a45,45 0 1,1 -90,0" fill-rule="evenodd"/></clipPath>
+          <clipPath id="clipGear"><g id="gearShape"></g></clipPath>
+          <clipPath id="clipBracket"><path id="bracketShape" d="M680,1155 h190 a12,12 0 0 1 12,12 v130 a12,12 0 0 1 -12,12 h-190 a12,12 0 0 1 -12,-12 v-130 a12,12 0 0 1 12,-12 z"/></clipPath>
+        </defs>
+
+        <!-- ladle -->
+        <g id="ladle" style="transform-origin:500px 70px">
+          <path d="M420,55 h160 l-16,42 h-128 z" fill="url(#ladleGrad)" stroke="var(--line)" stroke-width="2"/>
+          <rect x="392" y="30" width="30" height="14" rx="4" fill="url(#ladleGrad)" stroke="var(--line)" stroke-width="2"/>
+          <circle id="spout" cx="500" cy="97" r="6" fill="var(--accent)" filter="url(#glow)" opacity="0"/>
+        </g>
+
+        <!-- main sprue: base + glow overlay -->
+        <path id="sprueBase" d="M500,100 C500,260 500,420 500,585" fill="none" stroke="var(--line)" stroke-width="16" stroke-linecap="round"/>
+        <path id="sprueGlow" d="M500,100 C500,260 500,420 500,585" fill="none" stroke="var(--accent)" stroke-width="14" stroke-linecap="round" filter="url(#glow)"/>
+
+        <!-- branches -->
+        <path id="branchLBase" d="M500,585 C500,660 300,660 215,1080" fill="none" stroke="var(--line)" stroke-width="11" stroke-linecap="round"/>
+        <path id="branchLGlow" d="M500,585 C500,660 300,660 215,1080" fill="none" stroke="var(--accent)" stroke-width="9" stroke-linecap="round" filter="url(#glow)"/>
+        <path id="branchCBase" d="M500,585 C500,700 500,760 500,1075" fill="none" stroke="var(--line)" stroke-width="11" stroke-linecap="round"/>
+        <path id="branchCGlow" d="M500,585 C500,700 500,760 500,1075" fill="none" stroke="var(--accent)" stroke-width="9" stroke-linecap="round" filter="url(#glow)"/>
+        <path id="branchRBase" d="M500,585 C500,660 700,660 775,1080" fill="none" stroke="var(--line)" stroke-width="11" stroke-linecap="round"/>
+        <path id="branchRGlow" d="M500,585 C500,660 700,660 775,1080" fill="none" stroke="var(--accent)" stroke-width="9" stroke-linecap="round" filter="url(#glow)"/>
+
+        <!-- mold L: weight plate -->
+        <g id="moldL">
+          <circle cx="215" cy="1230" r="106" fill="none" stroke="var(--line)" stroke-width="3"/>
+          <g clip-path="url(#clipPlate)" transform="translate(95,0)">
+            <rect id="fillL" x="0" y="1420" width="220" height="200" fill="#FFD23F"/>
+            <rect id="coolL" x="0" y="1130" width="220" height="200" fill="var(--iron)" opacity="0"/>
+          </g>
+          <path id="ringDetailL" d="M120,1230 a95,95 0 1,0 190,0 a95,95 0 1,0 -190,0" fill="none" stroke="var(--iron-light)" stroke-width="1.5" opacity="0"/>
+        </g>
+
+        <!-- mold C: gear -->
+        <g id="moldC">
+          <circle cx="500" cy="1240" r="106" fill="none" stroke="var(--line)" stroke-width="3"/>
+          <g clip-path="url(#clipGear)">
+            <rect id="fillC" x="380" y="1440" width="240" height="220" fill="#FFD23F"/>
+            <rect id="coolC" x="380" y="1130" width="240" height="220" fill="var(--iron)" opacity="0"/>
+          </g>
+          <g id="gearDetailC" opacity="0" fill="none" stroke="var(--iron-light)" stroke-width="1.5"></g>
+        </g>
+
+        <!-- mold R: bracket -->
+        <g id="moldR">
+          <rect x="672" y="1147" width="206" height="154" rx="16" fill="none" stroke="var(--line)" stroke-width="3"/>
+          <g clip-path="url(#clipBracket)">
+            <rect id="fillR" x="660" y="1440" width="230" height="220" fill="#FFD23F"/>
+            <rect id="coolR" x="660" y="1130" width="230" height="220" fill="var(--iron)" opacity="0"/>
+          </g>
+          <g id="boltDetailR" opacity="0">
+            <circle cx="705" cy="1180" r="8" fill="none" stroke="var(--iron-light)" stroke-width="1.5"/>
+            <circle cx="855" cy="1180" r="8" fill="none" stroke="var(--iron-light)" stroke-width="1.5"/>
+            <circle cx="705" cy="1275" r="8" fill="none" stroke="var(--iron-light)" stroke-width="1.5"/>
+            <circle cx="855" cy="1275" r="8" fill="none" stroke="var(--iron-light)" stroke-width="1.5"/>
+          </g>
+        </g>
+
+        <g id="rimGlow" opacity="0" filter="url(#glowSoft)">
+          <circle cx="215" cy="1230" r="100" fill="none" stroke="var(--accent)" stroke-width="4"/>
+          <circle cx="500" cy="1240" r="100" fill="none" stroke="var(--accent)" stroke-width="4"/>
+          <rect x="678" y="1153" width="194" height="142" rx="14" fill="none" stroke="var(--accent)" stroke-width="4"/>
+        </g>
+
+        <g id="embers"></g>
+      </svg>
+    </div>
+
+    <svg class="ld-ring" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="20" fill="none" stroke="var(--accent)" stroke-width="3" stroke-dasharray="126" stroke-dashoffset="40"/></svg>
+
+    <div class="scrim" aria-hidden="true"></div>
+
+    <div class="hero-inner">
+      <div class="band band-l" id="band1" style="left:0;width:52%">
+        <p class="kicker">CLÁUDIO · MG · DESDE 2001</p>
+        <h2>O ferro derrete aqui.</h2>
+      </div>
+
+      <div class="band band-r" id="band2" style="right:0;width:52%">
+        <p class="kicker">UMA CORRIDA, TRÊS DESTINOS</p>
+        <h2>Vira anilha. Vira peça agrícola. Vira estrutura.</h2>
+        <p class="sub">O mesmo metal, moldado para o que cada cliente precisa carregar.</p>
+      </div>
+
+      <div class="band band-l" id="band3" style="left:0;width:56%">
+        <p class="kicker">1.450°C ATÉ O PONTO CERTO</p>
+        <h2>Esfria devagar, para não esconder falha.</h2>
+        <p class="sub">Controle técnico em cada etapa, da fusão ao acabamento.</p>
+      </div>
+
+      <div class="band band-r" id="band4" style="right:0;width:56%">
+        <p class="kicker">MAIOR POLO DE FUNDIÇÃO DA AMÉRICA LATINA</p>
+        <h2>Fundido em Cláudio. Usado no Brasil inteiro.</h2>
+      </div>
+
+      <div class="band band-c band-final" id="band5">
+        <p class="kicker">FUNDIÇÃO UNIBRÁS</p>
+        <h2>Peças que aguentam o peso do que você faz.</h2>
+        <p class="sub">Ferro fundido para fitness, agrícola, civil, industrial e mecânico. Mais de duas décadas de fábrica em Cláudio, MG.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://wa.me/5537998707538" target="_blank" rel="noopener">Falar no WhatsApp</a>
+          <a class="btn btn-ghost" href="#segmentos">Ver os segmentos</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="scroll-cue" id="scrollCue" aria-hidden="true">
+      <span>ROLE</span>
+      <div class="line"></div>
+    </div>
+  </div>
+</div>
+
+<main id="main" tabindex="-1">
+
+  <section class="premise">
+    <div class="wrap reveal">
+      <hr class="rule" style="width:64px;margin-bottom:2em">
+      <p>Toda peça da Unibrás começa do mesmo jeito. <strong>Ferro fundido, moldado com precisão, conferido antes de sair da fábrica.</strong> O que muda é para onde ela vai.</p>
+    </div>
+  </section>
+
+  <section id="segmentos">
+    <div class="wrap">
+      <span class="section-kicker reveal">SEGMENTOS</span>
+      <h2 class="reveal" style="font-size:clamp(28px,4.2vw,44px);max-width:16ch">Um material, quatro tipos de trabalho pesado.</h2>
+      <div class="seg-grid stagger">
+        <div class="seg-card r-item">
+          <svg class="seg-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="24" cy="24" r="18"/><circle cx="24" cy="24" r="7"/></svg>
+          <span class="seg-kicker">FITNESS</span>
+          <h3>Peso que não falha no meio do treino</h3>
+          <p>Anilhas e halteres fundidos para aguentar carga repetida, dia após dia, em academia.</p>
+        </div>
+        <div class="seg-card r-item">
+          <svg class="seg-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M24 6v10M24 32v10M6 24h10M32 24h10M12 12l7 7M29 29l7 7M36 12l-7 7M19 29l-7 7"/><circle cx="24" cy="24" r="6"/></svg>
+          <span class="seg-kicker">AGRÍCOLA</span>
+          <h3>Peça para o trabalho que não para</h3>
+          <p>Componentes fundidos para máquinas e implementos que enfrentam terra, poeira e uso pesado no campo.</p>
+        </div>
+        <div class="seg-card r-item">
+          <svg class="seg-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M8 40V16l16-8 16 8v24"/><path d="M8 40h32M18 40V24h12v16"/></svg>
+          <span class="seg-kicker">CIVIL</span>
+          <h3>Estrutura que segura peso de verdade</h3>
+          <p>Peças fundidas para construção, em pontos onde falhar não é opção.</p>
+        </div>
+        <div class="seg-card r-item">
+          <svg class="seg-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><rect x="10" y="10" width="28" height="28" rx="4"/><circle cx="24" cy="24" r="6"/><path d="M24 4v6M24 38v6M4 24h6M38 24h6"/></svg>
+          <span class="seg-kicker">INDUSTRIAL E MECÂNICO</span>
+          <h3>Peça técnica, feita na medida certa</h3>
+          <p>Componentes de precisão para máquinas e equipamentos, com tolerância controlada em cada lote.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="process" id="processo">
+    <div class="wrap">
+      <span class="section-kicker reveal">O PROCESSO</span>
+      <h2 class="reveal" style="font-size:clamp(28px,4.2vw,44px);max-width:18ch">Do metal líquido até a peça pronta.</h2>
+      <div class="p-list stagger">
+        <div class="p-row r-item"><span class="p-num mono">01</span><div><h3>Fusão</h3><p>O ferro é fundido em temperatura controlada. É o ponto de partida de toda peça.</p></div></div>
+        <div class="p-row r-item"><span class="p-num mono">02</span><div><h3>Moldagem</h3><p>Cada molde é preparado para repetir a mesma peça, lote após lote, sem variar.</p></div></div>
+        <div class="p-row r-item"><span class="p-num mono">03</span><div><h3>Vazamento</h3><p>O metal líquido preenche o molde. É aqui que a peça ganha forma.</p></div></div>
+        <div class="p-row r-item"><span class="p-num mono">04</span><div><h3>Resfriamento</h3><p>O resfriamento é controlado, para o ferro não esconder nenhuma falha.</p></div></div>
+        <div class="p-row r-item"><span class="p-num mono">05</span><div><h3>Acabamento e controle</h3><p>Rebarba fora, medida conferida. Só sai da fábrica o que passa no controle técnico.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="por-que">
+    <div class="wrap why">
+      <div class="reveal">
+        <span class="section-kicker">POR QUE CLÁUDIO</span>
+        <h2>Fundida no maior polo de fundição da América Latina.</h2>
+        <p>Cláudio, em Minas Gerais, reúne dezenas de fundições e virou referência nacional em peças de ferro fundido, das anilhas de academia às peças agrícolas e estruturais. A Unibrás está aqui desde 2001, dentro dessa cadeia produtiva, com processo estruturado, automação e controle técnico em cada etapa.</p>
+      </div>
+      <div class="badge-grid reveal">
+        <div class="badge"><span class="num">2001</span><span class="lbl">Fábrica em operação em Cláudio, MG</span></div>
+        <div class="badge"><span class="num">5</span><span class="lbl">Segmentos atendidos: fitness, agrícola, civil, industrial e mecânico</span></div>
+        <div class="badge"><span class="num">Nº1</span><span class="lbl">Cláudio é o maior polo de fundição da América Latina</span></div>
+        <div class="badge"><span class="num">100%</span><span class="lbl">Lotes conferidos antes de sair da fábrica</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pour-section">
+    <div class="wrap">
+      <span class="section-kicker reveal">EXPERIMENTE</span>
+      <h2 class="reveal" style="font-size:clamp(26px,3.8vw,40px)">Você também pode vazar uma peça.</h2>
+      <p class="reveal" style="color:var(--text-secondary);margin-top:.6em;max-width:46ch;margin-left:auto;margin-right:auto">Segure o botão e acompanhe o metal esfriar até virar peça pronta.</p>
+
+      <div class="pour-box reveal">
+        <svg class="mini-mold" viewBox="0 0 200 200" aria-hidden="true">
+          <circle cx="100" cy="100" r="90" fill="none" stroke="var(--line)" stroke-width="3"/>
+          <clipPath id="clipMini"><path d="M20,100 a80,80 0 1,0 160,0 a80,80 0 1,0 -160,0 M62,100 a38,38 0 1,1 76,0 a38,38 0 1,1 -76,0" fill-rule="evenodd"/></clipPath>
+          <g clip-path="url(#clipMini)">
+            <rect id="miniFill" x="10" y="190" width="180" height="200" fill="#FFD23F"/>
+            <rect id="miniCool" x="10" y="0" width="180" height="200" fill="var(--iron)" opacity="0"/>
+          </g>
+          <path d="M20,100 a80,80 0 1,0 160,0 a80,80 0 1,0 -160,0" fill="none" stroke="var(--accent)" stroke-width="3" id="miniRim" opacity="0"/>
+        </svg>
+        <div class="hold-wrap">
+          <button class="hold-btn" id="holdBtn" type="button"><span>Segure para vazar</span></button>
+          <div class="chip-row" id="chipRow">
+            <span class="chip" data-chip>Tolerância controlada</span>
+            <span class="chip" data-chip>Peça conferida antes de sair da fábrica</span>
+            <span class="chip" data-chip>Sem variar de um lote para o outro</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="depoimentos">
+    <div class="wrap">
+      <span class="section-kicker reveal">DEPOIMENTOS</span>
+      <h2 class="reveal" style="font-size:clamp(28px,4.2vw,44px);max-width:16ch">O que dizem sobre a Unibrás.</h2>
+      <div class="rating-row reveal">
+        <span class="rating-num">4,3</span>
+        <div class="stars" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.2L10 14.9 4.4 18l1.4-6.2L1 7.5l6.4-.6z"/></svg>
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.2L10 14.9 4.4 18l1.4-6.2L1 7.5l6.4-.6z"/></svg>
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.2L10 14.9 4.4 18l1.4-6.2L1 7.5l6.4-.6z"/></svg>
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.2L10 14.9 4.4 18l1.4-6.2L1 7.5l6.4-.6z"/></svg>
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 1l2.6 5.9 6.4.6-4.8 4.3 1.4 6.2L10 14.9 4.4 18l1.4-6.2L1 7.5l6.4-.6z"/></svg>
+        </div>
+        <span class="rating-sub">com base em avaliações reais de clientes no Google</span>
+      </div>
+      <div class="t-grid stagger">
+        <div class="t-card r-item">
+          <p>Excelente atendimento e produtos com ótimo custo benefício.</p>
+          <cite>Avaliação no Google</cite>
+        </div>
+        <div class="t-card r-item">
+          <p>Muito boa essa empresa.</p>
+          <cite>Avaliação no Google</cite>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap">
+      <span class="section-kicker reveal">PERGUNTAS FREQUENTES</span>
+      <h2 class="reveal" style="font-size:clamp(28px,4.2vw,44px);max-width:16ch">Antes de pedir o orçamento.</h2>
+      <div class="faq-list reveal">
+        <div class="faq-item" data-open="false">
+          <button class="faq-q" aria-expanded="false">Vocês fazem peça sob encomenda ou só o que já está pronto?<span class="plus" aria-hidden="true"></span></button>
+          <div class="faq-a"><p>As duas coisas. A Unibrás desenvolve peça sob encomenda, além dos itens já fundidos para fitness, agro, civil, industrial e mecânica. Manda o desenho ou a peça de referência e a equipe avalia.</p></div>
+        </div>
+        <div class="faq-item" data-open="false">
+          <button class="faq-q" aria-expanded="false">Qual o prazo de entrega?<span class="plus" aria-hidden="true"></span></button>
+          <div class="faq-a"><p>O prazo muda conforme a peça e a quantidade pedida. A forma mais rápida de saber é chamar no WhatsApp com os detalhes do pedido.</p></div>
+        </div>
+        <div class="faq-item" data-open="false">
+          <button class="faq-q" aria-expanded="false">Vocês entregam para fora de Minas Gerais?<span class="plus" aria-hidden="true"></span></button>
+          <div class="faq-a"><p>Sim. A Unibrás atende clientes em todo o Brasil, com estrutura para despachar de Cláudio para qualquer estado.</p></div>
+        </div>
+        <div class="faq-item" data-open="false">
+          <button class="faq-q" aria-expanded="false">Como funciona o controle de qualidade?<span class="plus" aria-hidden="true"></span></button>
+          <div class="faq-a"><p>Cada lote passa por conferência de medida e acabamento antes de sair da fábrica. É assim que a peça chega igual, do primeiro ao último lote.</p></div>
+        </div>
+        <div class="faq-item" data-open="false">
+          <button class="faq-q" aria-expanded="false">Qual o jeito mais rápido de falar com vocês?<span class="plus" aria-hidden="true"></span></button>
+          <div class="faq-a"><p>O WhatsApp é o canal mais direto para orçamento e dúvida técnica. É o primeiro lugar para procurar a Unibrás.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="contact" id="contato">
+    <div class="wrap c-grid">
+      <div class="c-info reveal">
+        <span class="section-kicker">CONTATO</span>
+        <h2>Peça o orçamento da sua peça.</h2>
+        <p>Manda a especificação ou a peça de referência. A equipe comercial responde no WhatsApp ou por e-mail.</p>
+        <div class="c-list">
+          <a href="https://wa.me/5537998707538" target="_blank" rel="noopener"><span class="lbl">WHATSAPP</span><span class="val">(37) 99870-7538</span></a>
+          <a href="tel:+553733811180"><span class="lbl">TELEFONE</span><span class="val">(37) 3381-1180</span></a>
+          <a href="mailto:comercial@fundicaounibras.com.br"><span class="lbl">E-MAIL COMERCIAL</span><span class="val">comercial@fundicaounibras.com.br</span></a>
+          <a href="https://www.google.com/maps/search/?api=1&query=Rua+Jos%C3%A9+Lu%C3%ADs+de+Souza+15+Parque+Industrial+Paulino+Prado+Cl%C3%A1udio+MG" target="_blank" rel="noopener"><span class="lbl">ENDEREÇO</span><span class="val">R. José Luís de Souza, 15, Parque Industrial Paulino Prado, Cláudio, MG, 35530-000</span></a>
+        </div>
+      </div>
+
+      <form class="c-form reveal" id="contactForm">
+        <div id="formFields">
+          <div class="field">
+            <label for="f-name">NOME</label>
+            <input id="f-name" name="name" type="text" required autocomplete="name">
+          </div>
+          <div class="field" style="margin-top:16px">
+            <label for="f-contact">E-MAIL OU TELEFONE</label>
+            <input id="f-contact" name="contact" type="text" required autocomplete="email">
+          </div>
+          <div class="field" style="margin-top:16px">
+            <label for="f-msg">O QUE VOCÊ PRECISA</label>
+            <textarea id="f-msg" name="msg" rows="4" required placeholder="Peça, quantidade, prazo desejado"></textarea>
+          </div>
+          <button class="btn btn-primary" type="submit" style="margin-top:18px">Enviar por e-mail</button>
+          <p class="form-note" style="margin-top:12px">Ao enviar, seu app de e-mail abre com a mensagem pronta para comercial@fundicaounibras.com.br.</p>
+        </div>
+        <div class="form-success" id="formSuccess">
+          <h3>Abrindo seu e-mail</h3>
+          <p>Confira o app de e-mail para revisar e enviar a mensagem para a Unibrás.</p>
+        </div>
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="f-grid">
+    <div class="f-brand">
+      <span class="brand-mark" style="font-family:'Anton';font-size:22px">UNIBRÁS</span>
+      <p>Fundição de ferro em Cláudio, MG, desde 2001. Peças para fitness, agrícola, civil, industrial e mecânico.</p>
+    </div>
+    <div class="f-cols">
+      <div class="f-col">
+        <h4 class="mono">SITE</h4>
+        <a href="#segmentos">Segmentos</a>
+        <a href="#processo">Processo</a>
+        <a href="#depoimentos">Depoimentos</a>
+        <a href="#contato">Contato</a>
+      </div>
+      <div class="f-col">
+        <h4 class="mono">CONTATO</h4>
+        <a href="https://wa.me/5537998707538" target="_blank" rel="noopener">WhatsApp</a>
+        <a href="mailto:comercial@fundicaounibras.com.br">E-mail</a>
+        <a href="https://www.instagram.com/fundicaounibras" target="_blank" rel="noopener">Instagram</a>
+      </div>
+    </div>
+  </div>
+  <div class="f-bottom">
+    <span>Fundição Unibrás. Cláudio, MG.</span>
+    <span>R. José Luís de Souza, 15, Parque Industrial Paulino Prado</span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var reduceMQ = matchMedia('(prefers-reduced-motion: reduce)');
+  var stage = document.getElementById('stage');
+  var hero = document.getElementById('hero');
+  var scrollCue = document.getElementById('scrollCue');
+  var ldRing = document.querySelector('.ld-ring circle');
+  var ldWrap = document.querySelector('.ld-ring');
+
+  var bands = [
+    {el:document.getElementById('band1'), a:0.00, b:0.17},
+    {el:document.getElementById('band2'), a:0.19, b:0.36},
+    {el:document.getElementById('band3'), a:0.39, b:0.56},
+    {el:document.getElementById('band4'), a:0.59, b:0.76},
+    {el:document.getElementById('band5'), a:0.80, b:1.00}
+  ];
+  bands.forEach(function(b){ b.op=-1; b.k=-1; });
+
+  function smoothstep(p,e0,e1){ var t=Math.min(1,Math.max(0,(p-e0)/(e1-e0))); return t*t*(3-2*t); }
+  function clamp(v,lo,hi){ return Math.min(hi,Math.max(lo,v)); }
+  function remap(p,a,b){ return clamp((p-a)/(b-a),0,1); }
+
+  function buildGear(){
+    var g = document.getElementById('gearShape');
+    var cx=500, cy=1240, rOut=95, rIn=68, teeth=10, d='';
+    for(var i=0;i<teeth;i++){
+      var a0 = (i/teeth)*Math.PI*2;
+      var a1 = a0 + (Math.PI*2/teeth)*0.55;
+      var a2 = a0 + (Math.PI*2/teeth);
+      var p1 = [cx+Math.cos(a0)*rIn, cy+Math.sin(a0)*rIn];
+      var p2 = [cx+Math.cos(a0)*rOut, cy+Math.sin(a0)*rOut];
+      var p3 = [cx+Math.cos(a1)*rOut, cy+Math.sin(a1)*rOut];
+      var p4 = [cx+Math.cos(a1)*rIn, cy+Math.sin(a1)*rIn];
+      d += 'M'+p1[0].toFixed(1)+','+p1[1].toFixed(1)+' L'+p2[0].toFixed(1)+','+p2[1].toFixed(1)+' L'+p3[0].toFixed(1)+','+p3[1].toFixed(1)+' L'+p4[0].toFixed(1)+','+p4[1].toFixed(1)+' A'+rIn+','+rIn+' 0 0 1 ';
+      var a3 = a2;
+      var p5 = [cx+Math.cos(a3)*rIn, cy+Math.sin(a3)*rIn];
+      d += p5[0].toFixed(1)+','+p5[1].toFixed(1)+' Z ';
+    }
+    var path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d', d);
+    g.appendChild(path);
+
+    var detail = document.getElementById('gearDetailC');
+    for(var j=0;j<teeth;j++){
+      var ang = (j/teeth)*Math.PI*2;
+      var x1=cx+Math.cos(ang)*rIn, y1=cy+Math.sin(ang)*rIn;
+      var x2=cx+Math.cos(ang)*(rOut-6), y2=cy+Math.sin(ang)*(rOut-6);
+      var ln = document.createElementNS('http://www.w3.org/2000/svg','line');
+      ln.setAttribute('x1',x1);ln.setAttribute('y1',y1);ln.setAttribute('x2',x2);ln.setAttribute('y2',y2);
+      detail.appendChild(ln);
+    }
+    var innerC = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    innerC.setAttribute('cx',cx);innerC.setAttribute('cy',cy);innerC.setAttribute('r',30);
+    detail.appendChild(innerC);
+  }
+  buildGear();
+
+  function buildEmbers(){
+    var host = document.getElementById('embers');
+    var pts = [[500,590],[420,900],[580,900],[215,1170],[500,1180],[785,1170],[500,320],[350,750],[650,750]];
+    for(var i=0;i<pts.length;i++){
+      var c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('cx', pts[i][0]);
+      c.setAttribute('cy', pts[i][1]);
+      c.setAttribute('r', 2.4 + (i%3));
+      c.setAttribute('fill', '#FFC15C');
+      c.setAttribute('opacity', '0');
+      c.setAttribute('class','emberDot');
+      c.style.setProperty('--d', (i*0.37).toFixed(2)+'s');
+      host.appendChild(c);
+    }
+  }
+  buildEmbers();
+
+  var sprueGlow = document.getElementById('sprueGlow');
+  var branchLGlow = document.getElementById('branchLGlow');
+  var branchCGlow = document.getElementById('branchCGlow');
+  var branchRGlow = document.getElementById('branchRGlow');
+  var sprueLen = sprueGlow.getTotalLength();
+  var bLLen = branchLGlow.getTotalLength();
+  var bCLen = branchCGlow.getTotalLength();
+  var bRLen = branchRGlow.getTotalLength();
+  [sprueGlow,branchLGlow,branchCGlow,branchRGlow].forEach(function(p,i){
+    var len = [sprueLen,bLLen,bCLen,bRLen][i];
+    p.style.strokeDasharray = len;
+    p.style.strokeDashoffset = len;
+  });
+
+  var ladle = document.getElementById('ladle');
+  var spout = document.getElementById('spout');
+  var fillL=document.getElementById('fillL'), coolL=document.getElementById('coolL'), ringDetailL=document.getElementById('ringDetailL');
+  var fillC=document.getElementById('fillC'), coolC=document.getElementById('coolC'), gearDetailC=document.getElementById('gearDetailC');
+  var fillR=document.getElementById('fillR'), coolR=document.getElementById('coolR'), boltDetailR=document.getElementById('boltDetailR');
+  var rimGlow=document.getElementById('rimGlow');
+
+  function heroRange(){
+    var h = hero.getBoundingClientRect().height;
+    return Math.max(1, h - innerHeight);
+  }
+  function heroProgress(){
+    var r = hero.getBoundingClientRect();
+    var p = (-r.top) / heroRange();
+    return clamp(p,0,1);
+  }
+  function heroOnScreen(){
+    var r = hero.getBoundingClientRect();
+    return r.bottom > 0 && r.top < innerHeight;
+  }
+
+  var target=0, shown=0, rafId=null, lastTick=0;
+
+  var avCache = Object.create(null);
+  var emberDots = null;
+  function setIfChanged(key, val, digits, apply){
+    var v = val.toFixed(digits);
+    if(avCache[key]===v) return;
+    avCache[key]=v;
+    apply(v);
+  }
+
+  function applyVisual(p){
+    // pour: ladle tip + spout
+    var pour = remap(p,0,0.07);
+    setIfChanged('ladle', pour*24, 2, function(v){ ladle.style.transform = 'rotate('+v+'deg)'; });
+    setIfChanged('spout', pour>0.15?1:pour/0.15, 2, function(v){ spout.setAttribute('opacity', v); });
+
+    var stream = remap(p,0.03,0.24);
+    setIfChanged('sprue', sprueLen*(1-stream), 1, function(v){ sprueGlow.style.strokeDashoffset = v; });
+
+    var bL = remap(p,0.22,0.42), bC = remap(p,0.24,0.44), bR = remap(p,0.26,0.46);
+    setIfChanged('bL', bLLen*(1-bL), 1, function(v){ branchLGlow.style.strokeDashoffset = v; });
+    setIfChanged('bC', bCLen*(1-bC), 1, function(v){ branchCGlow.style.strokeDashoffset = v; });
+    setIfChanged('bR', bRLen*(1-bR), 1, function(v){ branchRGlow.style.strokeDashoffset = v; });
+
+    var moldFillL = remap(p,0.30,0.50), moldFillC = remap(p,0.32,0.52), moldFillR = remap(p,0.34,0.54);
+    setIfChanged('fillL', 1420 - moldFillL*290, 1, function(v){ fillL.setAttribute('y', v); });
+    setIfChanged('fillC', 1440 - moldFillC*310, 1, function(v){ fillC.setAttribute('y', v); });
+    setIfChanged('fillR', 1440 - moldFillR*310, 1, function(v){ fillR.setAttribute('y', v); });
+
+    var cool = remap(p,0.50,0.80);
+    setIfChanged('coolL', cool, 2, function(v){ coolL.setAttribute('opacity', v); });
+    setIfChanged('coolC', cool, 2, function(v){ coolC.setAttribute('opacity', v); });
+    setIfChanged('coolR', cool, 2, function(v){ coolR.setAttribute('opacity', v); });
+
+    var detail = remap(p,0.78,0.98);
+    setIfChanged('detL', detail, 2, function(v){ ringDetailL.setAttribute('opacity', v); });
+    setIfChanged('detC', detail, 2, function(v){ gearDetailC.setAttribute('opacity', v); });
+    setIfChanged('detR', detail, 2, function(v){ boltDetailR.setAttribute('opacity', v); });
+    setIfChanged('rim', detail*0.55, 2, function(v){ rimGlow.setAttribute('opacity', v); });
+
+    var emberOn = p>0.02 && p<0.97 ? 1 : 0;
+    setIfChanged('embers', emberOn*0.55, 2, function(v){
+      if(!emberDots) emberDots = document.querySelectorAll('.emberDot');
+      emberDots.forEach(function(d){ d.setAttribute('opacity', v); });
+    });
+
+    var cueOp = p<0.03 ? 1 : Math.max(0, 1 - p/0.08);
+    setIfChanged('cue', cueOp, 2, function(v){ stage.style.setProperty('--cue-op', v); });
+  }
+
+  function updateBands(p){
+    bands.forEach(function(band){
+      var a=band.a, b=band.b;
+      var f = Math.min(0.02, (b-a)/3);
+      var op = smoothstep(p,a,a+f) * (1 - (band===bands[bands.length-1] ? 0 : smoothstep(p,b-f,b)));
+      if(band===bands[0]) op = 1 - smoothstep(p, b-f, b);
+      if(band===bands[bands.length-1]) op = smoothstep(p, a, a+f);
+      var ramp = Math.min(0.025,(b-a)*0.35);
+      var k = clamp((p-a)/ramp,0,1);
+      if(Math.abs(op-band.op)>0.004){ band.op=op; band.el.style.opacity=op.toFixed(3); }
+      if(Math.abs(k-band.k)>0.004){ band.k=k; band.el.style.setProperty('--k',k.toFixed(3)); }
+    });
+  }
+
+  function tick(now){
+    var dt = Math.min(100, now-(lastTick||now));
+    lastTick = now;
+    var k = 0.16;
+    shown += (target-shown)*(1-Math.pow(1-k, dt/16.667));
+    if(Math.abs(target-shown) < 0.0005){ shown=target; rafId=null; lastTick=0; }
+    else { rafId = requestAnimationFrame(tick); }
+    applyVisual(shown);
+    updateBands(shown);
+  }
+
+  function onScroll(){
+    target = heroProgress();
+    if(rafId===null && heroOnScreen()) rafId = requestAnimationFrame(tick);
+  }
+
+  function pinFinal(){
+    applyVisual(1);
+    updateBands(1);
+    bands.forEach(function(b,i){
+      if(i===bands.length-1){ b.el.style.opacity=1; b.el.style.setProperty('--k',1); }
+      else { b.el.style.opacity=0; }
+    });
+  }
+
+  var scrubOn=false;
+  function enableScrub(){
+    if(scrubOn) return; scrubOn=true;
+    addEventListener('scroll', onScroll, {passive:true});
+    target = heroProgress(); shown = target;
+    applyVisual(shown); updateBands(shown);
+    onScroll();
+  }
+  function disableScrub(){
+    if(!scrubOn) return; scrubOn=false;
+    removeEventListener('scroll', onScroll);
+    if(rafId!==null){ cancelAnimationFrame(rafId); rafId=null; }
+  }
+  function applyMode(){
+    if(reduceMQ.matches){ disableScrub(); pinFinal(); }
+    else { enableScrub(); }
+  }
+  reduceMQ.addEventListener('change', applyMode);
+  applyMode();
+  addEventListener('resize', function(){ if(scrubOn){ target=heroProgress(); } }, {passive:true});
+
+  document.addEventListener('visibilitychange', function(){
+    document.body.classList.toggle('paused', document.hidden);
+  });
+
+  /* reveal on scroll */
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, {threshold:0.2});
+  document.querySelectorAll('.reveal, .stagger').forEach(function(el){ io.observe(el); });
+
+  /* faq accordion */
+  document.querySelectorAll('.faq-item').forEach(function(item){
+    var q = item.querySelector('.faq-q');
+    var a = item.querySelector('.faq-a');
+    q.addEventListener('click', function(){
+      var open = item.getAttribute('data-open')==='true';
+      document.querySelectorAll('.faq-item').forEach(function(other){
+        other.setAttribute('data-open','false');
+        other.querySelector('.faq-q').setAttribute('aria-expanded','false');
+        other.querySelector('.faq-a').style.maxHeight = null;
+      });
+      if(!open){
+        item.setAttribute('data-open','true');
+        q.setAttribute('aria-expanded','true');
+        a.style.maxHeight = a.scrollHeight+'px';
+      }
+    });
+  });
+
+  /* interactive hold-to-pour */
+  (function(){
+    var btn = document.getElementById('holdBtn');
+    var miniFill = document.getElementById('miniFill');
+    var miniCool = document.getElementById('miniCool');
+    var miniRim = document.getElementById('miniRim');
+    var chips = document.querySelectorAll('[data-chip]');
+    var progress = 0, holding=false, raf=null, done=false;
+
+    function render(){
+      miniFill.setAttribute('y', (190 - progress*190).toFixed(1));
+      var cool = clamp((progress-0.7)/0.3,0,1);
+      miniCool.setAttribute('opacity', cool.toFixed(2));
+      miniRim.setAttribute('opacity', (cool*0.7).toFixed(2));
+      btn.style.setProperty('--hp', progress.toFixed(3));
+      if(progress>=1 && !done){
+        done = true;
+        chips.forEach(function(c,i){ setTimeout(function(){ c.classList.add('show'); }, i*260); });
+      }
+      if(progress<1 && done){
+        done = false;
+        chips.forEach(function(c){ c.classList.remove('show'); });
+      }
+    }
+
+    function loop(){
+      if(holding) progress = clamp(progress + 0.018, 0, 1);
+      else progress = clamp(progress - 0.03, 0, 1);
+      render();
+      if(holding || progress>0) raf = requestAnimationFrame(loop);
+      else raf=null;
+    }
+    function start(){
+      if(reduceMQ.matches){ progress=1; render(); return; }
+      holding=true;
+      if(!raf) raf=requestAnimationFrame(loop);
+    }
+    function stop(){
+      holding=false;
+      if(!raf) raf=requestAnimationFrame(loop);
+    }
+    btn.addEventListener('pointerdown', function(e){ e.preventDefault(); start(); });
+    addEventListener('pointerup', stop);
+    addEventListener('pointercancel', stop);
+    btn.addEventListener('keydown', function(e){ if(e.key===' '||e.key==='Enter'){ e.preventDefault(); start(); } });
+    btn.addEventListener('keyup', function(e){ if(e.key===' '||e.key==='Enter'){ stop(); } });
+    if(reduceMQ.matches){ progress=1; render(); }
+  })();
+
+  /* contact form -> mailto */
+  var form = document.getElementById('contactForm');
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    var name = document.getElementById('f-name').value.trim();
+    var contact = document.getElementById('f-contact').value.trim();
+    var msg = document.getElementById('f-msg').value.trim();
+    var subject = encodeURIComponent('Orçamento, site Unibrás');
+    var body = encodeURIComponent('Nome: '+name+'\nContato: '+contact+'\n\n'+msg);
+    window.location.href = 'mailto:comercial@fundicaounibras.com.br?subject='+subject+'&body='+body;
+    document.getElementById('formFields').style.display='none';
+    document.getElementById('formSuccess').classList.add('show');
+  });
+})();
+</script>
+</body>
+</html>
