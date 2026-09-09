@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Jogar — Conecta</title>
+<meta name="description" content="Percorra a trilha em circuito fechado, tire cartas de contato visual e comunicação, e junte estrelas para o seu Bloco." />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="game-header">
+  <a class="back-link" href="index.html">⟵ Início</a>
+  <div class="game-title"><span aria-hidden="true">🟩</span> Conecta</div>
+  <div class="header-right">
+    <div class="stat-pill" title="Estrelas">⭐ <span id="starCount">0</span></div>
+    <div class="stat-pill laps" title="Voltas completas">🔁 <span id="lapCount">0</span></div>
+    <button class="icon-btn" id="settingsBtn" type="button" aria-label="Configurações">⚙️</button>
+  </div>
+</header>
+
+<main class="game-wrap">
+  <div class="board-wrap">
+    <div class="board" id="board">
+      <div class="board-center" id="boardCenter">
+        <button class="avatar" id="avatarBtn" type="button" aria-label="Personalizar meu Bloco">
+          <span class="a-acc" aria-hidden="true"></span>
+          <div class="a-head">
+            <div class="a-face">
+              <div class="a-eyes"><span></span><span></span></div>
+              <div class="a-mouth"></div>
+            </div>
+          </div>
+          <div class="a-body"></div>
+          <div class="a-shadow"></div>
+        </button>
+        <div class="avatar-label">Toque para personalizar</div>
+
+        <div class="die-row">
+          <button class="die" id="dieBtn" type="button" aria-label="Jogar o dado e avançar">
+            <span class="dot" data-i="0"></span><span class="dot" data-i="1"></span><span class="dot" data-i="2"></span>
+            <span class="dot" data-i="3"></span><span class="dot" data-i="4"></span><span class="dot" data-i="5"></span>
+            <span class="dot" data-i="6"></span><span class="dot" data-i="7"></span><span class="dot" data-i="8"></span>
+          </button>
+          <button class="btn btn-primary btn-lg" id="advanceBtn" type="button">🎲 Avançar</button>
+        </div>
+        <p class="hint">Toque no dado para andar pela trilha!</p>
+      </div>
+      <div class="token" id="token" aria-hidden="true">🙂</div>
+    </div>
+  </div>
+</main>
+
+<div class="celebrate-banner" id="celebrateBanner" role="status" aria-live="polite"></div>
+
+<!-- Carta (contato visual / comunicação / bônus) -->
+<div class="modal-overlay" id="cardOverlay" hidden>
+  <div class="modal-card card--eye" id="cardModal" role="dialog" aria-modal="true" aria-labelledby="cardText">
+    <button class="modal-close modal-close-icon" type="button" aria-label="Fechar">✕</button>
+    <span class="card-kicker" id="cardKicker">👀 Contato Visual</span>
+    <div class="card-emoji" id="cardEmoji" aria-hidden="true">✨</div>
+    <p class="card-text" id="cardText">Texto da carta</p>
+    <div class="card-actions" id="cardActions"></div>
+  </div>
+</div>
+
+<!-- Closet do avatar -->
+<div class="modal-overlay" id="closetOverlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="closetTitle" style="border-color:var(--purple);">
+    <button class="modal-close modal-close-icon" type="button" aria-label="Fechar">✕</button>
+    <h3 id="closetTitle" style="margin-bottom:6px;">Meu Bloco</h3>
+    <div class="avatar" id="closetPreview" aria-hidden="true" style="margin:10px auto 18px;">
+      <span class="a-acc" aria-hidden="true"></span>
+      <div class="a-head">
+        <div class="a-face">
+          <div class="a-eyes"><span></span><span></span></div>
+          <div class="a-mouth"></div>
+        </div>
+      </div>
+      <div class="a-body"></div>
+      <div class="a-shadow"></div>
+    </div>
+
+    <div class="closet-section">
+      <h3>Cor</h3>
+      <div class="swatches" id="colorSwatches"></div>
+    </div>
+
+    <div class="closet-section">
+      <h3>Acessórios (desbloqueiam com estrelas ⭐)</h3>
+      <div class="acc-grid" id="accessoryGrid"></div>
+    </div>
+
+    <button class="btn btn-secondary btn-block modal-close" type="button">Fechar</button>
+  </div>
+</div>
+
+<!-- Configurações -->
+<div class="modal-overlay" id="settingsOverlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" style="border-color:var(--blue); text-align:left;">
+    <button class="modal-close modal-close-icon" type="button" aria-label="Fechar">✕</button>
+    <h3 id="settingsTitle" style="text-align:center;">Configurações</h3>
+
+    <div class="settings-row">
+      <div>
+        <div class="label">🔊 Sons</div>
+        <div class="desc">Efeitos sonoros ao andar e ganhar estrelas. A leitura das cartas tem botão próprio.</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="soundToggle" />
+        <span class="track"></span><span class="thumb"></span>
+      </label>
+    </div>
+
+    <div class="settings-row">
+      <div>
+        <div class="label">✨ Animações</div>
+        <div class="desc">Confete e movimentos mais suaves quando desligado.</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="animToggle" />
+        <span class="track"></span><span class="thumb"></span>
+      </label>
+    </div>
+
+    <div class="settings-row">
+      <div>
+        <div class="label">🧘 Modo calmo</div>
+        <div class="desc">Deixa as cores do jogo mais suaves.</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="calmToggle" />
+        <span class="track"></span><span class="thumb"></span>
+      </label>
+    </div>
+
+    <div style="text-align:center;">
+      <button class="reset-link" id="resetBtn" type="button">Apagar progresso salvo neste aparelho</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/cards.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
