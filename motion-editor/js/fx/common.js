@@ -47,3 +47,15 @@ export function noise1(x, seed = 0) {
   const u = f * f * (3 - 2 * f);
   return (hash1(i + seed * 101.3) * (1 - u) + hash1(i + 1 + seed * 101.3) * u) * 2 - 1;
 }
+
+/**
+ * Ruído de gradiente 1D (Perlin) — como o wiggle() do AE: o movimento nunca "para" nos pontos da grade
+ * (o ruído de valor com smoothstep tinha velocidade zero em cada ponto e dava um tremor engasgado).
+ * Saída aproximadamente em [-1, 1].
+ */
+export function noiseG(x, seed = 0) {
+  const i = Math.floor(x), f = x - i;
+  const g0 = hash1(i + seed * 101.3) * 2 - 1, g1 = hash1(i + 1 + seed * 101.3) * 2 - 1;
+  const u = f * f * f * (f * (f * 6 - 15) + 10);
+  return (g0 * f * (1 - u) + g1 * (f - 1) * u) * 2.2;
+}

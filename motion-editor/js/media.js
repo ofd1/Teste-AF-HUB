@@ -30,27 +30,34 @@ function videoHost() {
   }
   return host;
 }
-const allVideos = new Set();
+const allVideos = new Set(); // só os vídeos de reprodução (prévia); cache/miniaturas nunca são "tocados"
 function unlockVideos() {
   for (const v of allVideos) {
-    if (v.dataset.unlocked || !v.paused) continue;
+    if (v.dataset.unlocked || !v.paused || v.seeking) continue;
     v.dataset.unlocked = '1';
-    const t = v.currentTime;
+    const t = v.currentTime, gen = v._seekGen || 0;
     const p = v.play();
-    if (p) p.then(() => { v.pause(); v.currentTime = t; }).catch(() => { delete v.dataset.unlocked; });
+    // só devolve a posição se ninguém buscou outro quadro enquanto isso (antes isso estragava buscas em andamento)
+    if (p) p.then(() => { v.pause(); if ((v._seekGen || 0) === gen) v.currentTime = t; }).catch(() => { delete v.dataset.unlocked; });
   }
 }
 if (typeof document !== 'undefined') {
-  for (const ev of ['touchend', 'pointerup', 'click']) document.addEventListener(ev, unlockVideos, { capture: true, passive: true });
+  for (const ev of ['touchend', 'click']) document.addEventListener(ev, unlockVideos, { capture: true, passive: true });
+}
+function releaseVideo(v) {
+  allVideos.delete(v);
+  v.removeAttribute('src');
+  v.load();
+  v.remove();
 }
 
 // durante a exportação o cache de quadros pausa (o iPhone tem poucos decodificadores de vídeo)
 let exportBusy = false;
 export function setExporting(b) { exportBusy = b; }
 
-function makeVideo(src) {
+function makeVideo(src, playback = false) {
   const v = document.createElement('video');
-  allVideos.add(v);
+  if (playback) allVideos.add(v);
   videoHost()?.appendChild(v);
   v.src = src;
   v.muted = true;
@@ -67,8 +74,8 @@ export function getVideo(layer, needB = false) {
   const src = layer.props.src;
   let e = videos.get(layer.id);
   if (e && e.src !== src) { e.a.pause(); e.b?.pause(); e = null; }
-  if (!e) { e = { src, a: makeVideo(src), b: null }; videos.set(layer.id, e); }
-  if (needB && !e.b) e.b = makeVideo(src);
+  if (!e) { e = { src, a: makeVideo(src, true), b: null, snaps: new Map() }; videos.set(layer.id, e); }
+  if (needB && !e.b) e.b = makeVideo(src, true);
   return e;
 }
 
@@ -76,6 +83,7 @@ function seek(v, time) {
   if (!v || v.readyState < 1) return waitMeta(v).then(() => seek(v, time));
   const target = Math.max(0, Math.min(time, (v.duration || time + 1) - 0.001));
   if (Math.abs(v.currentTime - target) < 0.001 && !v.seeking) return Promise.resolve();
+  v._seekGen = (v._seekGen || 0) + 1;
   return new Promise((res) => {
     const done = () => {
       v.removeEventListener('seeked', done); clearTimeout(to);
@@ -89,6 +97,15 @@ function seek(v, time) {
     v.addEventListener('seeked', done);
     v.currentTime = target;
   });
+}
+
+/** Busca e espera o quadro ser realmente apresentado (o Safari às vezes entrega o quadro anterior logo após 'seeked'). */
+async function seekExact(v, time) {
+  const rvfc = 'requestVideoFrameCallback' in v;
+  let shown = null;
+  if (rvfc) shown = new Promise((r) => v.requestVideoFrameCallback(() => r()));
+  await seek(v, time);
+  if (shown) await Promise.race([shown, new Promise((r) => setTimeout(r, 90))]);
 }
 
 function waitMeta(v) {
@@ -128,15 +145,24 @@ export function prepare(project, t, { exact = false, playing = false } = {}) {
     const e = getVideo(l, fr.b !== null);
     e.frame = fr;
     if (exact) {
-      // exportação: um único decodificador por vídeo (o iPhone falha com vários); o quadro B vira uma cópia
+      // exportação: um único decodificador por vídeo (o iPhone falha com vários). Cada quadro de origem é
+      // decodificado uma vez, confirmado (requestVideoFrameCallback) e guardado: A e B ficam sempre corretos
+      // e a câmera lenta reaproveita os quadros, sem "travadas".
       if (!e.a.paused) e.a.pause();
+      if (!e.snaps) e.snaps = new Map();
       jobs.push((async () => {
-        if (fr.b !== null) {
-          await seek(e.a, fr.b);
-          e.snapB = snapshot(e.a, e.snapB);
+        for (const st of [fr.a, fr.b]) {
+          if (st === null) continue;
+          const key = Math.round(st * 1000);
+          if (e.snaps.has(key)) continue;
+          await seekExact(e.a, st);
+          if (e.a.readyState < 2) continue;
+          let c = null;
+          if (e.snaps.size >= 4) { const [k0, old] = e.snaps.entries().next().value; e.snaps.delete(k0); c = old; }
+          e.snaps.set(key, snapshot(e.a, c));
         }
-        await seek(e.a, fr.a);
-        if (e.a.readyState >= 2) e.last = snapshot(e.a, e.last);
+        const ka = e.snaps.get(Math.round(fr.a * 1000));
+        if (ka) e.last = ka;
       })());
     } else if (!playing) {
       if (!e.a.paused) e.a.pause();
@@ -190,9 +216,10 @@ export function videoFrames(layer, t, fps, final = false) {
   const fr = e.frame || { b: null, f: 0 };
   if (final) {
     // exportação: quadro A do elemento (ou a última cópia boa / cache, nunca preto) e B da cópia
-    const a = e.a.readyState >= 2 ? e.a : e.last || (c?.ready ? c.frames[Math.max(0, Math.min(c.frames.length - 1, Math.round((sourceTime(layer, t) - c.t0) * c.fps)))] : null);
+    const sa = e.snaps?.get(Math.round(fr.a * 1000)), sb = fr.b !== null ? e.snaps?.get(Math.round(fr.b * 1000)) : null;
+    const a = sa || (e.a.readyState >= 2 ? e.a : null) || e.last || (c?.ready ? c.frames[Math.max(0, Math.min(c.frames.length - 1, Math.round((sourceTime(layer, t) - c.t0) * c.fps)))] : null);
     if (!a) return null;
-    return { a, b: fr.b !== null && e.snapB ? e.snapB : null, f: fr.f, quality: 'final' };
+    return { a, b: sb || null, f: sb ? fr.f : 0, quality: 'final' };
   }
   if (e.a.readyState < 2) return e.last ? { a: e.last, b: null, f: 0, quality: 'final' } : null;
   return { a: e.a, b: fr.b !== null && e.b && e.b.readyState >= 2 ? e.b : null, f: fr.f, quality: 'final' };
@@ -267,8 +294,8 @@ async function buildCache(project, layer) {
   const h = Math.round(w * aspect);
   for (let i = 0; i < n; i++) {
     while (exportBusy && !entry.cancelled) await new Promise((r) => setTimeout(r, 250));
-    if (entry.cancelled) return;
-    await seek(v, lo + (i + 0.01) / entry.fps);
+    if (entry.cancelled) { releaseVideo(v); return; }
+    await seekExact(v, lo + (i + 0.01) / entry.fps); // quadro confirmado: sem quadros repetidos no cache
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     c.getContext('2d').drawImage(v, 0, 0, w, h);
@@ -276,8 +303,7 @@ async function buildCache(project, layer) {
     entry.progress = (i + 1) / n;
     if (i % 6 === 0) cacheListener();
   }
-  v.removeAttribute('src');
-  v.load();
+  releaseVideo(v);
   if (entry.cancelled) return;
   entry.ready = true;
   cacheListener();
@@ -297,8 +323,7 @@ export async function videoThumb(src, time = 0.1, h = 60) {
   c.height = h;
   c.width = Math.max(1, Math.round((v.videoWidth / v.videoHeight || 1.7) * h));
   c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-  v.removeAttribute('src');
-  v.load();
+  releaseVideo(v);
   return c.toDataURL('image/jpeg', 0.6);
 }
 
@@ -309,7 +334,7 @@ export function detectFps(src) {
     if (!('requestVideoFrameCallback' in v)) { resolve(null); return; }
     const times = [];
     const done = () => {
-      v.pause(); v.removeAttribute('src'); v.load();
+      v.pause(); releaseVideo(v);
       const d = times.slice(1).map((t, i) => t - times[i]).filter((x) => x > 0.001).sort((a, b) => a - b);
       if (d.length < 3) { resolve(null); return; }
       const raw = 1 / d[Math.floor(d.length / 2)];

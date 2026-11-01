@@ -87,7 +87,7 @@ function loop(now) {
   if ((dirty || store.playing) && !store.exporting) {
     prepare(store.project, store.time, { playing: store.playing });
     if (curQuality() !== quality) { quality = curQuality(); layoutCanvas(); }
-    renderFrame(ctx, store.project, store.time, quality);
+    renderFrame(ctx, store.project, store.time, quality, { hq: !store.playing });
     drawOverlay();
     timecode.textContent = formatTime(store.time, store.project.fps).slice(1);
     dirty = false;

@@ -42,6 +42,14 @@ void main() {
     float c = cost(v_uv, d) + 0.08 * length(vec2(float(i), float(j))); // regularização: prefere o movimento vizinho em áreas lisas
     if (c < bc) { bc = c; best = d; }
   }
+  // candidato "parado" (corrige objetos pequenos arrastados pelo movimento do nível grosso)
+  if (u_hasPrev > 0.5) {
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+      vec2 d = vec2(float(i), float(j));
+      float c = cost(v_uv, d) + 0.08 * length(d);
+      if (c < bc) { bc = c; best = d; }
+    }
+  }
   // refinamento sub-pixel (parábola)
   float cx0 = cost(v_uv, best - vec2(1.0, 0.0)), cx1 = cost(v_uv, best + vec2(1.0, 0.0));
   float cy0 = cost(v_uv, best - vec2(0.0, 1.0)), cy1 = cost(v_uv, best + vec2(0.0, 1.0));
@@ -64,6 +72,30 @@ void main() {
     acc += f * w; ws += w;
   }
   gl_FragColor = encodeFlow(acc / ws);
+}`;
+
+// interpolação bidirecional (A→B e B→A) com verificação de consistência: onde o movimento não é confiável
+// (oclusão, borrão), mistura os quadros sem deformar — evita "rasgos" e tremidas quadro a quadro
+const INTERP2 = `${PRELUDE}${FLOW_GLSL}
+uniform sampler2D u_b; uniform sampler2D u_fab; uniform sampler2D u_fba; uniform float u_f; uniform vec2 u_ftexel; uniform vec2 u_fsize;
+vec2 fab(vec2 uv) { return decodeFlow(texture2D(u_fab, uv)) * u_ftexel; }
+vec2 fba(vec2 uv) { return decodeFlow(texture2D(u_fba, uv)) * u_ftexel; }
+void main() {
+  float f = u_f;
+  // ponto de origem em A (2 iterações de ponto fixo) e em B
+  vec2 da = fab(v_uv); da = fab(v_uv - da * f); da = fab(v_uv - da * f);
+  vec2 db = fba(v_uv); db = fba(v_uv - db * (1.0 - f)); db = fba(v_uv - db * (1.0 - f));
+  vec2 pa = v_uv - da * f, pb = v_uv - db * (1.0 - f);
+  vec4 ca = texture2D(u_tex, pa), cb = texture2D(u_b, pb);
+  // consistência ida-e-volta, em pixels do fluxo
+  float ea = length((fab(pa) + fba(pa + fab(pa))) * u_fsize);
+  float eb = length((fba(pb) + fab(pb + fba(pb))) * u_fsize);
+  float wa = (1.0 - f) / (1.0 + ea * ea * 0.5), wb = f / (1.0 + eb * eb * 0.5);
+  vec4 warped = (ca * wa + cb * wb) / max(wa + wb, 1e-4);
+  // quando nenhum lado é confiável, cai para a mistura simples (como o frame blend do Twixtor)
+  float trust = clamp(1.0 - min(ea, eb) / 3.0, 0.0, 1.0);
+  vec4 blend = mix(texture2D(u_tex, v_uv), texture2D(u_b, v_uv), f);
+  gl_FragColor = mix(blend, warped, trust);
 }`;
 
 const INTERP = `${PRELUDE}${FLOW_GLSL}
@@ -96,9 +128,9 @@ void main() {
 
 /** Campo de fluxo óptico A→B (texturas do GLEngine). quality: 'preview' (1/8) ou 'final' (1/4). */
 export function computeFlow(gl, texA, texB, quality = 'final') {
-  const base = quality === 'final' ? 4 : 8;
-  const levels = [32, 16, 8, 4].filter((s) => s >= base);
-  const radii = { 32: 4, 16: 2, 8: 1, 4: 1 };
+  const base = quality === 'final' ? 2 : 8;
+  const levels = [32, 16, 8, 4, 2].filter((s) => s >= base);
+  const radii = { 32: 4, 16: 2, 8: 1, 4: 1, 2: 1 };
   const W = texA.w, H = texA.h;
   const pyrA = {}, pyrB = {};
   let la = texA, lb = texB;
@@ -139,5 +171,13 @@ export function flowMotionBlur(gl, tex, flow, len) {
 export function flowInterpolate(gl, texA, texB, f, quality = 'final') {
   if (f <= 0.001) return texA;
   if (f >= 0.999) return texB;
-  return interpWithFlow(gl, texA, texB, computeFlow(gl, texA, texB, quality), f);
+  if (quality !== 'final') return interpWithFlow(gl, texA, texB, computeFlow(gl, texA, texB, quality), f);
+  return interpBidirectional(gl, texA, texB, computeFlow(gl, texA, texB, quality), computeFlow(gl, texB, texA, quality), f);
+}
+
+/** Quadro intermediário com fluxos A→B e B→A (qualidade de exportação). */
+export function interpBidirectional(gl, texA, texB, fab, fba, f) {
+  if (f <= 0.001) return texA;
+  if (f >= 0.999) return texB;
+  return gl.pass(INTERP2, { u_tex: texA, u_b: texB, u_fab: fab, u_fba: fba, u_f: f, u_ftexel: [1 / fab.w, 1 / fab.h], u_fsize: [fab.w, fab.h] }, texA.w, texA.h);
 }

@@ -1,6 +1,6 @@
 // Movimento e tempo: Shake (wiggle / S_Shake / Universe Camera Shake), Twitch, Transformar,
 // Velocidade (estilo Twixtor / Timewarp), Posterize Time, Echo.
-import { frag, num, ang, bool, sel, pos, rad, cuv, hash1, noise1 } from './common.js';
+import { frag, num, ang, bool, sel, pos, rad, cuv, hash1, noise1, noiseG } from './common.js';
 
 const TWITCH = frag(`
 uniform vec2 u_off; uniform float u_light;
@@ -38,13 +38,24 @@ vec4 sampleAt(float s, float r, vec2 sh) {
 void main() {
   vec4 acc = vec4(0.0);
   float n = max(1.0, u_n);
-  for (int i = 0; i < 32; i++) {
+  for (int i = 0; i < 64; i++) {
     if (float(i) >= n) break;
     float f = n > 1.0 ? float(i) / (n - 1.0) : 1.0;
     acc += sampleAt(mix(u_s0, u_s1, f), mix(u_r0, u_r1, f), mix(u_sh0, u_sh1, f));
   }
   gl_FragColor = acc / n;
 }`);
+
+/**
+ * Amostras de motion blur pela distância percorrida (px na tela): ~1 amostra a cada 2,5 px — sem "fantasmas"
+ * nem degraus quando o tremor é grande.
+ */
+function blurSamples(env, q, c, min = 8) {
+  const w = env.w * env.scale, h = env.h * env.scale, R = Math.hypot(w, h) / 2;
+  const move = Math.hypot((c.dx - q.dx) * env.scale, (c.dy - q.dy) * env.scale)
+    + Math.abs(c.s - q.s) * R + Math.abs(rad(c.rot - q.rot)) * R;
+  return Math.max(min, Math.min(64, Math.ceil(move / 2.5)));
+}
 
 /** Envelope aleatório por "evento" (0..1), estilo Twitch. */
 export function twitchEnv(t, p, channel) {
@@ -69,7 +80,7 @@ export default [
     render: (src, p, env) => {
       const fps = env.fps || 30;
       const oct = Math.max(1, Math.round(p.complexity ?? 1));
-      const wig = (f, seed) => { let v = 0, a = 1, n = 0; for (let o = 0; o < oct; o++) { v += noise1(f * 2 ** o, seed + o * 7.7) * a; n += a; a *= 0.5; } return v / n; };
+      const wig = (f, seed) => { let v = 0, a = 1, n = 0; for (let o = 0; o < oct; o++) { v += noiseG(f * 2 ** o + o * 0.37, seed + o * 7.7) * a; n += a; a *= 0.5; } return Math.max(-1, Math.min(1, v / n)); };
       const at = (t) => {
         const f = t * p.frequency;
         return {
@@ -81,7 +92,7 @@ export default [
       const moving = (p.shutter ?? 1) > 0 && (Math.abs(c.dx - q.dx) + Math.abs(c.dy - q.dy) > 0.3 || Math.abs(c.rot - q.rot) > 0.05 || Math.abs(c.s - q.s) > 1e-3);
       return env.gl.pass(BMC, {
         u_tex: src, u_c: cuv(env, [0.5, 0.5]), u_s0: q.s, u_s1: c.s, u_r0: rad(q.rot), u_r1: rad(c.rot),
-        u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: moving ? Math.round(p.samples ?? 12) : 1, u_wrap: isFull(env.layer) ? p.wrap ?? 3 : 1,
+        u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: moving ? blurSamples(env, q, c, Math.round(p.samples ?? 12)) : 1, u_wrap: isFull(env.layer) ? p.wrap ?? 3 : 1,
       });
     },
   },
@@ -101,7 +112,7 @@ export default [
       return env.gl.pass(BMC, {
         u_tex: src, u_c: cuv(env, p.center), u_s0: 1 / Math.max(0.01, q.zDist), u_s1: 1 / Math.max(0.01, p.zDist),
         u_r0: rad(q.rotate), u_r1: rad(p.rotate), u_sh0: [q.shiftX, q.shiftY], u_sh1: [p.shiftX, p.shiftY],
-        u_n: moving && p.shutter > 0 ? Math.round(p.samples) : 1, u_wrap: p.wrap,
+        u_n: moving && p.shutter > 0 ? blurSamples(env, { dx: q.shiftX * env.w, dy: q.shiftY * env.h, s: 1 / Math.max(0.01, q.zDist), rot: q.rotate }, { dx: p.shiftX * env.w, dy: p.shiftY * env.h, s: 1 / Math.max(0.01, p.zDist), rot: p.rotate }, Math.round(p.samples)) : 1, u_wrap: p.wrap,
       });
     },
   },
@@ -137,7 +148,7 @@ export default [
       if (moving || c.s > 1.0005 || Math.abs(c.dx) + Math.abs(c.dy) > 0.5) {
         out = gl.pass(BMC, {
           u_tex: src, u_c: cuv(env, [0.5, 0.5]), u_s0: q.s, u_s1: c.s, u_r0: 0, u_r1: 0,
-          u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: moving && p.blur ? 16 : 1, u_wrap: isFull(env.layer) ? 3 : 1,
+          u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: moving && p.blur ? blurSamples(env, { ...q, rot: 0 }, { ...c, rot: 0 }, 12) : 1, u_wrap: isFull(env.layer) ? 3 : 1,
         });
       }
       if (eb > 0.01 && !moving) out = gl.blur(out, eb * p.blurAmt * 0.35 * env.scale);

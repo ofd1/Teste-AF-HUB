@@ -4,7 +4,7 @@ import { valueAt } from './anim.js';
 import { EFFECT_MAP, makeCanvas } from './effects.js';
 import { getGL } from './gl.js';
 import { getImage, videoFrames } from './media.js';
-import { computeFlow, interpWithFlow, flowMotionBlur } from './flow.js';
+import { computeFlow, interpWithFlow, interpBidirectional, flowMotionBlur } from './flow.js';
 import { layerTime, vectorBlur, sourceRate } from './timing.js';
 
 const contentCanvases = new Map();
@@ -179,9 +179,11 @@ function renderLayerImage(layer, t, scale, extra) {
     // Twixtor: quadro intermediário por fluxo óptico
     const texB = gl.upload(paint(`${layer.id}#b`, vf.b));
     try {
-      const flow = computeFlow(gl, tex, texB, vf.quality === 'final' && renderOpts.final ? 'final' : 'preview');
+      const hq = renderOpts.final || renderOpts.hq;
+      const flow = computeFlow(gl, tex, texB, hq ? 'final' : 'preview');
       const mbAmt = vectorBlur(layer, lt);
-      tex = interpWithFlow(gl, tex, texB, flow, vf.f);
+      if (hq && vf.f > 0.001 && vf.f < 0.999) tex = interpBidirectional(gl, tex, texB, flow, computeFlow(gl, texB, tex, 'final'), vf.f);
+      else tex = interpWithFlow(gl, tex, texB, flow, vf.f);
       if (mbAmt > 0) {
         // obturador de 180° (0,5 quadro) × quadros de origem avançados por quadro de saída
         const sfps = layer.props.sourceFps || fps;
@@ -319,7 +321,7 @@ export function renderLayer(ctx, layer, t, scale, extra, fps = 30) {
 
 export function renderFrame(ctx, proj, t, scale = 1, opts = {}) {
   project = proj;
-  renderOpts = { final: !!opts.final };
+  renderOpts = { final: !!opts.final, hq: !!opts.hq };
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
