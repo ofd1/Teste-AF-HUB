@@ -49,3 +49,32 @@ export function animationFFX() {
     ]),
   ]);
 }
+
+/** Presets "de edit" com plugins de terceiros (match names/nomes como aparecem no AE). */
+export function pluginsFFX() {
+  return ffxFile([
+    effectBlock('Twixtor Pro', 'Twixtor Pro', [
+      { name: 'Speed %', type: 'slider', values: [100], keys: [{ frame: 0, v: [100], interp: 2 }, { frame: 10, v: [20], interp: 2 }, { frame: 30, v: [100], interp: 2 }] },
+      { name: 'Frame Interp', type: 'popup', values: [3], options: ['Nearest', 'Blend', 'Motion Weighted Blend'] },
+    ]),
+    effectBlock('PEDG', 'Deep Glow', [
+      { name: 'Radius', type: 'slider', values: [300] },
+      { name: 'Exposure', type: 'slider', values: [1.5] },
+      { name: 'Threshold', type: 'slider', values: [0.4] },
+    ]),
+    effectBlock('S_Shake', 'S_Shake', [
+      { name: 'Amplitude', type: 'slider', values: [0.3] },
+      { name: 'Frequency', type: 'slider', values: [12] },
+    ]),
+    effectBlock('VIDEOCOPILOT Twitch', 'Twitch', [
+      { name: 'Amount', type: 'slider', values: [70] },
+      { name: 'Speed', type: 'slider', values: [8] },
+      { name: 'Blur', type: 'checkbox', values: [1] },
+      { name: 'Slide', type: 'checkbox', values: [1] },
+    ]),
+    effectBlock('BCC Glow', 'BCC Glow', [{ name: 'Glow Radius', type: 'slider', values: [80] }]),
+    effectBlock('RSMB', 'RSMB', [{ name: 'Blur Amount', type: 'slider', values: [0.5] }]),
+    effectBlock('CC Radial Blur', 'CC Radial Blur', [{ name: 'Type', type: 'popup', values: [1] }, { name: 'Amount', type: 'slider', values: [40] }]),
+    effectBlock('Element 3D', 'Element', [{ name: 'Group 1', type: 'slider', values: [1] }]),
+  ]);
+}

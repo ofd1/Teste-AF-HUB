@@ -1,0 +1,122 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { parseFFX } from '../js/ffx.js';
+import { ffxToPreset } from '../js/presets.js';
+import { matchEffect } from '../js/import-map.js';
+import { anim, valueAt } from '../js/anim.js';
+import { selectAll, stretchKeys, reverseKeys, selectionRange } from '../js/keyframes.js';
+import { sourceTime, integrateSpeed, layerTime, blendFrames } from '../js/timing.js';
+import { createEffectInstance } from '../js/presets.js';
+import { detectBeatsFromSamples } from '../js/audio.js';
+import { EFFECTS } from '../js/effects.js';
+import { pluginsFFX } from './fixtures.mjs';
+
+const near = (a, b, eps = 1e-3) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
+
+test('identifica plugins de terceiros e converte', () => {
+  const preset = ffxToPreset(parseFFX(pluginsFFX().buffer, { fps: 30 }));
+  const byMn = Object.fromEntries(preset.report.effects.map((e) => [e.matchName, e]));
+  assert.equal(byMn['Twixtor Pro'].status, 'plugin');
+  assert.equal(byMn['Twixtor Pro'].mappedTo, 'Velocidade (estilo Twixtor)');
+  assert.equal(byMn.PEDG.plugin, 'Deep Glow');
+  assert.equal(byMn.S_Shake.vendor, 'Sapphire');
+  assert.equal(byMn['VIDEOCOPILOT Twitch'].plugin, 'Twitch');
+  assert.equal(byMn['BCC Glow'].vendor, 'BCC');
+  assert.equal(byMn.RSMB.plugin, 'ReelSmart Motion Blur');
+  assert.equal(byMn['CC Radial Blur'].status, 'native');
+  assert.equal(byMn['Element 3D'].status, 'unsupported');
+
+  const fx = Object.fromEntries(preset.effects.map((e) => [e.matchName, e]));
+  assert.equal(fx['Twixtor Pro'].type, 'twixtor');
+  assert.deepEqual(fx['Twixtor Pro'].params.speed.keys.map((k) => k.v), [100, 20, 100]);
+  assert.equal(fx['Twixtor Pro'].params.frameBlend, true);
+  assert.equal(fx.PEDG.params.radius, 300);
+  assert.equal(fx.PEDG.params.threshold, 40);
+  assert.equal(fx.S_Shake.params.amount, 30);
+  assert.equal(fx.S_Shake.params.frequency, 12);
+  assert.equal(fx['VIDEOCOPILOT Twitch'].params.slide, true);
+  assert.equal(fx.RSMB.params.amount, 100);
+  assert.equal(fx['CC Radial Blur'].params.amount, 40);
+  assert.equal(fx['Element 3D'].type, 'generic');
+  assert.ok(preset.report.plugins.includes('Twixtor'));
+});
+
+test('regras de palavra-chave e nomes de exibição', () => {
+  assert.equal(matchEffect('XYZ Super Glow FX').def.type, 'glow');
+  assert.equal(matchEffect('XYZ Super Glow FX').kind, 'approx');
+  assert.equal(matchEffect('uni.Glow').rule.plugin, 'Universe Glow');
+  assert.equal(matchEffect('S_BlurMoCurves').def.type, 'dirBlur');
+  assert.equal(matchEffect('ADBE Wave Warp').kind, 'native');
+  assert.equal(matchEffect('Plugin estranho 123'), null);
+});
+
+test('todo efeito tem parâmetros com default válido', () => {
+  for (const e of EFFECTS) {
+    const inst = createEffectInstance(e.type);
+    for (const pd of e.params) assert.notEqual(inst.params[pd.key].value, undefined, `${e.type}.${pd.key}`);
+    assert.ok(e.render || e.transform || e.temporal || e.sourceSpeed || e.timeWarp, e.type);
+  }
+});
+
+function makeLayer() {
+  return {
+    id: 'L1', inPoint: 0, outPoint: 10, type: 'video', props: { sourceStart: 0, speed: 1 },
+    transform: {
+      position: anim([0, 0], [{ t: 1, v: [0, 0], ease: 'linear' }, { t: 2, v: [100, 0], ease: 'linear' }]),
+      scale: anim([100, 100]), rotation: anim(0), anchor: anim([0, 0]),
+      opacity: anim(100, [{ t: 1, v: 0, ease: 'linear' }, { t: 3, v: 100, ease: 'linear' }]),
+    },
+    effects: [],
+  };
+}
+
+test('selecionar todos e esticar keyframes', () => {
+  const layer = makeLayer();
+  const project = { fps: 30, layers: [layer] };
+  const sel = selectAll([layer]);
+  assert.equal(sel.length, 4);
+  assert.deepEqual(selectionRange(sel), [1, 3]);
+  const base = sel.map((s) => s.key.t);
+  stretchKeys(project, sel, 2, 'first', base);
+  assert.deepEqual(selectionRange(sel), [1, 5]);
+  near(valueAt(layer.transform.position, 2)[0], 50);
+  stretchKeys(project, sel, 0.5, 'first', base); // não destrutivo: relativo ao original
+  assert.deepEqual(selectionRange(sel), [1, 2]);
+  reverseKeys(project, sel);
+  near(valueAt(layer.transform.opacity, 1), 100);
+  near(valueAt(layer.transform.opacity, 2), 0);
+});
+
+test('velocidade estilo Twixtor integra a curva', () => {
+  const layer = makeLayer();
+  near(sourceTime(layer, 4), 4);
+  layer.effects.push(createEffectInstance('twixtor', { speed: 50 }));
+  near(sourceTime(layer, 4), 2);
+  layer.effects[0].params.speed = anim(100, [{ t: 0, v: 100, ease: 'linear' }, { t: 2, v: 0, ease: 'linear' }]);
+  near(integrateSpeed(layer.effects[0].params.speed, 0, 2), 1, 1e-2);
+  near(sourceTime(layer, 5), 1, 1e-2);
+  layer.props.sourceStart = 3;
+  near(sourceTime(layer, 5), 4, 1e-2);
+  layer.effects[0].params.speed = anim(50);
+  const b = blendFrames(layer, 1 / 30, 30);
+  assert.ok(b.b !== null && Math.abs(b.f - 0.5) < 0.01);
+});
+
+test('posterize time quantiza o tempo da camada', () => {
+  const layer = makeLayer();
+  layer.effects.push(createEffectInstance('posterizeTime', { fps: 4 }));
+  near(layerTime(layer, 0.6), 0.5);
+  near(layerTime(layer, 0.99), 0.75);
+});
+
+test('detecção de batidas encontra pulsos', () => {
+  const sr = 44100;
+  const ch = new Float32Array(sr * 4);
+  for (let b = 0; b < 8; b++) {
+    const s = Math.floor((0.25 + b * 0.5) * sr);
+    for (let i = 0; i < 2000; i++) ch[s + i] = Math.sin(i * 0.3) * (1 - i / 2000);
+  }
+  const beats = detectBeatsFromSamples(ch, sr, 0.5);
+  assert.ok(beats.length >= 7 && beats.length <= 9, `beats=${beats.length}`);
+  near(beats[1] - beats[0], 0.5, 0.05);
+});

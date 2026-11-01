@@ -1,5 +1,6 @@
 import { anim } from './anim.js';
 import { uid, deepClone } from './util.js';
+import { sourceTime } from './timing.js';
 
 export const RESOLUTIONS = {
   '1080x1920': 'Story / Reels 9:16',
@@ -10,7 +11,7 @@ export const RESOLUTIONS = {
 };
 
 export function createProject(w = 1080, h = 1920) {
-  return { version: 1, width: w, height: h, fps: 30, duration: 6, background: '#101018', layers: [] };
+  return { version: 2, width: w, height: h, fps: 30, duration: 10, background: '#000000', layers: [], markers: [] };
 }
 
 function baseLayer(project, type, name, props) {
@@ -35,7 +36,9 @@ export const LAYER_FACTORIES = {
   ellipse: (p) => baseLayer(p, 'ellipse', 'Elipse', { width: Math.round(p.width * 0.4), height: Math.round(p.width * 0.4), fill: '#3d8bff', strokeColor: '#ffffff', strokeWidth: 0 }),
   solid: (p) => baseLayer(p, 'solid', 'Sólido', { width: p.width, height: p.height, fill: '#2b2b48' }),
   image: (p, src, w, h, name) => baseLayer(p, 'image', name || 'Imagem', { src, width: w, height: h }),
-  video: (p, src, w, h, name) => baseLayer(p, 'video', name || 'Vídeo', { src, width: w, height: h, muted: true }),
+  video: (p, src, w, h, name) => baseLayer(p, 'video', name || 'Vídeo', { src, width: w, height: h, sourceStart: 0, speed: 1 }),
+  audio: (p, src, name) => baseLayer(p, 'audio', name || 'Áudio', { src, volume: 100, sourceStart: 0, muted: false }),
+  adjustment: (p) => baseLayer(p, 'adjustment', 'Ajuste', {}),
 };
 
 /** Estado global do editor com histórico de desfazer/refazer. */
@@ -45,7 +48,7 @@ export class Store {
     this.time = 0;
     this.playing = false;
     this.selectedLayerId = null;
-    this.selectedKey = null; // { layerId, path, t }
+    this.selectedKeys = []; // [{ layerId, path, key }]
     this.listeners = new Set();
     this.undoStack = [];
     this.redoStack = [];
@@ -83,7 +86,7 @@ export class Store {
     this.project = JSON.parse(snap);
     this.lastSnapshot = snap;
     if (!this.layer()) this.selectedLayerId = null;
-    this.selectedKey = null;
+    this.selectedKeys = [];
     this.emit('structure');
   }
 
@@ -91,8 +94,9 @@ export class Store {
     this.project = project;
     this.undoStack = []; this.redoStack = [];
     this.lastSnapshot = this.snapshot();
-    this.selectedLayerId = project.layers[0]?.id || null;
-    this.selectedKey = null;
+    project.markers ||= [];
+    this.selectedLayerId = null;
+    this.selectedKeys = [];
     this.setTime(0);
     this.emit('structure');
   }
@@ -101,8 +105,50 @@ export class Store {
 
   select(id) {
     this.selectedLayerId = id;
-    this.selectedKey = null;
     this.emit('selection');
+  }
+
+  isKeySelected(key) {
+    return this.selectedKeys.some((s) => s.key === key);
+  }
+
+  setKeySelection(sel) {
+    this.selectedKeys = sel;
+    this.emit('keys');
+  }
+
+  toggleKey(layerId, path, key, additive) {
+    const i = this.selectedKeys.findIndex((s) => s.key === key);
+    if (additive) {
+      if (i >= 0) this.selectedKeys.splice(i, 1);
+      else this.selectedKeys.push({ layerId, path, key });
+    } else if (i < 0) this.selectedKeys = [{ layerId, path, key }];
+    this.emit('keys');
+  }
+
+  /** Divide a camada no tempo t (como a tesoura do Alight Motion / Ctrl+Shift+D do AE). */
+  splitLayer(id, t) {
+    const l = this.layer(id);
+    if (!l || t <= l.inPoint + 1e-3 || t >= l.outPoint - 1e-3) return false;
+    const copy = deepClone(l);
+    copy.id = uid('ly');
+    copy.effects.forEach((fx) => { fx.id = uid('fx'); });
+    if (l.type === 'video') copy.props.sourceStart = sourceTime(l, t);
+    if (l.type === 'audio') copy.props.sourceStart = (l.props.sourceStart || 0) + (t - l.inPoint);
+    copy.inPoint = t;
+    l.outPoint = t;
+    const i = this.project.layers.indexOf(l);
+    this.project.layers.splice(i, 0, copy);
+    this.selectedLayerId = copy.id;
+    this.commit('structure');
+    return true;
+  }
+
+  toggleMarker(t) {
+    const m = this.project.markers;
+    const i = m.findIndex((x) => Math.abs(x - t) < 0.5 / this.project.fps);
+    if (i >= 0) m.splice(i, 1); else { m.push(t); m.sort((a, b) => a - b); }
+    this.commit();
   }
 
   setTime(t) {
@@ -119,6 +165,7 @@ export class Store {
 
   removeLayer(id) {
     this.project.layers = this.project.layers.filter((l) => l.id !== id);
+    this.selectedKeys = this.selectedKeys.filter((s) => s.layerId !== id);
     if (this.selectedLayerId === id) this.selectedLayerId = this.project.layers[0]?.id || null;
     this.commit('structure');
   }

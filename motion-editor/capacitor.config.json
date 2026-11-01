@@ -1,0 +1,8 @@
+{
+  "appId": "app.motionframe.editor",
+  "appName": "MotionFrame",
+  "webDir": "www",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false },
+  "ios": { "contentInset": "never" }
+}

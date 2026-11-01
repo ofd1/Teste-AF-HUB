@@ -1,116 +1,189 @@
-# MotionFrame Editor
+# MotionFrame — editor de edits (Android, iPhone e web)
 
-Editor de motion graphics no navegador, no estilo Frameify / Nova Editor, que **importa presets `.ffx` do After Effects** e presets próprios em JSON.
+Editor de vídeo e motion graphics com interface no estilo Alight Motion, feito para **edits** (futebol, velocity, shakes, glows…):
 
-Não tem build nem dependências: são ES modules puros. Funciona no desktop e no celular (layout responsivo e instalável como PWA).
+- **52 efeitos** que recriam os plugins mais usados no After Effects (Twixtor, Deep Glow, Twitch, Sapphire, BCC, RSMB, Optical Flares…) e os efeitos nativos famosos do AE.
+- **Importador de `.ffx`** que identifica efeitos nativos e **plugins de terceiros** e converte cada um para o efeito equivalente do app, mantendo valores e keyframes.
+- **Pacote de presets FREE**: basta colocar arquivos `.ffx`/`.json` numa pasta.
+- **App Android e iOS** via Capacitor (projetos em `android/` e `ios/`) e também PWA instalável.
 
-## Como rodar
+## Rodar
 
 ```bash
 cd motion-editor
-python3 -m http.server 8080     # ou: npm start
-# abra http://localhost:8080
+python3 -m http.server 8080        # ou: npm start
+# abra http://localhost:8080 (no celular: use o IP do computador na mesma rede)
 ```
 
-> Precisa de um servidor HTTP: módulos ES não carregam via `file://`.
+## Interface (estilo Alight Motion)
 
-## Recursos
+- **Prévia** no topo. Arraste com 1 dedo para mover a camada; use 2 dedos para escalar e girar.
+- **Timeline** com playhead fixo no centro. Arraste para navegar e use pinça (ou Ctrl+roda) para zoom. Os clipes mostram miniatura (vídeo) ou forma de onda (áudio). Os marcadores de batida aparecem em laranja.
+- **Barra inferior** contextual:
+  - sem seleção: Camada, Mídia, Áudio, Texto, Ajuste, Efeitos, Presets, `.ffx`, Projeto;
+  - com seleção: Efeitos, Presets, Ajustes, Keyframes, Velocidade, Dividir, Duplicar, Ordem, Ocultar, Excluir.
+- **Painéis** deslizam de baixo (no desktop ficam na lateral).
+- **Barra de keyframes** (acima da timeline):
+  - **◆ Key** — cria um keyframe em posição, escala, rotação e opacidade;
+  - **◆◆ Sel. todos** — seleciona todos os keyframes da camada (ou do projeto);
+  - **⟷ Esticar** — estica ou comprime o comprimento dos keyframes selecionados. Use o slider de ¼× a 4× (com prévia ao vivo), os botões ½× / 0,75× / 1,5× / 2× ou digite a duração exata. A âncora pode ser o primeiro keyframe, o playhead ou o último;
+  - **▾ Marca** — marcador de batida.
+- **Painel Keyframes:**
+  - interpolação em lote: Linear, Easy Ease, Ease In/Out, **Velocity forte/suave** (curva de influência alta, o “graph” clássico de edits), Overshoot e Hold;
+  - inverter, mover para o playhead e excluir;
+  - modo de seleção múltipla para celular.
+- **Edição:**
+  - camadas de vídeo, imagem, áudio, texto, formas, sólido e **camada de ajuste** (efeitos aplicados em tudo abaixo, como no AE);
+  - dividir clipe (✂) e aparar pelas alças;
+  - snap no playhead, nos marcadores e nas bordas de outros clipes;
+  - desfazer/refazer.
+- **Música:**
+  - forma de onda na timeline;
+  - **detecção automática de batidas**, que gera marcadores para sincronizar cortes e keyframes.
+- **Salvamento:**
+  - projeto salvo automaticamente no aparelho;
+  - mídias guardadas no IndexedDB, então continuam lá depois de fechar o app.
 
-- **Camadas:** texto, retângulo, elipse, sólido, imagem e vídeo (por arrastar e soltar ou pelo botão "+ Mídia"). Modos de mesclagem e pontos de entrada e saída.
-- **Keyframes em tudo:** posição, escala, rotação, opacidade, ponto de ancoragem e todos os parâmetros de efeito. Funciona com cronômetro e navegação ‹ ◆ › como no AE.
-- **Interpolações:** Linear, Easy Ease, Ease In/Out, Overshoot, Quicar, Hold e Bézier com influência (vinda do AE).
-- **Timeline:** mover e aparar camadas, arrastar keyframes (com snap no quadro), zoom com Ctrl+roda e scrub.
-- **Efeitos nativos:** desfoque gaussiano, desfoque direcional, glow, sombra projetada, preenchimento, tingir, matiz/saturação, brilho/contraste, preto e branco, inverter, mosaico, vinheta, aberração RGB, ruído/grão, gradiente, tremor (wiggle) e transformar.
-- **Biblioteca de presets:** mais de 20 presets nativos (entradas, saídas, ênfase e looks). Você também pode salvar a animação de uma camada como preset e exportar ou importar `.json`.
-- **Exportação:** vídeo WebM/MP4 (MediaRecorder), quadro PNG e projeto `.json`.
-- **Outros:** desfazer/refazer, salvamento automático no navegador e atalhos de teclado.
+Atalhos (desktop): Espaço (play), ←/→ (quadro), K (keyframe), M (marcador), Ctrl+A (selecionar keyframes), Ctrl+Shift+K (dividir), Ctrl+Z/Ctrl+Shift+Z, Ctrl+D, Delete.
 
-### Atalhos
+## Efeitos
 
-| Tecla | Ação |
+Renderização em **WebGL** (shaders próprios em `js/fx/`), o que funciona em Android e iPhone. O Safari não suporta `ctx.filter`.
+
+| Categoria | Efeitos (entre parênteses: plugin/efeito do AE que recriam) |
 |---|---|
-| Espaço | Play/Pause |
-| ← / → (Shift = 10 quadros) | Quadro anterior/próximo |
-| Home / End | Início/fim |
-| Delete | Exclui o keyframe selecionado (ou a camada) |
-| Ctrl+Z / Ctrl+Shift+Z | Desfazer/Refazer |
-| Ctrl+D | Duplicar camada |
-| Ctrl+S | Salvar projeto |
+| Luz e brilho | Deep Glow (Deep Glow), Glow (AE Glow), Raios de luz (CC Light Rays / Shine / S_Rays), Lens Flare (Optical Flares / S_LensFlare / BCC Lens Flare), Light Leaks (BCC Light Leaks), Strobe / Flash (Strobe Light) |
+| Movimento | Shake (S_Shake / Universe Shake / wiggle), **Twitch** (Video Copilot Twitch: blur, cor, luz, escala, deslize), Transformar |
+| Tempo | **Velocidade estilo Twixtor** (rampas de velocidade com keyframes + frame blending), Posterize Time (stutter), Echo (rastro) |
+| Desfoque | Gaussiano, Direcional, Radial/Zoom (CC Radial Blur), **Motion blur estilo RSMB** (calculado a partir do movimento real da camada) |
+| Estilizar | Sombra, Contorno, Mosaico, Vinheta, Ruído/Grão, Aberração cromática (S_WarpChroma), Prisma (BCC Prism), Glitch (BCC Glitch / S_DigitalDamage), VHS (BCC VHS), Encontrar bordas, Film Look (S_FilmEffect / FilmConvert) |
+| Distorção | Wave Warp, Turbulent Displace, Bulge / CC Lens, Twirl, Optics Compensation, Mirror, CC Kaleida, **Motion Tile** |
+| Cor | Color Grade (Lumetri / Looks), Exposição, Brilho/Contraste, Matiz/Saturação, Níveis, Vibração, Tint, P&B, Inverter, Fill, Gradiente, Posterizar, Threshold |
+| Transições | Wipe linear, Wipe radial, Persianas, Dissolver em blocos |
 
-## Importação de `.ffx`
+> **Importante:** são **recriações próprias**, com a mesma função e parâmetros parecidos. Não são os plugins originais nem afiliados aos seus fabricantes. Os nomes aparecem apenas para identificar a compatibilidade na importação.
 
-O `.ffx` é um arquivo binário **RIFX** (RIFF big-endian, form type `FaFX`). O parser (`js/riff.js` + `js/ffx.js`) lê a árvore de chunks:
+## Importador de `.ffx`
+
+`js/riff.js` e `js/ffx.js` leem o binário RIFX (`FaFX`): efeitos, parâmetros, valores, keyframes e propriedades de transformação. Depois `js/import-map.js` identifica cada efeito:
+
+1. **Nativo AE / CC.** O match name é exato (`ADBE Gaussian Blur 2`, `ADBE Glo2`, `CC Radial Blur`, `ADBE Lumetri`… são mais de 50).
+2. **Plugin de terceiro.** O match name ou o nome é reconhecido por padrões:
+
+   | Fabricante | Plugins reconhecidos |
+   |---|---|
+   | RE:Vision | Twixtor, RSMB |
+   | Plugin Everything | Deep Glow |
+   | Video Copilot | Twitch, Optical Flares, Saber, Heat Distortion |
+   | Sapphire | `S_Glow`, `S_Shake`, `S_Blur*`, `S_WarpChroma`, `S_LensFlare`, `S_Rays`, `S_Film*`, `S_DigitalDamage`… |
+   | BCC | Glow, Lens Flare, Light Leaks, Prism, Glitch, VHS, Shake… |
+   | Red Giant | Universe (Glow, Shake, Glitch, VHS…), Shine, Starglow, Magic Bullet |
+   | Outros | FilmConvert |
+
+3. **Aproximado.** Quando nada acima casa, o app procura palavras-chave no nome (glow, shake, chromatic, glitch…).
+4. **Sem equivalente.** O efeito vira “Controles importados”: os controles continuam editáveis e animáveis, mas não alteram a imagem.
+
+Depois da importação, um relatório mostra o status de cada efeito, o plugin identificado, quais parâmetros foram convertidos e os avisos (expressões, arquivo truncado). Ali também dá para ajustar o fps usado para converter o tempo dos keyframes.
+
+**Para adicionar ou corrigir um plugin:** inclua uma regra em `IMPORT_RULES` (`js/import-map.js`) com `test` (regex), `to` (efeito do app) e `map` (nome do parâmetro no plugin → parâmetro do app, com `conv` para converter unidades).
+
+## Pacote de presets FREE
+
+Coloque os arquivos em `presets/free/<Categoria>/`:
 
 ```
-RIFX FaFX
- ├ head
- └ LIST besc
-    ├ LIST tdsp   → caminho do alvo (tdmn "ADBE Effect Parade", tdmn "<matchName>", tdsn "<nome>")
-    └ LIST sspc   → instância do efeito
-       ├ LIST parT → definições dos parâmetros (tdmn "<mn>-0001" + pard: tipo, nome)
-       └ LIST tdgp → valores (tdmn + LIST tdbs { tdsn, tdb4, cdat, LIST list { lhd3, ldat } })
+presets/free/
+  Shakes/Shake forte RSMB.json
+  Shakes/Shake forte RSMB.png      ← miniatura opcional (mesmo nome)
+  Transições/zoom punch.ffx
+  Velocity/rampa 1.ffx
 ```
 
-Para cada efeito, o editor:
+Depois rode:
 
-1. **Lê o match name** (por exemplo `ADBE Gaussian Blur 2`), os nomes, tipos e valores dos parâmetros (`cdat`, float64) e os keyframes (`lhd3`/`ldat`).
-2. **Mapeia para um efeito nativo.** Ele procura primeiro pelo match name exato e depois por palavras-chave no nome ("glow", "shadow", "shake"…). Os parâmetros são casados pelo nome e, se não houver nome, pelo índice `-000N`. Também converte unidades: cores ARGB 0–255 viram RGBA 0–1, e a opacidade da sombra (0–255) vira %.
-3. **Mantém o que não tem equivalente.** Pseudo-efeitos e plugins de terceiros sem correspondência viram "Controles importados": continuam editáveis e animáveis, mas não alteram a imagem.
-4. **Lê presets de animação.** Propriedades de `ADBE Transform Group` (posição, escala, rotação, opacidade) viram keyframes da camada. A posição é aplicada de forma relativa, porque as coordenadas absolutas da comp do AE não valem para outra comp.
-5. **Mostra um relatório:** status de cada efeito (Nativo / Aproximado / Sem equivalente), avisos (expressões, arquivo truncado) e a árvore RIFX para depuração. O fps usado para converter o tempo dos keyframes pode ser ajustado ali mesmo.
+```bash
+npm run presets      # gera presets/manifest.json
+```
 
-Se a estrutura não for reconhecida, uma varredura bruta dos chunks `tdmn` ainda lista os efeitos encontrados.
+Os presets aparecem na aba **Presets** com o selo **FREE**, organizados por categoria. Arquivos `.ffx` são lidos e convertidos na hora em que o usuário toca neles. Também é possível exportar qualquer preset do app como `.json` (botão ⤓) e colocá-lo no pacote.
 
-| Efeito do AE (match name) | Efeito no editor |
-|---|---|
-| ADBE Gaussian Blur 2, ADBE Fast Blur, ADBE Box Blur2 | Desfoque gaussiano |
-| ADBE Motion Blur | Desfoque direcional |
-| ADBE Glo2 | Glow |
-| ADBE Drop Shadow | Sombra projetada |
-| ADBE Fill | Preenchimento |
-| ADBE Tint | Tingir |
-| ADBE HUE SATURATION, ADBE Color Balance (HLS) | Matiz/Saturação |
-| ADBE Brightness & Contrast 2 | Brilho e contraste |
-| ADBE Black&White | Preto e branco |
-| ADBE Invert | Inverter |
-| ADBE Mosaic | Mosaico |
-| CC Vignette | Vinheta |
-| ADBE Noise, ADBE Add Grain | Ruído/Grão |
-| ADBE Ramp | Gradiente |
-| ADBE Geometry2 | Transformar |
+## Exportação
 
-Para adicionar um mapeamento, edite `ffx.matchNames` e `ffx.map` do efeito em `js/effects.js`.
+- **MP4 quadro a quadro.** Usa WebCodecs + [mp4-muxer](https://github.com/Vanilagy/mp4-muxer) (MIT, em `js/vendor/`). A exportação é precisa: respeita Twixtor, motion blur e frame blending. Sai em H.264 (ou VP9/AV1, conforme o aparelho) e **com áudio** (AAC ou Opus).
+- **Fallback.** Em navegadores sem WebCodecs, a gravação é feita em tempo real, sem áudio.
+- **No celular**, o vídeo abre a folha de compartilhar, com as opções Salvar na galeria, TikTok, Instagram etc.
 
-### Limitações conhecidas
+## Android e iPhone
 
-- O formato `.ffx` não é documentado pela Adobe. O layout foi obtido de engenharia reversa pública. A leitura de efeitos, parâmetros e valores segue essa estrutura. Já o layout binário dos **keyframes** (`ldat`) é *best-effort*: se os valores não passarem na checagem de plausibilidade, o parâmetro é importado como valor estático e um aviso aparece.
-- **Expressões** são preservadas como texto, mas não são executadas.
-- Não há suporte a animadores de texto, máscaras, 3D/câmeras nem plugins de terceiros (Saber, Deep Glow etc.), que viram aproximações ou controles sem render.
-- O render usa Canvas 2D (`ctx.filter`), o que funciona melhor em navegadores Chromium. A exportação de vídeo é em tempo real.
-- Vídeos não são embutidos no arquivo de projeto `.json` (imagens são).
+O app é empacotado com **Capacitor 8**. Os projetos nativos já estão em `android/` e `ios/`.
+
+```bash
+cd motion-editor
+npm install
+npm run android   # copia o app para www/, sincroniza e abre no Android Studio → Run / Build APK/AAB
+npm run ios       # idem para Xcode (requer macOS) → Run / Archive
+```
+
+- **Plugins nativos:** `@capacitor/filesystem` e `@capacitor/share`, usados para salvar e compartilhar os vídeos exportados.
+- **iOS:** as permissões de galeria, câmera e microfone já estão no `Info.plist`. A exportação MP4 precisa de iOS 16.4 ou mais novo (WebCodecs).
+- **PWA:** sem compilar nada, dá para abrir o site no celular e usar “Adicionar à tela inicial”. O app funciona offline graças ao service worker.
 
 ## Testes
 
 ```bash
-npm test            # parser FFX, conversão em preset e aplicação de presets (node:test)
-npm run samples     # regenera samples/*.ffx
+npm test          # 14 testes: parser FFX, plugins, conversão, presets, esticar keyframes, Twixtor, posterize, batidas
+npm run samples   # regenera samples/*.ffx e presets/free/Exemplos AE/
 ```
 
-Os `.ffx` de teste e de exemplo (`samples/`) são gerados por `tests/ffx-builder.mjs`, que escreve o mesmo layout RIFX descrito acima. Vale testar também com arquivos `.ffx` exportados do seu After Effects. Se algum não importar bem, o painel "Estrutura RIFX (debug)" no relatório mostra a árvore lida.
+Também foram verificados no Chromium:
+
+- interface no celular e no desktop;
+- seleção e gestos;
+- navegador de efeitos;
+- selecionar todos / esticar keyframes;
+- importação de `.ffx` com plugins;
+- presets FREE;
+- vídeo com rampa de velocidade (conferido medindo o movimento quadro a quadro no MP4 exportado);
+- detecção de batidas;
+- exportação MP4 com áudio.
+
+## Limitações conhecidas
+
+- **Formato `.ffx`.** Não é documentado. Os testes usam arquivos gerados com o mesmo layout RIFX obtido por engenharia reversa. **Ainda é preciso validar com `.ffx` reais do seu After Effects**, principalmente:
+  - os match names exatos de plugins de terceiros (a detecção usa padrões de nome);
+  - os nomes de parâmetros de cada plugin;
+  - o layout binário dos keyframes (*best-effort*).
+
+  Quando algo não converter bem, o relatório de importação mostra a estrutura do arquivo.
+- **Expressões** (ex.: `wiggle()`) são preservadas como texto, mas não executadas. Use o efeito Shake.
+- **Não suportado:** animadores de texto, máscaras, 3D/câmera, Element 3D, Particular e outros plugins de geração 3D.
+- **Velocidade estilo Twixtor:** usa frame blending, não optical flow real. A interpolação fica mais suave em clipes com taxa de quadros alta.
+- **Desempenho:** em celulares mais fracos, use prévia ½ ou ⅓. A exportação é feita quadro a quadro e não depende da velocidade da prévia.
+- **Áudio do vídeo:** os clipes de vídeo entram mudos. O áudio vem das camadas de áudio, como é comum em edits.
+- **Build nativo:** o APK/IPA não foi compilado neste ambiente, que não tem Android SDK nem Xcode. Os projetos foram gerados e sincronizados com sucesso pelo Capacitor.
 
 ## Estrutura
 
 ```
-js/riff.js       parser RIFF/RIFX genérico
-js/ffx.js        interpretação de .ffx (efeitos, parâmetros, keyframes)
-js/presets.js    formato de preset, presets nativos, FFX→preset, aplicar/salvar
-js/effects.js    efeitos (render Canvas 2D) + mapeamento de match names do AE
-js/anim.js       keyframes, interpolação e easing
-js/renderer.js   composição dos quadros, hit-test e mídia
-js/state.js      projeto, camadas, histórico (undo/redo)
-js/timeline.js   timeline
-js/inspector.js  painel de propriedades e efeitos
-js/library.js    biblioteca de presets + relatório de importação
-js/exporter.js   exportação de vídeo/PNG
-js/main.js       app, comandos, atalhos, arrastar e soltar
+js/gl.js            motor WebGL (blur multi-escala, passes, pool de texturas)
+js/fx/*.js          efeitos (shaders) por categoria
+js/effects.js       registro dos efeitos
+js/import-map.js    regras de identificação AE/plugins → efeitos do app
+js/ffx.js, riff.js  leitura de .ffx
+js/presets.js       presets nativos, FFX → preset, aplicar/salvar
+js/renderer.js      composição: WebGL, motion blur, echo, camada de ajuste
+js/timing.js        velocidade (Twixtor), posterize time, tempo da mídia
+js/media.js         vídeo/imagem (seek preciso, frame blending)
+js/audio.js         música, forma de onda, mixagem, detecção de batidas
+js/keyframes.js     selecionar todos, esticar, inverter, easing em lote
+js/timeline.js      timeline estilo Alight Motion
+js/inspector.js     propriedades e controles de efeitos
+js/keytools.js      painel de keyframes
+js/fx-browser.js    navegador de efeitos
+js/library.js       presets (nativos, FREE, importados)
+js/exporter.js      exportação MP4 (WebCodecs) e fallback
+js/platform.js      Capacitor (salvar/compartilhar), PWA
+js/main.js          app, gestos, comandos
+tools/              build-presets (manifest FREE) e build-www (Capacitor)
+android/, ios/      projetos nativos (Capacitor)
 ```

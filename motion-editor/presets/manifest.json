@@ -1,0 +1,31 @@
+{
+  "generated": "2026-11-01T16:29:13.703Z",
+  "count": 5,
+  "presets": [
+    {
+      "name": "animacao pop tint",
+      "category": "Exemplos AE",
+      "file": "presets/free/Exemplos AE/animacao-pop-tint.ffx"
+    },
+    {
+      "name": "blur glow sombra",
+      "category": "Exemplos AE",
+      "file": "presets/free/Exemplos AE/blur-glow-sombra.ffx"
+    },
+    {
+      "name": "plugins de edit",
+      "category": "Exemplos AE",
+      "file": "presets/free/Exemplos AE/plugins-de-edit.ffx"
+    },
+    {
+      "name": "pseudo controles",
+      "category": "Exemplos AE",
+      "file": "presets/free/Exemplos AE/pseudo-controles.ffx"
+    },
+    {
+      "name": "Shake forte RSMB",
+      "category": "Shakes",
+      "file": "presets/free/Shakes/Shake forte RSMB.json"
+    }
+  ]
+}

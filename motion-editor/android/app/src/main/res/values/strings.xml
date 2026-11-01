@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MotionFrame</string>
+    <string name="title_activity_main">MotionFrame</string>
+    <string name="package_name">app.motionframe.editor</string>
+    <string name="custom_url_scheme">app.motionframe.editor</string>
+</resources>
