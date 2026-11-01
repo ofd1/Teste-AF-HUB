@@ -31,6 +31,7 @@ export function looksFromTools(tools, strength = 100) {
     optDensity: 0, optSize: 50, optHighlights: 50, optGlow: 0, edgeCenter: [0.5, 0.5], edgeAspect: 1,
     gradExposure: 0, gradAngle: 0, gradOffset: 0, gradSoft: 0.5, gradColor: [1, 1, 1, 1],
     edgeBlur: 0, edgeSize: 100, edgeSoft: 50,
+    anamSize: 0, anamBoost: 1, anamThreshold: 70, hazeExposure: -99, hazeSoftness: 60, hazeSpill: 50, lensDistort: 0, lensFlatten: 0,
   };
   const HSL = ['Red', 'Orange', 'Yellow', 'Green', 'Aqua', 'Blue', 'Purple', 'Magenta'];
   for (const k of HSL) { p[`hsl${k}H`] = 0; p[`hsl${k}S`] = 0; p[`hsl${k}L`] = 0; }
@@ -66,7 +67,16 @@ export function looksFromTools(tools, strength = 100) {
           p.temperature += (v[7] || 0) * 10 * k;
         }
         break;
-      case 'haze': p.fade += (v[0] || 0) * 0.35; break;
+      // Haze/Flare (manual: Spillage, Softness, …, Exposure, …, cor): luz que vaza dentro da lente + leve névoa
+      case 'haze':
+        p.hazeSpill = clampN(v[0] ?? 50, 0, 100); p.hazeSoftness = clampN(v[1] ?? 60, 0, 100);
+        p.hazeExposure = clampN(v[3] ?? -1, -10, 4); p.hazeTint = [v[8] ?? 1, v[9] ?? 1, v[10] ?? 1, 1];
+        p.fade += (v[2] || 0) * 0.08;
+        break;
+      // Anamorphic Flare (manual: Size, Boost, Threshold, …, cor)
+      case 'anam': p.anamSize = clampN(v[0] || 0, 0, 1000); p.anamBoost = clampN(v[1] ?? 1, 0, 5); p.anamThreshold = clampN((v[2] ?? 0.7) * 100, 0, 100); break;
+      // Lens Distortion (manual: Distortion, Flatten)
+      case 'lnsd': p.lensDistort = clampN(v[0] || 0, -100, 100); p.lensFlatten = clampN(v[1] || 0, 0, 100); break;
       case 'csta': {
         // Colorista: [?, força, exposição, lift RGB, gamma RGB, gain RGB, ?, HSL de 8 cores (matiz/sat/lum) …, temperatura (216), tint (217)]
         p.liftR += ((v[3] ?? 1) - 1) * 0.6; p.liftG += ((v[4] ?? 1) - 1) * 0.6; p.liftB += ((v[5] ?? 1) - 1) * 0.6;

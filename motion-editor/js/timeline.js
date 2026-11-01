@@ -176,6 +176,7 @@ export class Timeline {
       else {
         const [, fxId, key] = /^fx:([^.]+)\.(.+)$/.exec(path);
         const fx = layer.effects.find((f) => f.id === fxId);
+        if (fx?.type === 'stabilize') continue; // keyframes automáticos da estabilização (um por quadro) não poluem a timeline
         const def = fx.type === 'generic' ? { label: fx.label, params: fx.defs || [] } : getEffectDef(fx.type);
         label = `${fx.label || def.label} › ${def.params.find((p) => p.key === key)?.label || key}`;
       }

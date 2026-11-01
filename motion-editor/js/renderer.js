@@ -208,7 +208,7 @@ function renderLayerImage(layer, t, scale, extra) {
   }
   const rect = [pad / tex.w, pad / tex.h, (w * scale) / tex.w, (h * scale) / tex.h];
   gl.env = { u_time: lt, u_scale: scale, u_rect: rect };
-  const env = { gl, t: lt, scale, pad, w, h, W: tex.w, H: tex.h, rect, layer, fps, srcCanvas: canvas, final: renderOpts.final };
+  const env = { gl, t: lt, scale, pad, w, h, W: tex.w, H: tex.h, rect, layer, fps, srcCanvas: canvas, final: renderOpts.final, srcW: vf?.a ? vf.a.videoWidth || vf.a.width : layer.type === 'image' ? getImage(layer.props.src)?.naturalWidth : 0 };
   for (const { def, p, prev, fx } of evaluated) {
     try {
       const input = tex;

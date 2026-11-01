@@ -413,3 +413,13 @@ input[type="number"], input[type="text"], input[type="search"], select, textarea
 .graph-presets svg { width: 34px; height: 24px; color: #2d8ceb; overflow: visible; }
 .graph-empty { padding: 10px; border: 1px dashed var(--line); border-radius: 6px; font-size: 13px; color: #b8b8b8; margin-bottom: 10px; }
 .app.docked ~ .toasts { top: calc(60px + var(--safe-t)); bottom: auto; }
+
+/* ---------- painel Topaz ---------- */
+.tz-head { padding: 6px 0 10px; font-size: 14px; }
+.tz-sec { border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin: 0 0 10px; background: #171717; }
+.tz-title { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 14px; }
+.tz-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid #222; font-size: 12.5px; }
+.tz-row.locked { opacity: .6; }
+.tz-ctl { display: flex; align-items: center; gap: 6px; }
+.tz-ctl output { min-width: 26px; text-align: right; font: 12px ui-monospace, Menlo, monospace; color: var(--accent); }
+@media (max-width: 520px) { .tz-row { grid-template-columns: 1fr; } }

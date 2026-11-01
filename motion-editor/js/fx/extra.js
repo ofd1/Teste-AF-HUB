@@ -218,6 +218,43 @@ void main() { vec4 c = unpre(texture2D(u_tex, v_uv)); gl_FragColor = pre(vec4(c.
 const SCREEN_ADD = frag(`
 uniform sampler2D u_tex2; uniform float u_amount;
 void main() { vec4 s = texture2D(u_tex, v_uv); vec4 g = texture2D(u_tex2, v_uv) * u_amount; gl_FragColor = vec4(s.rgb + g.rgb * (s.a - s.rgb), s.a); }`);
+// Anamorphic Flare (Looks): riscos horizontais saindo dos realces
+const ANAM_HI = frag(`
+uniform float u_thr, u_soft;
+void main() { vec4 c = texture2D(u_tex, v_uv); float l = luma(c.rgb / max(c.a, 1e-4)); gl_FragColor = c * smoothstep(u_thr, u_thr + max(u_soft, 0.02), l); }`);
+const ANAM_STREAK = frag(`
+uniform float u_len;
+void main() {
+  vec4 acc = vec4(0.0); float ws = 0.0;
+  for (int i = -32; i <= 32; i++) { float k = float(i) / 32.0; float w = exp(-abs(k) * 3.0); acc += texture2D(u_tex, v_uv + vec2(k * u_len * u_texel.x, 0.0)) * w; ws += w; }
+  gl_FragColor = acc / ws;
+}`);
+const ANAM_ADD = frag(`
+uniform sampler2D u_tex2; uniform float u_boost; uniform vec3 u_col;
+void main() { vec4 a = texture2D(u_tex, v_uv); vec3 f = texture2D(u_tex2, v_uv).rgb * u_col * u_boost; gl_FragColor = vec4(min(a.rgb + f * a.a, vec3(a.a)), a.a); }`);
+// Lens Distortion (Looks): barril (+) / almofada (−), "Flatten" empurra a distorção para as bordas
+const LENSD = frag(`
+uniform float u_k, u_flat;
+void main() {
+  vec2 cu = contentUV(v_uv) - 0.5;
+  float r2 = dot(cu, cu) * 2.0;
+  float f = 1.0 + u_k * pow(r2, 1.0 + u_flat * 2.0);
+  // almofada (k<0) puxa as bordas para dentro: compensa para o quadro continuar cheio (sem barras pretas)
+  float fill = u_k < 0.0 ? 1.0 + u_k : 1.0;
+  vec2 q = cu * fill / max(f, 0.05) + 0.5;
+  gl_FragColor = (q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) ? vec4(0.0) : texture2D(u_tex, fromContent(q));
+}`);
+// Haze/Flare (Looks): luz que "vaza" dentro da lente — brilho largo dos realces, mais forte perto das bordas (spillage)
+const HAZE = frag(`
+uniform sampler2D u_tex2; uniform float u_exp, u_spill; uniform vec3 u_tintc;
+void main() {
+  vec4 a = texture2D(u_tex, v_uv);
+  vec3 h = texture2D(u_tex2, v_uv).rgb;
+  vec2 cu = contentUV(v_uv) - 0.5;
+  float edge = mix(1.0, smoothstep(0.1, 0.75, length(cu) * 1.4), 1.0 - u_spill);
+  vec3 o = a.rgb + h * u_tintc * u_exp * edge * (1.0 - a.rgb * 0.5);
+  gl_FragColor = vec4(min(o, vec3(a.a)), a.a);
+}`);
 const RADIAL_SPLIT = frag(`
 uniform float u_amt;
 void main() {
@@ -242,6 +279,9 @@ export default [
       num('vignette', 'Vinheta %', 0, 0, 100), num('vignetteSize', 'Tamanho da vinheta %', 50, 0, 100),
       num('diffusion', 'Difusão (glow) %', 0, 0, 300), num('diffusionRadius', 'Raio da difusão', 60, 1, 600), num('diffusionThreshold', 'Limiar da difusão %', 60, 0, 100),
       num('chroma', 'Aberração cromática', 0, 0, 50, 0.1),
+      num('anamSize', 'Anamorphic Flare – tamanho', 0, 0, 1000), num('anamBoost', 'Anamorphic Flare – força', 1, 0, 5, 0.01), num('anamThreshold', 'Anamorphic Flare – limiar %', 70, 0, 100), adv(col('anamColor', 'Anamorphic Flare – cor', [0.35, 0.6, 1, 1])),
+      num('hazeExposure', 'Haze/Flare – exposição (stops, -99 = desligado)', -99, -99, 4, 0.05), num('hazeSoftness', 'Haze/Flare – suavidade %', 60, 0, 100), num('hazeSpill', 'Haze/Flare – spillage %', 50, 0, 100), adv(col('hazeTint', 'Haze/Flare – cor', [1, 0.92, 0.82, 1])),
+      adv(num('lensDistort', 'Lens Distortion (+ barril / − almofada)', 0, -100, 100, 0.5)), adv(num('lensFlatten', 'Lens Distortion – flatten %', 0, 0, 100)),
       num('spotExposure', 'Spot Exposure (luz)', 0, -4, 4, 0.01), col('spotColor', 'Spot – cor da luz', [1, 1, 1, 1]), pos('spotCenter', 'Spot – centro', [0.5, 0.5]),
       num('spotSize', 'Spot – raio %', 50, 0, 400), num('spotSoft', 'Spot – spread %', 50, 0, 400), adv(num('spotAspect', 'Spot – proporção', 1, 0.1, 4, 0.01)), adv(bool('spotInvert', 'Spot – inverter', false)),
       num('edgeBlur', 'Edge Softness (desfoque nas bordas)', 0, 0, 100, 0.1), num('edgeSize', 'Edge – raio nítido %', 100, 0, 400), num('edgeSoft', 'Edge – spread %', 50, 0, 400),
@@ -292,6 +332,18 @@ export default [
         const b = gl.blur(th, p.diffusionRadius * 0.5 * env.scale);
         out = gl.pass(SCREEN_ADD, { u_tex: out, u_tex2: b, u_amount: (p.diffusion / 100) * s });
       }
+      if ((p.hazeExposure ?? -99) > -20 && s > 0) {
+        // brilho largo dos realces (como os reflexos internos de lentes antigas)
+        const hi = gl.pass(ANAM_HI, { u_tex: out, u_thr: 0.45, u_soft: 0.4 });
+        const big = gl.blur(hi, Math.max(2, (10 + (p.hazeSoftness ?? 60) * 1.4) * env.scale * (Math.max(env.w, env.h) / 1920)));
+        out = gl.pass(HAZE, { u_tex: out, u_tex2: big, u_exp: Math.pow(2, p.hazeExposure) * s, u_spill: (p.hazeSpill ?? 50) / 100, u_tintc: rgb(p.hazeTint || [1, 0.92, 0.82, 1]) });
+      }
+      if ((p.anamSize || 0) > 0 && s > 0) {
+        const hi = gl.pass(ANAM_HI, { u_tex: out, u_thr: (p.anamThreshold ?? 70) / 100, u_soft: 0.15 });
+        const st = gl.pass(ANAM_STREAK, { u_tex: gl.pass(ANAM_STREAK, { u_tex: hi, u_len: p.anamSize * env.scale * 0.5 }), u_len: p.anamSize * env.scale });
+        out = gl.pass(ANAM_ADD, { u_tex: out, u_tex2: st, u_boost: (p.anamBoost ?? 1) * 1.5 * s, u_col: rgb(p.anamColor || [0.35, 0.6, 1, 1]) });
+      }
+      if (Math.abs(p.lensDistort || 0) > 0.05) out = gl.pass(LENSD, { u_tex: out, u_k: (p.lensDistort / 100) * 0.35 * s, u_flat: (p.lensFlatten || 0) / 100 });
       if (p.chroma > 0 && s > 0) out = gl.pass(RADIAL_SPLIT, { u_tex: out, u_amt: (p.chroma / 1000) * s });
       return out;
     },

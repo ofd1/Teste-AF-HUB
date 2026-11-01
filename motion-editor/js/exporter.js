@@ -245,7 +245,7 @@ export async function exportPNG(store) {
 export async function exportDialog(store) {
   const res = await modal('Exportar', `
     <label class="row"><span>Formato</span><select data-f="fmt"><option value="video">Vídeo MP4</option><option value="png">Quadro atual (PNG)</option><option value="project">Projeto (.json)</option></select></label>
-    <label class="row"><span>Resolução</span><select data-f="scale"><option value="1">100% (${store.project.width}×${store.project.height})</option><option value="0.6667">66%</option><option value="0.5">50%</option></select></label>
+    <label class="row"><span>Resolução</span><select data-f="scale"><option value="1">100% (${store.project.width}×${store.project.height})</option><option value="1.5">150% upscale (${even(store.project.width * 1.5)}×${even(store.project.height * 1.5)})</option><option value="2">200% upscale (${store.project.width * 2}×${store.project.height * 2})</option><option value="0.6667">66%</option><option value="0.5">50%</option></select></label>
     <label class="row"><span>FPS</span><select data-f="fps">${[24, 25, 30, 50, 60].map((f) => `<option ${f === store.project.fps ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
     <label class="row"><span>Qualidade (Mbps)</span><input type="number" data-f="bitrate" value="16" min="2" max="80"></label>`,
   [{ label: 'Cancelar', value: null }, { label: 'Exportar', primary: true, value: (w) => ({ fmt: w.querySelector('[data-f="fmt"]').value, scale: +w.querySelector('[data-f="scale"]').value, fps: +w.querySelector('[data-f="fps"]').value, bitrate: +w.querySelector('[data-f="bitrate"]').value }) }]);

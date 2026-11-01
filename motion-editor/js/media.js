@@ -142,7 +142,8 @@ export function prepare(project, t, { exact = false, playing = false } = {}) {
       if (e && !e.a.paused) e.a.pause();
       continue;
     }
-    const fr = blendFrames(l, t, project.fps);
+    let fr = blendFrames(l, t, project.fps);
+    if (l.props.dedupe) { const d = dedupeTimes(l, sourceTime(l, t)); if (d) fr = d; }
     const e = getVideo(l, fr.b !== null);
     e.frame = fr;
     if (exact) {
@@ -208,6 +209,10 @@ export function videoFrames(layer, t, fps, final = false) {
     const x = Math.max(0, Math.min(c.frames.length - 1, (sourceTime(layer, t) - c.t0) * c.fps));
     const i = Math.floor(x), f = x - i;
     const blend = wantsInterp(layer, t);
+    if (layer.props.dedupe) {
+      const d = dedupeIndex(c, x);
+      if (d) return d.ib === null || d.f < 0.02 ? { a: c.frames[d.ia], b: null, f: 0 } : { a: c.frames[d.ia], b: c.frames[d.ib], f: d.f, quality: 'preview' };
+    }
     if (vectorBlur(layer, t) > 0 && i + 1 < c.frames.length) return { a: c.frames[i], b: c.frames[i + 1], f: blend ? f : 0, quality: 'preview' };
     if (!blend || f < 0.02 || i + 1 >= c.frames.length) return { a: c.frames[Math.round(x)], b: null, f: 0 };
     if (f > 0.98) return { a: c.frames[i + 1], b: null, f: 0 };
@@ -242,7 +247,43 @@ export function setCacheListener(fn) { cacheListener = fn; }
 function cacheKey(layer) {
   const fx = speedEffect(layer);
   const rm = remapEffect(layer);
-  return JSON.stringify([JSON.stringify(rm?.params.time), layer.props.src, layer.props.sourceStart || 0, layer.props.speed ?? 1, layer.inPoint, layer.outPoint, fx?.params.speed, fx?.enabled, !!layer.props.interpolate, layer.props.sourceFps]);
+  return JSON.stringify([!!layer.props.dedupe, JSON.stringify(rm?.params.time), layer.props.src, layer.props.sourceStart || 0, layer.props.speed ?? 1, layer.inPoint, layer.outPoint, fx?.params.speed, fx?.enabled, !!layer.props.interpolate, layer.props.sourceFps]);
+}
+
+const sigCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+function frameSignature(c) {
+  sigCanvas.width = 24; sigCanvas.height = 24;
+  const x = sigCanvas.getContext('2d', { willReadFrequently: true });
+  x.drawImage(c, 0, 0, 24, 24);
+  const d = x.getImageData(0, 0, 24, 24).data, out = new Uint8Array(576);
+  for (let i = 0; i < 576; i++) out[i] = (d[i * 4] + d[i * 4 + 1] * 2 + d[i * 4 + 2]) >> 2;
+  return out;
+}
+function sigDiff(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]); return s / a.length; }
+
+/**
+ * "Replace Duplicate Frames" (como no Topaz): com props.dedupe, quadros repetidos são ignorados e o tempo é
+ * remapeado entre os quadros únicos vizinhos (a interpolação preenche o buraco). Retorna { ia, ib, f } (índices).
+ */
+function dedupeIndex(c, x) {
+  if (!c.dup?.length) return null;
+  const i = Math.floor(x);
+  let u0 = Math.min(i, c.frames.length - 1);
+  while (u0 > 0 && c.dup[u0]) u0--;
+  let u1 = i + 1;
+  while (u1 < c.frames.length && c.dup[u1]) u1++;
+  if (u1 >= c.frames.length) return { ia: u0, ib: null, f: 0 };
+  return { ia: u0, ib: u1, f: Math.max(0, Math.min(1, (x - u0) / (u1 - u0))) };
+}
+
+/** Tempos de origem (s) já sem quadros duplicados, para a exportação. null se não se aplica. */
+export function dedupeTimes(layer, st) {
+  const c = caches.get(layer.id);
+  if (!layer.props.dedupe || !c?.ready || c.key !== cacheKey(layer)) return null;
+  const d = dedupeIndex(c, Math.max(0, (st - c.t0) * c.fps));
+  if (!d) return null;
+  const tt = (k) => c.t0 + (k + 0.01) / c.fps;
+  return { a: tt(d.ia), b: d.ib === null ? null : tt(d.ib), f: d.ib === null ? 0 : d.f };
 }
 
 export function cacheReady(layer) {
@@ -260,7 +301,7 @@ export function cacheStatus() {
 export function ensureCaches(project) {
   const ids = new Set();
   for (const l of flatLayers(project.layers)) {
-    if (l.type !== 'video' || !l.props.src || !(speedEffect(l) || remapEffect(l) || l.props.interpolate || l.effects.some((fx) => fx.enabled && (fx.type === 'timeSlice' || fx.type === 'echo')))) continue;
+    if (l.type !== 'video' || !l.props.src || !(speedEffect(l) || remapEffect(l) || l.props.interpolate || l.props.dedupe || l.effects.some((fx) => fx.enabled && (fx.type === 'timeSlice' || fx.type === 'echo')))) continue;
     ids.add(l.id);
     const c = caches.get(l.id);
     if (c && c.key === cacheKey(l)) continue;
@@ -278,7 +319,7 @@ async function buildCache(project, layer) {
     const s = sourceTime(layer, t);
     lo = Math.min(lo, s); hi = Math.max(hi, s);
   }
-  const entry = { key, fps, t0: 0, frames: [], ready: false, progress: 0, cancelled: false };
+  const entry = { key, fps, t0: 0, frames: [], dup: [], sigs: [], ready: false, progress: 0, cancelled: false };
   caches.set(layer.id, entry);
   cacheListener();
   const v = makeVideo(layer.props.src);
@@ -301,6 +342,10 @@ async function buildCache(project, layer) {
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     c.getContext('2d').drawImage(v, 0, 0, w, h);
+    // assinatura pequena do quadro: detecta quadros repetidos (vídeos baixados do TikTok/IG costumam ter)
+    const sig = frameSignature(c);
+    entry.dup.push(i > 0 && entry.sigs.length && sigDiff(sig, entry.sigs[entry.sigs.length - 1]) < 0.9);
+    entry.sigs.push(sig);
     entry.frames.push(c);
     entry.progress = (i + 1) / n;
     if (i % 6 === 0) cacheListener();

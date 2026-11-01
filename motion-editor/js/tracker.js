@@ -3,10 +3,11 @@
 import { sourceTime } from './timing.js';
 import { contentSize, layerTransform, toLayerSpace } from './renderer.js';
 import { valueAt, sortKeys } from './anim.js';
+import { setExporting } from './media.js';
 
 const AW = 360; // largura de análise (px)
 
-function loadVideo(src) {
+export function loadVideo(src) {
   return new Promise((res, rej) => {
     const v = document.createElement('video');
     v.muted = true; v.playsInline = true; v.preload = 'auto'; v.crossOrigin = 'anonymous';
@@ -16,16 +17,21 @@ function loadVideo(src) {
   });
 }
 
-function seek(v, t) {
+export function seek(v, t) {
   return new Promise((res) => {
-    const done = () => { v.removeEventListener('seeked', done); clearTimeout(to); res(); };
-    const to = setTimeout(done, 3000);
+    // espera o quadro ser realmente apresentado (requestVideoFrameCallback) — sem isso, às vezes vem o quadro anterior
+    let shown = !('requestVideoFrameCallback' in v);
+    let seeked = false;
+    const finish = () => { if (seeked && shown) { clearTimeout(to); res(); } };
+    if (!shown) v.requestVideoFrameCallback(() => { shown = true; finish(); });
+    const done = () => { v.removeEventListener('seeked', done); seeked = true; setTimeout(() => { shown = true; finish(); }, 120); finish(); };
+    const to = setTimeout(() => { seeked = true; shown = true; finish(); }, 3000);
     v.addEventListener('seeked', done);
     v.currentTime = Math.max(0, Math.min(t, (v.duration || t + 1) - 0.001));
   });
 }
 
-function grayFrame(v, ctx, w, h) {
+export function grayFrame(v, ctx, w, h) {
   ctx.drawImage(v, 0, 0, w, h);
   const d = ctx.getImageData(0, 0, w, h).data;
   const g = new Float32Array(w * h);
@@ -59,7 +65,12 @@ function sad(g, w, h, tpl, cx, cy, r, best) {
  * Rastreia um ponto (em coordenadas da composição) numa camada de vídeo de t0 a t1.
  * Retorna [{ t, x, y }] em coordenadas da composição.
  */
-export async function trackPoint({ layer, project, t0, t1, point, onProgress, isCancelled }) {
+export async function trackPoint(opts) {
+  setExporting(true); // pausa o cache de quadros durante a análise
+  try { return await trackImpl(opts); } finally { setExporting(false); }
+}
+
+async function trackImpl({ layer, project, t0, t1, point, onProgress, isCancelled }) {
   const v = await loadVideo(layer.props.src);
   const vw = v.videoWidth || 1080, vh = v.videoHeight || 1920;
   const aw = Math.min(AW, vw), ah = Math.round((aw * vh) / vw);
@@ -75,7 +86,7 @@ export async function trackPoint({ layer, project, t0, t1, point, onProgress, is
   const fps = project.fps;
   const times = [];
   for (let t = t0; t <= t1 + 1e-6; t += 1 / fps) times.push(+t.toFixed(5));
-  await seek(v, sourceTime(layer, t0));
+  await seek(v, sourceTime(layer, t0) + 0.3 / project.fps);
   let g = grayFrame(v, ctx, aw, ah);
   let tpl = patch(g, aw, ah, x, y, R);
   const ref = tpl.slice();
@@ -84,7 +95,7 @@ export async function trackPoint({ layer, project, t0, t1, point, onProgress, is
     if (isCancelled?.()) break;
     const t = times[i];
     if (i > 0) {
-      await seek(v, sourceTime(layer, t));
+      await seek(v, sourceTime(layer, t) + 0.3 / project.fps); // dentro do quadro
       g = grayFrame(v, ctx, aw, ah);
       const cx0 = Math.round(x), cy0 = Math.round(y);
       let best = Infinity, bx = cx0, by = cy0;

@@ -187,3 +187,23 @@ test('Main Shakey: S_BlurMoCurves com Shift em pixels e Wrap X/Y separados (não
   assert.equal(bounce.params.wrap, 1);   // X: não
   assert.equal(bounce.params.wrapY, 3);  // Y: espelhar
 });
+
+test('Looks: Haze/Flare, Anamorphic Flare e Lens Distortion convertidos do .ffx', async () => {
+  const { looksFromTools } = await import('../js/import-map.js');
+  const { params, used } = looksFromTools([
+    { id: 'haze', enabled: true, values: [75, 100, 20, -0.75, 0, 0, 50, 0, 1, 1, 1] },
+    { id: 'anam', enabled: true, values: [406.2, 1.01, 0.2, 2.5, 1, -2, 2, 2, 1.999, 1] },
+    { id: 'lnsd', enabled: true, values: [-8, 25] },
+  ]);
+  assert.ok(used.includes('haze') && used.includes('anam') && used.includes('lnsd'));
+  assert.equal(params.hazeExposure, -0.75);
+  assert.equal(params.anamSize, 406.2);
+  assert.equal(params.lensDistort, -8);
+});
+
+test('Topaz: modelos com valores automáticos e efeitos registrados', async () => {
+  const { EFFECT_MAP } = await import('../js/effects.js');
+  const { TOPAZ_MODELS, TOPAZ_KEYS } = await import('../js/fx/topaz.js');
+  assert.ok(EFFECT_MAP.topaz && EFFECT_MAP.stabilize);
+  for (const [, auto] of TOPAZ_MODELS.slice(1)) for (const k of TOPAZ_KEYS) assert.ok(auto[k] >= 0 && auto[k] <= 100, k);
+});

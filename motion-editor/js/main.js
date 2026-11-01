@@ -1,5 +1,6 @@
 import { Store, LAYER_FACTORIES, RESOLUTIONS, createProject, flatLayers } from './state.js';
 import { compDialog } from './comp-dialog.js';
+import { TopazPanel } from './topaz-panel.js';
 import { setBgListener, ensureBgModel, bgStatus } from './bgremove.js';
 import { setGLLostListener } from './gl.js';
 import { createEffectInstance } from './presets.js';
@@ -193,7 +194,7 @@ overlay.addEventListener('pointercancel', endPointer);
 // ------------------------------------------------------------------ sheet (painel inferior / lateral)
 const sheet = document.getElementById('sheet');
 const sheetTitle = document.getElementById('sheetTitle');
-const TITLES = { effects: 'Efeitos', browser: 'Adicionar efeito', props: 'Ajustes da camada', presets: 'Presets', keys: 'Keyframes e gráfico', add: 'Adicionar camada' };
+const TITLES = { effects: 'Efeitos', browser: 'Adicionar efeito', props: 'Ajustes da camada', presets: 'Presets', keys: 'Keyframes e gráfico', topaz: 'Topaz (melhorar vídeo)', add: 'Adicionar camada' };
 const desktop = window.matchMedia('(min-width: 1100px)');
 const appEl = document.querySelector('.app');
 let sheetPane = null;
@@ -283,6 +284,7 @@ new FxBrowser(document.getElementById('fxBrowser'), (type) => {
   toast(`${getEffectDef(type).label} adicionado em ${layer.name}`, 'ok', 2000);
 });
 keyTools = new KeyTools(document.getElementById('keyTools'), store);
+new TopazPanel(document.getElementById('topazPanel'), store);
 
 // ---- tracker
 function drawTrackMarker(pt) {
@@ -389,7 +391,7 @@ function renderToolbar() {
     ? [
       ['deselect', '✕', 'Fechar'], ['sep'],
       ['effects', '✦', 'Efeitos', true], ['presets', '★', 'Presets'],
-      ...(t === 'video' ? [['speed', '⏱', 'Velocidade', true]] : []),
+      ...(t === 'video' ? [['speed', '⏱', 'Velocidade', true], ['topaz', '✨', 'Topaz', true]] : []),
       ...(t === 'video' || t === 'audio' ? [['sound', '🔊', 'Som']] : []),
       ...(t === 'video' || t === 'image' ? [['bg-remove', '✂︎', 'Tirar fundo']] : []),
       ['props', '☰', 'Propriedades'], ['keys', '📈', 'Keyframes / gráfico'],
@@ -726,6 +728,7 @@ const commands = {
   del: deleteSelection,
   group: groupLayers,
   ungroup: ungroupLayer,
+  topaz: () => openSheet('topaz'),
   'bg-remove': async () => {
     const l = store.layer();
     if (!l || (l.type !== 'video' && l.type !== 'image')) { toast('Selecione um vídeo ou uma foto.', 'warn'); return; }
