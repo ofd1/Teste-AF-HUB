@@ -151,7 +151,7 @@ test('presets nativos usam só efeitos/parâmetros existentes (inclui Shatter e 
 
 test('Shatter do AE (APC Shatter) é convertido com raio animado e duas forças', async () => {
   const { readFileSync } = await import('node:fs');
-  const b = readFileSync(new URL('../presets/free/Shatter/W Shatter.ffx', import.meta.url));
+  const b = readFileSync(new URL('./fixtures/ffx/Shatter/W Shatter.ffx', import.meta.url));
   const pr = ffxToPreset(parseFFX(b.buffer.slice(b.byteOffset, b.byteOffset + b.length), { fps: 30 }));
   assert.deepEqual(pr.effects.map((e) => e.type), ['fill', 'shatter', 'deepGlow']);
   const sh = pr.effects[1].params;
@@ -174,4 +174,16 @@ test('gráfico personalizado (curva) nos keyframes, com overshoot', async () => 
   assert.ok(valueAt(p, 0.6) > 100);          // passa do alvo (back) e volta
   assert.equal(valueAt(p, 1), 100);
   assert.deepEqual(curveOf({ ease: 'easeInOut' }), [0.33, 0, 0.67, 1]);
+});
+
+test('Main Shakey: S_BlurMoCurves com Shift em pixels e Wrap X/Y separados (não fica preto)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const b = readFileSync(new URL('./fixtures/ffx/Shakes/Main Shakey.ffx', import.meta.url));
+  const pr = ffxToPreset(parseFFX(b.buffer.slice(b.byteOffset, b.byteOffset + b.length), { fps: 30 }));
+  const bmc = pr.effects.filter((e) => e.type === 'blurMoCurves');
+  assert.equal(bmc.length, 5);
+  const bounce = bmc.find((e) => e.params.shiftY?.keys?.length === 5);
+  assert.deepEqual(bounce.params.shiftY.keys.map((k) => k.v), [-300, 50, -25, 10, 0]); // pixels, como no AE
+  assert.equal(bounce.params.wrap, 1);   // X: não
+  assert.equal(bounce.params.wrapY, 3);  // Y: espelhar
 });

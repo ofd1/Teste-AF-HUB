@@ -1,4 +1,4 @@
-// Testes com presets .ffx reais do After Effects (pacote FREE em presets/free/).
+// Testes com presets .ffx reais do After Effects (arquivos de teste em tests/fixtures/ffx — não vão para o app).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -8,7 +8,7 @@ import { anim, valueAt } from '../js/anim.js';
 import { sourceTime } from '../js/timing.js';
 
 const load = (rel) => {
-  const b = readFileSync(new URL(`../presets/free/${rel}`, import.meta.url));
+  const b = readFileSync(new URL(`./fixtures/ffx/${rel}`, import.meta.url));
   const parsed = parseFFX(b.buffer.slice(b.byteOffset, b.byteOffset + b.length), { fps: 30 });
   return { parsed, preset: ffxToPreset(parsed) };
 };

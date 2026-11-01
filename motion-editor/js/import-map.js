@@ -161,7 +161,7 @@ export const IMPORT_RULES = [
     map: { amount: { n: ['amplitude', 'shake amp', 'amp'], conv: (v) => (v < 20 ? v * 35 : v) }, frequency: { n: ['frequency', 'shake freq', 'freq'], conv: (v) => (v > 60 ? Math.min(40, v / 250) : v) }, rotation: { n: ['tilt rand amp', 'rotate amp'], conv: (v) => v * 0.05 }, seed: { n: ['seed'] } },
     extra: (raw) => (raw('motion blur') ? [{ type: 'motionBlur', params: { amount: 100 * (raw('mo blur length') ?? 1), samples: 12 } }] : []) },
   { vendor: 'Sapphire', plugin: 'S_BlurMoCurves', to: 'blurMoCurves', test: /s_blurmocurves/i,
-    map: { center: { n: ['center xy'] }, zDist: { n: ['z dist'] }, rotate: { n: ['rotate'] }, shiftX: { n: ['shift x'] }, shiftY: { n: ['shift y'] }, shutter: { n: ['shutter duration'] }, wrap: { n: ['wrap x'], conv: (v) => Math.min(3, Math.max(1, v)) } } },
+    map: { center: { n: ['center xy'] }, zDist: { n: ['z dist'] }, rotate: { n: ['rotate'] }, shiftX: { n: ['shift x'] }, shiftY: { n: ['shift y'] }, shutter: { n: ['shutter duration'] }, wrap: { n: ['wrap x'], conv: (v) => Math.min(3, Math.max(1, v)) }, wrapY: { n: ['wrap y'], conv: (v) => Math.min(3, Math.max(1, v)) } } },
   { vendor: 'Sapphire', plugin: 'S_Sharpen', to: 'sharpen', test: /s_sharpen/i,
     map: { amount: { n: ['sharpen amp'], conv: (v) => v * 60 }, radius: { n: ['small detail size'], conv: (v) => v * 0.8 } } },
   { vendor: 'Sapphire', plugin: 'S_HueSatBright', to: 'looks', test: /s_huesat/i,

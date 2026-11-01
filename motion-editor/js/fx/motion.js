@@ -20,17 +20,18 @@ const FULL = new Set(['video', 'adjustment', 'image', 'solid']);
 const isFull = (layer) => !layer || FULL.has(layer.type);
 
 const BMC = frag(`
-uniform vec2 u_c; uniform float u_s0, u_s1, u_r0, u_r1; uniform vec2 u_sh0, u_sh1; uniform float u_n; uniform float u_wrap;
-vec2 wrapUV(vec2 cu) {
-  if (u_wrap > 2.5) { vec2 m = mod(cu, 2.0); return vec2(m.x > 1.0 ? 2.0 - m.x : m.x, m.y > 1.0 ? 2.0 - m.y : m.y); }
-  if (u_wrap > 1.5) return fract(cu);
-  return cu;
+uniform vec2 u_c; uniform float u_s0, u_s1, u_r0, u_r1; uniform vec2 u_sh0, u_sh1; uniform float u_n; uniform vec2 u_wrap;
+float wrap1(float v, float mode) {
+  if (mode > 2.5) { float m = mod(v, 2.0); return m > 1.0 ? 2.0 - m : m; } // espelhar
+  if (mode > 1.5) return fract(v);                                        // repetir
+  return v;                                                                // não (transparente)
 }
+vec2 wrapUV(vec2 cu) { return vec2(wrap1(cu.x, u_wrap.x), wrap1(cu.y, u_wrap.y)); }
 vec4 sampleAt(float s, float r, vec2 sh) {
   vec2 px = (v_uv - u_c) * u_size - sh * u_rect.zw * u_size;
   px = mat2(cos(r), -sin(r), sin(r), cos(r)) * px / s;
   vec2 cu = contentUV(u_c + px / u_size);
-  if (u_wrap < 1.5 && (cu.x < 0.0 || cu.y < 0.0 || cu.x > 1.0 || cu.y > 1.0)) return vec4(0.0);
+  if ((u_wrap.x < 1.5 && (cu.x < 0.0 || cu.x > 1.0)) || (u_wrap.y < 1.5 && (cu.y < 0.0 || cu.y > 1.0))) return vec4(0.0);
   vec2 e = u_texel / u_rect.zw * 0.75; // meio texel para dentro: sem linha nas emendas
   cu = clamp(wrapUV(cu), e, 1.0 - e);
   return texture2D(u_tex, fromContent(cu));
@@ -104,7 +105,7 @@ export default [
       const moving = (p.shutter ?? 1) > 0 && (Math.abs(c.dx - q.dx) + Math.abs(c.dy - q.dy) > 0.3 || Math.abs(c.rot - q.rot) > 0.05 || Math.abs(c.s - q.s) > 1e-3);
       return env.gl.pass(BMC, {
         u_tex: src, u_c: cuv(env, [0.5, 0.5]), u_s0: q.s, u_s1: c.s, u_r0: rad(q.rot), u_r1: rad(c.rot),
-        u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: moving ? blurSamples(env, q, c, Math.round(p.samples ?? 12)) : 1, u_wrap: isFull(env.layer) ? p.wrap ?? 3 : 1,
+        u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: moving ? blurSamples(env, q, c, Math.round(p.samples ?? 12)) : 1, u_wrap: isFull(env.layer) ? [p.wrap ?? 3, p.wrap ?? 3] : [1, 1],
       });
     },
   },
@@ -113,18 +114,22 @@ export default [
     description: 'Câmera virtual: aproxima/afasta (Distância Z), gira e desloca a imagem, com motion blur calculado pela velocidade do movimento — anime a Distância Z para o zoom de edit.',
     params: [
       pos('center', 'Centro'), num('zDist', 'Distância Z (1 = normal, <1 aproxima)', 1, 0.1, 5, 0.005), ang('rotate', 'Rotação', 0),
-      num('shiftX', 'Deslocamento X', 0, -2, 2, 0.005), num('shiftY', 'Deslocamento Y', 0, -2, 2, 0.005),
+      num('shiftX', 'Deslocamento X (px)', 0, -5000, 5000, 1), num('shiftY', 'Deslocamento Y (px)', 0, -5000, 5000, 1),
       num('shutter', 'Duração do obturador (quadros)', 1, 0, 4, 0.05), num('samples', 'Amostras', 16, 1, 32, 1),
-      sel('wrap', 'Bordas', ['Transparente', 'Repetir', 'Espelhar'], 3),
+      sel('wrap', 'Bordas X (horizontal)', ['Transparente', 'Repetir', 'Espelhar'], 3), sel('wrapY', 'Bordas Y (vertical)', ['Transparente', 'Repetir', 'Espelhar'], 3),
     ],
     usesPrev: true,
     render: (src, p, env, prev) => {
       const q = prev || p;
-      const moving = Math.abs(q.zDist - p.zDist) > 1e-4 || Math.abs(q.rotate - p.rotate) > 1e-3 || Math.abs(q.shiftX - p.shiftX) > 1e-4 || Math.abs(q.shiftY - p.shiftY) > 1e-4;
+      // Sapphire: Shift em pixels (como no AE). Projetos antigos guardavam fração da tela (|v| ≤ 2): convertidos aqui.
+      const px = (v, size) => (Math.abs(v) <= 2 && v !== 0 && !Number.isInteger(v) ? v * size : v);
+      const sx0 = px(q.shiftX, env.w), sy0 = px(q.shiftY, env.h), sx1 = px(p.shiftX, env.w), sy1 = px(p.shiftY, env.h);
+      const moving = Math.abs(q.zDist - p.zDist) > 1e-4 || Math.abs(q.rotate - p.rotate) > 1e-3 || Math.abs(sx0 - sx1) > 0.05 || Math.abs(sy0 - sy1) > 0.05;
       return env.gl.pass(BMC, {
         u_tex: src, u_c: cuv(env, p.center), u_s0: 1 / Math.max(0.01, q.zDist), u_s1: 1 / Math.max(0.01, p.zDist),
-        u_r0: rad(q.rotate), u_r1: rad(p.rotate), u_sh0: [q.shiftX, q.shiftY], u_sh1: [p.shiftX, p.shiftY],
-        u_n: moving && p.shutter > 0 ? blurSamples(env, { dx: q.shiftX * env.w, dy: q.shiftY * env.h, s: 1 / Math.max(0.01, q.zDist), rot: q.rotate }, { dx: p.shiftX * env.w, dy: p.shiftY * env.h, s: 1 / Math.max(0.01, p.zDist), rot: p.rotate }, Math.round(p.samples)) : 1, u_wrap: p.wrap,
+        u_r0: rad(q.rotate), u_r1: rad(p.rotate), u_sh0: [sx0 / env.w, sy0 / env.h], u_sh1: [sx1 / env.w, sy1 / env.h],
+        u_n: moving && p.shutter > 0 ? blurSamples(env, { dx: sx0, dy: sy0, s: 1 / Math.max(0.01, q.zDist), rot: q.rotate }, { dx: sx1, dy: sy1, s: 1 / Math.max(0.01, p.zDist), rot: p.rotate }, Math.round(p.samples)) : 1,
+        u_wrap: [p.wrap ?? 3, p.wrapY ?? p.wrap ?? 3],
       });
     },
   },
@@ -160,7 +165,7 @@ export default [
       if (moving || c.s > 1.0005 || Math.abs(c.dx) + Math.abs(c.dy) > 0.5) {
         out = gl.pass(BMC, {
           u_tex: src, u_c: cuv(env, [0.5, 0.5]), u_s0: q.s, u_s1: c.s, u_r0: 0, u_r1: 0,
-          u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: moving && p.blur ? blurSamples(env, { ...q, rot: 0 }, { ...c, rot: 0 }, 12) : 1, u_wrap: isFull(env.layer) ? 3 : 1,
+          u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: moving && p.blur ? blurSamples(env, { ...q, rot: 0 }, { ...c, rot: 0 }, 12) : 1, u_wrap: isFull(env.layer) ? [3, 3] : [1, 1],
         });
       }
       if (eb > 0.01 && !moving) out = gl.blur(out, eb * p.blurAmt * 0.35 * env.scale);

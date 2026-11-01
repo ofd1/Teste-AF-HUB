@@ -1,4 +1,4 @@
-import { Store, LAYER_FACTORIES, RESOLUTIONS, createProject } from './state.js';
+import { Store, LAYER_FACTORIES, RESOLUTIONS, createProject, flatLayers } from './state.js';
 import { compDialog } from './comp-dialog.js';
 import { setBgListener, ensureBgModel, bgStatus } from './bgremove.js';
 import { setGLLostListener } from './gl.js';
@@ -480,14 +480,15 @@ async function importMedia(files) {
 
 async function relinkMedia(project) {
   const keep = new Set();
-  for (const l of project.layers) {
+  for (const l of flatLayers(project.layers)) {
     if (!l.props.mediaId) continue;
     keep.add(l.props.mediaId);
     const blob = await getMedia(l.props.mediaId);
     if (blob) {
       l.props.src = URL.createObjectURL(blob);
       if (l.type === 'audio') await loadAudio(l.props.src).catch(() => {});
-      if (l.type === 'video' && l.props.hasAudio) loadAudio(l.props.src).catch(() => {});
+      // vídeos importados antes do som existir no app: detecta e liga o áudio agora
+      if (l.type === 'video' && l.props.hasAudio !== false) loadAudio(l.props.src).then(() => { if (!l.props.hasAudio) { l.props.hasAudio = true; if (l.props.volume == null) l.props.volume = 100; } }).catch(() => { l.props.hasAudio = false; });
     } else l.missing = true;
   }
   pruneMedia(keep);

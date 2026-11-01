@@ -11,6 +11,21 @@ function audioCtx() {
   return ctx;
 }
 
+// iPhone: o Web Audio fica mudo com a chave de silencioso e só "acorda" num toque. Pede a sessão de reprodução
+// (iOS 17+) e destrava o áudio no primeiro toque tocando um buffer vazio.
+function iosAudioSession() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* sem suporte */ }
+}
+if (typeof document !== 'undefined') {
+  const unlock = () => {
+    iosAudioSession();
+    const ac = audioCtx();
+    if (ac.state !== 'running') ac.resume().catch(() => {});
+    try { const b = ac.createBuffer(1, 1, 22050); const s = ac.createBufferSource(); s.buffer = b; s.connect(ac.destination); s.start(0); } catch { /* ok */ }
+  };
+  for (const ev of ['touchend', 'click']) document.addEventListener(ev, unlock, { capture: true, passive: true });
+}
+
 export async function loadAudio(src) {
   if (buffers.has(src)) return buffers.get(src);
   const data = await (await fetch(src)).arrayBuffer();
@@ -71,6 +86,7 @@ function scheduleGain(gain, l, ctxStart, fromT) {
 /** Inicia a reprodução de todas as camadas de áudio a partir do tempo t. */
 export function playAudio(project, t) {
   stopAudio();
+  iosAudioSession();
   const ac = audioCtx();
   if (ac.state === 'suspended') ac.resume();
   const now = ac.currentTime + 0.03;

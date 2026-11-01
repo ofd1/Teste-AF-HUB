@@ -29,10 +29,18 @@ async function pickVideoCodec(width, height, bitrate, fps) {
   return null;
 }
 
+/** AudioSpecificConfig de 2 bytes do AAC-LC (o que o MP4 espera na caixa esds). */
+function aacSpecificConfig(sampleRate, channels) {
+  const rates = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
+  const idx = Math.max(0, rates.indexOf(sampleRate));
+  const v = (2 << 11) | (idx << 7) | (channels << 3);
+  return new Uint8Array([v >> 8, v & 255]);
+}
+
 async function pickAudioCodec(sampleRate) {
   if (!window.AudioEncoder) return null;
   for (const [mux, codec] of [['aac', 'mp4a.40.2'], ['opus', 'opus']]) {
-    const config = { codec, sampleRate, numberOfChannels: 2, bitrate: 192000 };
+    const config = { codec, sampleRate, numberOfChannels: 2, bitrate: 192000, ...(mux === 'aac' ? { aac: { format: 'aac' } } : {}) };
     try {
       const s = await AudioEncoder.isConfigSupported(config);
       if (s.supported) return { mux, config: s.config };
@@ -67,7 +75,7 @@ export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } 
   if (!video) return false;
   const { Muxer, ArrayBufferTarget } = await import('./vendor/mp4-muxer.mjs');
 
-  const ui = progressModal('Exportando vídeo…', `${width}×${height} · ${fps} fps · ${video.config.codec}`);
+  let ui = progressModal('Exportando vídeo…', `${width}×${height} · ${fps} fps · ${video.config.codec}`);
   store.exporting = true; setExporting(true);
   try { await prepareBgModels(flatLayers(store.project.layers)); } catch { /* segue sem IA */ }
   stopAudio();
@@ -78,6 +86,13 @@ export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } 
     ui.set(0, 'Mixando áudio…');
     const mix = await renderMix(project, sampleRate).catch(() => null);
     const audio = mix ? await pickAudioCodec(sampleRate) : null;
+    if (mix && !audio) {
+      // aparelho sem codificador de áudio: oferece gravar em tempo real COM som
+      ui.close();
+      const choice = await modal('Áudio', '<p>Este aparelho não consegue codificar o áudio na exportação quadro a quadro.</p><p><b>Tempo real com som</b>: grava o vídeo tocando (pode perder quadros em efeitos pesados).<br><b>Sem som</b>: exportação precisa, mas muda.</p>', [{ label: 'Sem som', value: 'mute' }, { label: 'Tempo real com som', value: 'rt', primary: true }]);
+      if (choice !== 'mute') { store.exporting = false; setExporting(false); keepAwake(false); return false; }
+      ui = progressModal('Exportando vídeo (sem som)…', `${width}×${height} · ${fps} fps`);
+    }
 
     const target = new ArrayBufferTarget();
     const muxer = new Muxer({
@@ -124,7 +139,10 @@ export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } 
     if (audio && mix) {
       ui.set(1, 'Codificando áudio…');
       let aerr = null;
-      const aenc = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: (e) => { aerr = e; } });
+      // Safari (bug WebKit 302253) entrega a "description" do AAC no formato errado (caixa esds): o MP4 ficava com
+      // uma faixa de áudio que nenhum player toca = vídeo sem som. Usamos sempre o AudioSpecificConfig correto.
+      const fixMeta = (meta) => (audio.mux === 'aac' && meta?.decoderConfig ? { ...meta, decoderConfig: { ...meta.decoderConfig, description: aacSpecificConfig(sampleRate, 2) } } : meta);
+      const aenc = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, fixMeta(meta)), error: (e) => { aerr = e; } });
       aenc.configure(audio.config);
       const L = mix.getChannelData(0), R = mix.numberOfChannels > 1 ? mix.getChannelData(1) : L;
       const block = 4096;
@@ -161,20 +179,34 @@ export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } 
 
 /** Fallback: grava em tempo real via MediaRecorder (sem áudio). */
 export async function exportRealtime(store, { scale = 1, bitrate = 12 } = {}) {
-  const types = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm', 'video/mp4'];
+  const types = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm', 'video/mp4'];
   const mime = types.find((t) => window.MediaRecorder?.isTypeSupported?.(t));
   if (!mime) { toast('Este aparelho não suporta exportação de vídeo no navegador.', 'error'); return; }
   const { project } = store;
   const c = document.createElement('canvas');
   c.width = even(project.width * scale); c.height = even(project.height * scale);
   const ctx = c.getContext('2d');
-  const rec = new MediaRecorder(c.captureStream(project.fps), { mimeType: mime, videoBitsPerSecond: bitrate * 1e6 });
+  // som: a mixagem toca num destino de gravação junto com o vídeo
+  const mix = await renderMix(project, 48000).catch(() => null);
+  let ac = null, srcNode = null;
+  const stream = c.captureStream(project.fps);
+  if (mix) {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    const dest = ac.createMediaStreamDestination();
+    srcNode = ac.createBufferSource();
+    srcNode.buffer = mix;
+    srcNode.connect(dest);
+    dest.stream.getAudioTracks().forEach((tr) => stream.addTrack(tr));
+  }
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate * 1e6 });
   const chunks = [];
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-  const ui = progressModal('Gravando (tempo real)…', 'Este navegador não tem WebCodecs: gravação em tempo real, sem áudio.');
+  const ui = progressModal('Gravando (tempo real)…', mix ? 'Gravando vídeo e som em tempo real.' : 'Gravação em tempo real.');
   store.exporting = true; setExporting(true);
   try { await prepareBgModels(flatLayers(store.project.layers)); } catch { /* segue sem IA */ }
+  if (ac) await ac.resume().catch(() => {});
   rec.start(250);
+  srcNode?.start();
   const start = performance.now();
   await new Promise((resolve) => {
     const tick = () => {
@@ -187,6 +219,8 @@ export async function exportRealtime(store, { scale = 1, bitrate = 12 } = {}) {
     };
     tick();
   });
+  try { srcNode?.stop(); } catch { /* ok */ }
+  ac?.close();
   pauseAll();
   await new Promise((r) => { rec.onstop = r; rec.stop(); });
   store.exporting = false; setExporting(false);
