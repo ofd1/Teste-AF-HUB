@@ -19,8 +19,39 @@ export function getImage(src) {
   return img;
 }
 
+// iPhone (Safari) só decodifica vídeos que estão na página e que já foram "liberados" por um toque.
+let host = null;
+function videoHost() {
+  if (!host && typeof document !== 'undefined') {
+    host = document.createElement('div');
+    host.setAttribute('aria-hidden', 'true');
+    host.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;overflow:hidden;opacity:0.01;pointer-events:none;z-index:-1';
+    document.body.appendChild(host);
+  }
+  return host;
+}
+const allVideos = new Set();
+function unlockVideos() {
+  for (const v of allVideos) {
+    if (v.dataset.unlocked || !v.paused) continue;
+    v.dataset.unlocked = '1';
+    const t = v.currentTime;
+    const p = v.play();
+    if (p) p.then(() => { v.pause(); v.currentTime = t; }).catch(() => { delete v.dataset.unlocked; });
+  }
+}
+if (typeof document !== 'undefined') {
+  for (const ev of ['touchend', 'pointerup', 'click']) document.addEventListener(ev, unlockVideos, { capture: true, passive: true });
+}
+
+// durante a exportação o cache de quadros pausa (o iPhone tem poucos decodificadores de vídeo)
+let exportBusy = false;
+export function setExporting(b) { exportBusy = b; }
+
 function makeVideo(src) {
   const v = document.createElement('video');
+  allVideos.add(v);
+  videoHost()?.appendChild(v);
   v.src = src;
   v.muted = true;
   v.playsInline = true;
@@ -46,7 +77,14 @@ function seek(v, time) {
   const target = Math.max(0, Math.min(time, (v.duration || time + 1) - 0.001));
   if (Math.abs(v.currentTime - target) < 0.001 && !v.seeking) return Promise.resolve();
   return new Promise((res) => {
-    const done = () => { v.removeEventListener('seeked', done); clearTimeout(to); res(); };
+    const done = () => {
+      v.removeEventListener('seeked', done); clearTimeout(to);
+      // Safari às vezes termina a busca sem quadro decodificado: espera o quadro (evita tela preta)
+      if (v.readyState >= 2) { res(); return; }
+      const ok = () => { clearTimeout(t2); v.removeEventListener('canplay', ok); v.removeEventListener('loadeddata', ok); res(); };
+      const t2 = setTimeout(ok, 1500);
+      v.addEventListener('canplay', ok); v.addEventListener('loadeddata', ok);
+    };
     const to = setTimeout(done, 3000);
     v.addEventListener('seeked', done);
     v.currentTime = target;
@@ -89,7 +127,18 @@ export function prepare(project, t, { exact = false, playing = false } = {}) {
     const fr = blendFrames(l, t, project.fps);
     const e = getVideo(l, fr.b !== null);
     e.frame = fr;
-    if (exact || !playing) {
+    if (exact) {
+      // exportação: um único decodificador por vídeo (o iPhone falha com vários); o quadro B vira uma cópia
+      if (!e.a.paused) e.a.pause();
+      jobs.push((async () => {
+        if (fr.b !== null) {
+          await seek(e.a, fr.b);
+          e.snapB = snapshot(e.a, e.snapB);
+        }
+        await seek(e.a, fr.a);
+        if (e.a.readyState >= 2) e.last = snapshot(e.a, e.last);
+      })());
+    } else if (!playing) {
       if (!e.a.paused) e.a.pause();
       jobs.push(seek(e.a, fr.a));
       if (fr.b !== null) jobs.push(seek(e.b, fr.b));
@@ -108,6 +157,14 @@ export function prepare(project, t, { exact = false, playing = false } = {}) {
     }
   }
   return Promise.all(jobs);
+}
+
+function snapshot(v, c) {
+  const w = v.videoWidth || 2, h = v.videoHeight || 2;
+  if (!c) c = document.createElement('canvas');
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  c.getContext('2d').drawImage(v, 0, 0, w, h);
+  return c;
 }
 
 export function pauseAll() {
@@ -130,8 +187,14 @@ export function videoFrames(layer, t, fps, final = false) {
     return { a: c.frames[i], b: c.frames[i + 1], f, quality: 'preview' };
   }
   const e = getVideo(layer);
-  if (e.a.readyState < 2) return null;
   const fr = e.frame || { b: null, f: 0 };
+  if (final) {
+    // exportação: quadro A do elemento (ou a última cópia boa / cache, nunca preto) e B da cópia
+    const a = e.a.readyState >= 2 ? e.a : e.last || (c?.ready ? c.frames[Math.max(0, Math.min(c.frames.length - 1, Math.round((sourceTime(layer, t) - c.t0) * c.fps)))] : null);
+    if (!a) return null;
+    return { a, b: fr.b !== null && e.snapB ? e.snapB : null, f: fr.f, quality: 'final' };
+  }
+  if (e.a.readyState < 2) return e.last ? { a: e.last, b: null, f: 0, quality: 'final' } : null;
   return { a: e.a, b: fr.b !== null && e.b && e.b.readyState >= 2 ? e.b : null, f: fr.f, quality: 'final' };
 }
 
@@ -203,6 +266,7 @@ async function buildCache(project, layer) {
   const w = Math.max(160, Math.min(vw, 720, Math.floor(Math.sqrt(160e6 / (n * 4 * aspect)))));
   const h = Math.round(w * aspect);
   for (let i = 0; i < n; i++) {
+    while (exportBusy && !entry.cancelled) await new Promise((r) => setTimeout(r, 250));
     if (entry.cancelled) return;
     await seek(v, lo + (i + 0.01) / entry.fps);
     const c = document.createElement('canvas');

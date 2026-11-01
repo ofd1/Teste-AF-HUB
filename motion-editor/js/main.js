@@ -32,7 +32,9 @@ const timecode = document.getElementById('timecode');
 const ctx = view.getContext('2d');
 const octx = overlay.getContext('2d');
 let dirty = true;
-let quality = parseFloat(qualitySel.value);
+// "Auto": nítido (resolução cheia) parado, ½ tocando para manter a fluidez
+const curQuality = () => (qualitySel.value === 'auto' ? (store.playing ? 0.5 : 1) : parseFloat(qualitySel.value));
+let quality = curQuality();
 setMediaListener(() => { dirty = true; });
 
 function layoutCanvas() {
@@ -50,7 +52,7 @@ function layoutCanvas() {
   dirty = true;
 }
 new ResizeObserver(layoutCanvas).observe(stage);
-qualitySel.addEventListener('change', () => { quality = parseFloat(qualitySel.value); layoutCanvas(); });
+qualitySel.addEventListener('change', () => { quality = curQuality(); layoutCanvas(); });
 
 function drawOverlay() {
   const k = overlay.width / store.project.width;
@@ -83,6 +85,7 @@ function loop(now) {
   }
   if ((dirty || store.playing) && !store.exporting) {
     prepare(store.project, store.time, { playing: store.playing });
+    if (curQuality() !== quality) { quality = curQuality(); layoutCanvas(); }
     renderFrame(ctx, store.project, store.time, quality);
     drawOverlay();
     timecode.textContent = formatTime(store.time, store.project.fps).slice(1);

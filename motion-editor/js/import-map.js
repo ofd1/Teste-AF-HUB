@@ -83,7 +83,8 @@ export function looksFromTools(tools, strength = 100) {
       }
       case 'cmix': if ((v[0] ?? 100) > 0) p.saturation *= (v[1] ?? 100) / 100; break;
       case 'duto': p.mojo = Math.max(p.mojo, (v[3] || 0) * 2); break;
-      case '2stp': p.mojo = Math.max(p.mojo, (v[0] || 0) * 0.6); p.saturation *= 0.9; break;
+      // Two Strip (Technicolor de 2 tiras): laranja/ciano forte, pele quente — não dessatura
+      case '2stp': p.mojo = Math.max(p.mojo, (v[0] || 0) * 0.6); p.mojoSkin = Math.max(p.mojoSkin, 70); p.saturation *= 1 + (v[0] || 0) / 500; break;
       case 'logc': p.fade += 8; p.contrast -= 8; break;
       case 'spex':
         // Spot Exposure: [exposição, deslocamento x %, deslocamento y %, ?, ?, ?, tamanho %, filtro de cor RGB (7-9), suavidade (10)]

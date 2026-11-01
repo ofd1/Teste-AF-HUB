@@ -131,8 +131,12 @@ void main() {
     float m = smoothstep(-u_grsoft * 0.5, u_grsoft * 0.5, g);
     lin *= mix(vec3(1.0), pow(2.0, u_grexp) * mix(vec3(1.0), u_grcol, min(1.0, abs(u_grexp))), m);
   }
-  r = pow(lin, vec3(1.0 / 2.2));
-  vec3 f = r * u_filter; f *= luma(r) / max(luma(f), 0.0001); r = mix(r, f, u_fdens);
+  // filtro fotográfico (Warming/Cooling): age na luz linear como uma gelatina na lente — a cor mostrada
+  // no Looks é a transmissão da gelatina, que é bem mais forte que a cor sugere (≈ cubo da transmissão)
+  vec3 fl = lin * pow(max(u_filter, vec3(0.001)), vec3(3.0));
+  fl *= luma(lin) / max(luma(fl), 0.0001);
+  lin = mix(lin, fl, u_fdens);
+  r = pow(max(lin, 0.0), vec3(1.0 / 2.2));
   // temperatura / tint
   r += vec3(u_temp, u_temp * 0.15, -u_temp) * 0.09 + vec3(u_tint * 0.05, -u_tint * 0.07, u_tint * 0.05);
   // Colorista 3 vias
@@ -155,10 +159,12 @@ void main() {
   // Mojo II: sombras/meios-tons para teal, pele para laranja
   float l = luma(r);
   float skin = smoothstep(22.0, 6.0, abs(mod(hv.x * 360.0 - 28.0 + 180.0, 360.0) - 180.0)) * smoothstep(0.1, 0.35, hv.y);
-  vec3 teal = vec3(l) + (r - vec3(l)) * 0.85 + vec3(-0.07, 0.015, 0.06) * (1.0 - l * 0.7);
-  vec3 warm = r * vec3(1.07, 1.0, 0.88);
+  // (o Mojo não lava a imagem: separa as cores — fundo para teal, pele para laranja — e aumenta a saturação)
+  vec3 teal = r + vec3(-0.06, 0.012, 0.05) * (1.0 - l * 0.6);
+  vec3 warm = r * vec3(1.08, 1.0, 0.86);
   r = mix(r, teal, u_mojo * u_cool * (1.0 - skin));
   r = mix(r, warm, u_mojo * u_skin * skin);
+  r = mix(vec3(luma(r)), r, 1.0 + u_mojo * 0.22);
   // Punch (curva S + saturação) e Bleach (bleach bypass)
   vec3 sc = r * r * (3.0 - 2.0 * r);
   r = mix(r, sc, u_punch);

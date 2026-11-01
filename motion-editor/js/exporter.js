@@ -1,6 +1,6 @@
 // Exportação: MP4 quadro a quadro (WebCodecs + mp4-muxer, com áudio) e fallback em tempo real (MediaRecorder).
 import { renderFrame } from './renderer.js';
-import { prepare, pauseAll } from './media.js';
+import { prepare, pauseAll, setExporting } from './media.js';
 import { renderMix, stopAudio } from './audio.js';
 import { modal, toast } from './ui.js';
 import { saveFile, keepAwake } from './platform.js';
@@ -65,7 +65,7 @@ export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } 
   const { Muxer, ArrayBufferTarget } = await import('./vendor/mp4-muxer.mjs');
 
   const ui = progressModal('Exportando vídeo…', `${width}×${height} · ${fps} fps · ${video.config.codec}`);
-  store.exporting = true;
+  store.exporting = true; setExporting(true);
   stopAudio();
   pauseAll();
   keepAwake(true);
@@ -133,7 +133,7 @@ export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } 
     muxer.finalize();
     const blob = new Blob([target.buffer], { type: 'video/mp4' });
     ui.close();
-    store.exporting = false;
+    store.exporting = false; setExporting(false);
     keepAwake(false);
     if (!audio && mix) toast('Vídeo exportado sem áudio: codec de áudio indisponível neste aparelho.', 'warn', 5000);
     await saveFile(`edit-${Date.now()}.mp4`, blob);
@@ -144,7 +144,7 @@ export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } 
     return true;
   } finally {
     ui.close();
-    store.exporting = false;
+    store.exporting = false; setExporting(false);
     keepAwake(false);
   }
 }
@@ -162,7 +162,7 @@ export async function exportRealtime(store, { scale = 1, bitrate = 12 } = {}) {
   const chunks = [];
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
   const ui = progressModal('Gravando (tempo real)…', 'Este navegador não tem WebCodecs: gravação em tempo real, sem áudio.');
-  store.exporting = true;
+  store.exporting = true; setExporting(true);
   rec.start(250);
   const start = performance.now();
   await new Promise((resolve) => {
@@ -178,7 +178,7 @@ export async function exportRealtime(store, { scale = 1, bitrate = 12 } = {}) {
   });
   pauseAll();
   await new Promise((r) => { rec.onstop = r; rec.stop(); });
-  store.exporting = false;
+  store.exporting = false; setExporting(false);
   ui.close();
   if (ui.cancelled) return;
   const size = chunks.reduce((n, x) => n + x.size, 0);
