@@ -6,8 +6,9 @@ import distort from './fx/distort.js';
 import stylize from './fx/stylize.js';
 import motion from './fx/motion.js';
 import extra from './fx/extra.js';
+import shatter from './fx/shatter.js';
 
-export const EFFECTS = [...blurLight, ...color, ...extra, ...distort, ...stylize, ...motion];
+export const EFFECTS = [...blurLight, ...color, ...extra, ...distort, ...stylize, ...motion, ...shatter];
 export const EFFECT_MAP = Object.fromEntries(EFFECTS.map((e) => [e.type, e]));
 export const CATEGORIES = ['Luz e brilho', 'Movimento', 'Tempo', 'Desfoque', 'Estilizar', 'Distorção', 'Cor', 'Transições'];
 

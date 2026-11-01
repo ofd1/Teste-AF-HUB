@@ -1,5 +1,5 @@
 // Gerenciador de mídia: imagens, vídeos (com dois decodificadores para frame blending) e sincronização.
-import { blendFrames, sourceRate, sourceTime, speedEffect, wantsInterp } from './timing.js';
+import { blendFrames, sourceRate, sourceTime, speedEffect, wantsInterp, vectorBlur } from './timing.js';
 import { valueAt } from './anim.js';
 
 const images = new Map();
@@ -124,6 +124,7 @@ export function videoFrames(layer, t, fps, final = false) {
     const x = Math.max(0, Math.min(c.frames.length - 1, (sourceTime(layer, t) - c.t0) * c.fps));
     const i = Math.floor(x), f = x - i;
     const blend = wantsInterp(layer, t);
+    if (vectorBlur(layer, t) > 0 && i + 1 < c.frames.length) return { a: c.frames[i], b: c.frames[i + 1], f: blend ? f : 0, quality: 'preview' };
     if (!blend || f < 0.02 || i + 1 >= c.frames.length) return { a: c.frames[Math.round(x)], b: null, f: 0 };
     if (f > 0.98) return { a: c.frames[i + 1], b: null, f: 0 };
     return { a: c.frames[i], b: c.frames[i + 1], f, quality: 'preview' };
@@ -167,7 +168,7 @@ export function cacheStatus() {
 export function ensureCaches(project) {
   const ids = new Set();
   for (const l of project.layers) {
-    if (l.type !== 'video' || !l.props.src || !(speedEffect(l) || l.props.interpolate)) continue;
+    if (l.type !== 'video' || !l.props.src || !(speedEffect(l) || l.props.interpolate || l.effects.some((fx) => fx.enabled && (fx.type === 'timeSlice' || fx.type === 'echo')))) continue;
     ids.add(l.id);
     const c = caches.get(l.id);
     if (c && c.key === cacheKey(l)) continue;

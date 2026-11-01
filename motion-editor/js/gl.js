@@ -96,6 +96,8 @@ export class GLEngine {
     this.pool = [];
     this.live = [];
     const buf = gl.createBuffer();
+    this.quad = buf;
+    this.meshes = new Map();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
@@ -222,6 +224,72 @@ export class GLEngine {
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    return target;
+  }
+
+  /**
+   * Desenha geometria (triângulos) num alvo novo — usado por efeitos 3D como o Shatter.
+   * build() → { data: Float32Array, attribs: [[nome, tamanho], …] } (intercalado); fica em cache por `key`.
+   */
+  mesh(key, build, vert, frag, uniforms, w, h) {
+    const gl = this.gl;
+    let m = this.meshes.get(key);
+    if (!m) {
+      const g = build();
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, g.data, gl.STATIC_DRAW);
+      const stride = g.attribs.reduce((n, [, s]) => n + s, 0);
+      m = { buf, attribs: g.attribs, stride, count: g.data.length / stride };
+      if (this.meshes.size > 6) { const [k0, old] = this.meshes.entries().next().value; gl.deleteBuffer(old.buf); this.meshes.delete(k0); }
+      this.meshes.set(key, m);
+    }
+    const pkey = vert + frag;
+    let p = this.programs.get(pkey);
+    if (!p) {
+      const compile = (type, src) => {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(`Shader: ${gl.getShaderInfoLog(s)}`);
+        return s;
+      };
+      const prog = gl.createProgram();
+      gl.attachShader(prog, compile(gl.VERTEX_SHADER, vert));
+      gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, frag));
+      m.attribs.forEach(([name], i) => gl.bindAttribLocation(prog, i, name));
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`Link: ${gl.getProgramInfoLog(prog)}`);
+      p = { prog, locs: new Map() };
+      this.programs.set(pkey, p);
+    }
+    const target = this.acquire(w, h);
+    gl.useProgram(p.prog);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+    gl.viewport(0, 0, target.w, target.h);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    let unit = 0;
+    for (const [name, v] of Object.entries({ ...this.env, ...uniforms })) {
+      const l = this.loc(p, name);
+      if (l === null) continue;
+      if (v && v.tex) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, v.tex); gl.uniform1i(l, unit++); }
+      else if (typeof v === 'number' || typeof v === 'boolean') gl.uniform1f(l, +v);
+      else if (Array.isArray(v)) [null, null, gl.uniform2fv, gl.uniform3fv, gl.uniform4fv][v.length]?.call(gl, l, v);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.buf);
+    let off = 0;
+    m.attribs.forEach(([, size], i) => {
+      gl.enableVertexAttribArray(i);
+      gl.vertexAttribPointer(i, size, gl.FLOAT, false, m.stride * 4, off * 4);
+      off += size;
+    });
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.TRIANGLES, 0, m.count);
+    gl.disable(gl.BLEND);
+    for (let i = 1; i < m.attribs.length; i++) gl.disableVertexAttribArray(i);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quad);
     return target;
   }
 

@@ -149,11 +149,13 @@ export class Library {
     if (!p) return;
     let layer = this.store.layer();
     const hasSpeed = (p.effects || []).some((e) => e.type === 'twixtor');
-    if (hasSpeed && layer?.type !== 'video') {
-      // Velocidade/Twixtor só faz sentido no vídeo: usa o clipe de vídeo sob o playhead
+    const needsVideo = hasSpeed || (p.effects || []).some((e) => e.type === 'timeSlice');
+    if (p.needsLayer && !layer) { toast('Selecione a camada (ex.: o recorte/silhueta do jogador) antes de aplicar este preset.', 'warn', 5000); return; }
+    if (needsVideo && layer?.type !== 'video') {
+      // Velocidade/Twixtor e Time Slice só fazem sentido no vídeo: usa o clipe de vídeo sob o playhead
       const t = this.store.time;
       const v = this.store.project.layers.find((l) => l.type === 'video' && l.visible && t >= l.inPoint && t < l.outPoint);
-      if (!v) { toast('Este preset muda a velocidade do vídeo: coloque o playhead sobre um clipe de vídeo.', 'warn', 5000); return; }
+      if (!v) { toast(hasSpeed ? 'Este preset muda a velocidade do vídeo: coloque o playhead sobre um clipe de vídeo.' : 'Este preset precisa de um clipe de vídeo: coloque o playhead sobre o clipe.', 'warn', 5000); return; }
       layer = v;
       this.store.selectedLayerId = v.id;
     }

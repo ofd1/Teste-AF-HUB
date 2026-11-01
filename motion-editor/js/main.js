@@ -98,7 +98,7 @@ cachePill.className = 'cache-pill';
 stage.appendChild(cachePill);
 setCacheListener(() => {
   const st = cacheStatus();
-  cachePill.textContent = st == null ? '' : `Preparando câmera lenta… ${st}%`;
+  cachePill.textContent = st == null ? '' : `Preparando quadros… ${st}%`;
   cachePill.classList.toggle('show', st != null);
   dirty = true;
 });

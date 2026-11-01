@@ -19,12 +19,25 @@ const k = (t, v, ease = 'easeInOut') => ({ t, v, ease });
 const kv = (t, v, inf = 0.85) => ({ t, v, ease: 'bezier', outInf: inf, inInf: inf });
 
 export const BUILTIN_PRESETS = [
-  // ---- Shakes
-  { name: 'Shake impacto', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 16, amount: { keys: [k(0, 70, 'easeOut'), k(0.45, 0)] }, rotation: { keys: [k(0, 4, 'easeOut'), k(0.45, 0)] }, zoom: 6 } }, { type: 'motionBlur', params: { amount: 160 } }, { type: 'motionTile', params: { outW: 160, outH: 160 } }] },
-  { name: 'Shake contínuo', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 9, amount: 22, rotation: 1.5, zoom: 2 } }, { type: 'motionBlur', params: { amount: 120 } }, { type: 'motionTile', params: { outW: 140, outH: 140 } }] },
-  { name: 'Shake suave (câmera na mão)', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 2.5, amount: 14, rotation: 0.8, zoom: 1 } }] },
-  { name: 'Shake horizontal + RGB', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 18, amount: { keys: [k(0, 60, 'easeOut'), k(0.35, 0)] }, rotation: 0, axis: 2 } }, { type: 'rgbSplit', params: { amount: { keys: [k(0, 25, 'easeOut'), k(0.35, 0)] } } }, { type: 'motionBlur', params: { amount: 200 } }] },
+  // ---- Shakes (motion blur e bordas espelhadas já vêm no próprio Shake, como no S_Shake)
+  { name: 'Shake impacto', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 16, amount: { keys: [k(0, 70, 'easeOut'), k(0.45, 0)] }, rotation: { keys: [k(0, 4, 'easeOut'), k(0.45, 0)] }, zoom: 6, shutter: 1.5 } }] },
+  { name: 'Shake contínuo', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 9, amount: 22, rotation: 1.5, zoom: 2, shutter: 1 } }] },
+  { name: 'Shake suave (câmera na mão)', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 2.5, amount: 14, rotation: 0.8, zoom: 1, complexity: 3, shutter: 0.5 } }] },
+  { name: 'Shake horizontal + RGB', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 18, amount: { keys: [k(0, 60, 'easeOut'), k(0.35, 0)] }, rotation: 0, axis: 2, shutter: 2 } }, { type: 'rgbSplit', params: { amount: { keys: [k(0, 25, 'easeOut'), k(0.35, 0)] } } }] },
+  { name: 'Shake forte com blur (ZAZ)', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 12, amount: { keys: [k(0, 95, 'easeOut'), k(0.55, 0)] }, rotation: { keys: [k(0, 3.5, 'easeOut'), k(0.55, 0)] }, zoom: { keys: [k(0, 8, 'easeOut'), k(0.55, 0)] }, shutter: 2, samples: 16 } }] },
   { name: 'Twitch impacto', category: 'Shakes', effects: [{ type: 'twitch', params: { amount: 85, speed: 14, slide: true, slideAmt: 40 } }] },
+  { name: 'Twitch flash (ftb)', category: 'Shakes', effects: [{ type: 'twitch', params: { amount: 100, speed: 8, blur: true, blurAmt: 40, color: true, colorAmt: 18, light: true, lightAmt: 90, scale: true, scaleAmt: 22 } }] },
+  // ---- Inspirados nas 3 edits de referência (ftb, sonhei, ZAZ)
+  { name: 'Shatter branco (silhueta)', category: 'Edits (referência)', anchorStart: true, needsLayer: true, duration: 2.2, effects: [{ type: 'shatter', params: { start: 0.4, fill: true, fillColor: [1, 1, 1, 1], pattern: 1, repetitions: 34, radius: 1.1, strength: 6, randomness: 0.5, zPush: 1.1, gravity: 0.6, spin: 0.6, life: 1.6, shutter: 1.5 } }, { type: 'deepGlow', params: { radius: 90, exposure: 0.5, threshold: 70 } }] },
+  { name: 'Shatter explosão (ZAZ)', category: 'Edits (referência)', anchorStart: true, duration: 1.6, effects: [{ type: 'shatter', params: { start: 0, render: 3, keepOriginal: true, fill: true, fillColor: [0.92, 0.96, 1, 1], opacity: 70, pattern: 1, repetitions: 30, radius: 0.75, strength: 9, randomness: 0.7, zPush: 1.8, gravity: 0.4, spin: 0.9, life: 0.9, shutter: 2.5, samples: 10 } }, { type: 'blurMoCurves', params: { zDist: { keys: [kv(0, 0.82), kv(0.35, 1)] }, shutter: 1.5 } }] },
+  { name: 'Zoom shake transição (sonhei)', category: 'Edits (referência)', effects: [{ type: 'blurMoCurves', params: { zDist: { keys: [kv(0, 1), kv(0.16, 0.62), kv(0.4, 1)] }, rotate: { keys: [kv(0, 0), kv(0.16, 6), kv(0.4, 0)] }, shutter: 1.5, samples: 24 } }, { type: 'shake', params: { frequency: 14, amount: { keys: [k(0.1, 60, 'easeOut'), k(0.5, 0)] }, rotation: 2, shutter: 1.5 } }, { type: 'exposure', params: { exposure: { keys: [k(0.12, 0.8, 'easeOut'), k(0.35, 0)] } } }] },
+  { name: 'Time slice (faixas)', category: 'Edits (referência)', effects: [{ type: 'timeSlice', params: { slices: 16, delay: { keys: [k(0, 0), k(0.2, 3), k(0.6, 0)] }, stretch: { keys: [k(0, 0), k(0.2, 40), k(0.6, 0)] }, order: 2 } }] },
+  { name: 'Time slice esticado (sonhei)', category: 'Edits (referência)', effects: [{ type: 'timeSlice', params: { slices: 24, delay: 2, stretch: 80, offset: 30, order: 3, levels: 10 } }, { type: 'dirBlur', params: { length: 25, angle: 0 } }] },
+  { name: 'CC escuro azul (ftb)', category: 'Edits (referência)', effects: [{ type: 'looks', params: { exposure: -0.35, contrast: 28, saturation: 85, mojo: 40, mojoCool: 70, temperature: -10, fade: 6, vignette: 45, edgeBlur: 3, edgeSize: 120, diffusion: 25, diffusionThreshold: 70 } }, { type: 'sharpen', params: { amount: 60, radius: 1.5 } }] },
+  { name: 'CC vivo (sonhei)', category: 'Edits (referência)', effects: [{ type: 'looks', params: { contrast: 32, saturation: 128, punch: 28, diffusion: 45, diffusionRadius: 80, diffusionThreshold: 65, edgeBlur: 2, vignette: 20 } }, { type: 'sharpen', params: { amount: 90, radius: 1.2 } }] },
+  { name: 'CC noturno (ZAZ)', category: 'Edits (referência)', effects: [{ type: 'looks', params: { exposure: -0.15, temperature: -15, contrast: 38, saturation: 112, mojo: 55, punch: 15, vignette: 55, vignetteSize: 45, diffusion: 30, edgeBlur: 4, edgeSize: 110 } }, { type: 'sharpen', params: { amount: 80, radius: 1.3 } }] },
+  { name: 'Flash branco + blur (ftb)', category: 'Edits (referência)', effects: [{ type: 'exposure', params: { exposure: { keys: [k(0, 3, 'easeOut'), k(0.3, 0)] } } }, { type: 'blur', params: { radius: { keys: [k(0, 60, 'easeOut'), k(0.3, 0)] } } }] },
+  { name: 'Velocity + motion blur (Twixtor)', category: 'Edits (referência)', effects: [{ type: 'twixtor', params: { speed: { keys: [kv(0, 280), kv(0.45, 20), kv(1.2, 20), kv(1.6, 280)] }, motionBlur: 120 } }] },
   // ---- Transições
   { name: 'Zoom punch (in)', category: 'Transições', transform: { scale: { mode: 'abs', keys: [kv(0, [100, 100]), kv(0.35, [165, 165])] } }, effects: [{ type: 'radialBlur', params: { amount: { keys: [k(0, 0, 'easeIn'), k(0.25, 45, 'easeOut'), k(0.35, 0)] } } }, { type: 'motionBlur', params: { amount: 150 } }] },
   { name: 'Zoom out (entrada)', category: 'Transições', transform: { scale: { mode: 'abs', keys: [kv(0, [180, 180]), kv(0.4, [100, 100])] } }, effects: [{ type: 'radialBlur', params: { amount: { keys: [k(0, 50, 'easeOut'), k(0.4, 0)] } } }, { type: 'motionTile', params: { outW: 200, outH: 200 } }] },
@@ -70,7 +83,7 @@ export const BUILTIN_PRESETS = [
   { name: 'Pulsar', category: 'Entradas', transform: { scale: { mode: 'abs', keys: [k(0, [100, 100]), k(0.25, [115, 115]), k(0.5, [100, 100]), k(0.75, [115, 115]), k(1, [100, 100])] } } },
   { name: 'Fade Out', category: 'Saídas', anchor: 'end', transform: { opacity: { mode: 'abs', keys: [k(0, 100, 'easeIn'), k(0.5, 0)] } } },
   { name: 'Encolher', category: 'Saídas', anchor: 'end', transform: { scale: { mode: 'abs', keys: [k(0, [100, 100], 'easeIn'), k(0.4, [0, 0])] } } },
-].map((p, i) => ({ id: `builtin_${i}`, source: 'builtin', anchor: 'playhead', ...p, duration: presetDuration(p) }));
+].map((p, i) => ({ id: `builtin_${i}`, source: 'builtin', anchor: 'playhead', ...p, duration: p.duration ?? presetDuration(p) }));
 
 function keysOf(v) {
   return v && typeof v === 'object' && !Array.isArray(v) && Array.isArray(v.keys) ? v.keys : [];
@@ -300,7 +313,8 @@ export function applyPreset(layer, preset, playhead) {
 
   for (const fx of preset.effects || []) {
     if (fx.type !== 'generic' && !EFFECT_MAP[fx.type]) continue;
-    layer.effects.push(createEffectInstance(fx.type, fx.params, t0, {
+    const params = preset.anchorStart && fx.params && 'start' in fx.params ? { ...fx.params, start: +(t0 - layer.inPoint + fx.params.start).toFixed(4) } : fx.params;
+    layer.effects.push(createEffectInstance(fx.type, params, t0, {
       ...(fx.label ? { label: fx.label } : {}),
       ...(fx.matchName ? { matchName: fx.matchName } : {}),
       ...(fx.defs ? { defs: fx.defs } : {}),

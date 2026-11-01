@@ -70,13 +70,21 @@ export function wantsInterp(layer, t) {
 }
 
 /** Quadros de origem para o tempo t (no fps real do vídeo): { a, b, f } em segundos de mídia. */
+/** Motion blur por vetores do Twixtor (%), 0 quando desligado. */
+export function vectorBlur(layer, t) {
+  const fx = speedEffect(layer);
+  return fx?.params.motionBlur ? valueAt(fx.params.motionBlur, t) || 0 : 0;
+}
+
 export function blendFrames(layer, t, fps) {
   const st = sourceTime(layer, t);
   const sfps = layer.props.sourceFps || fps;
-  if (!wantsInterp(layer, t)) return { a: (Math.floor(st * sfps + 1e-6) + 0.01) / sfps, b: null, f: 0 };
   const fr = st * sfps;
   const i = Math.floor(fr);
   const f = fr - i;
+  // motion blur por vetores precisa sempre do quadro seguinte (para medir o movimento)
+  if (vectorBlur(layer, t) > 0) return { a: (i + 0.01) / sfps, b: (i + 1.01) / sfps, f: wantsInterp(layer, t) ? f : 0 };
+  if (!wantsInterp(layer, t)) return { a: (Math.floor(st * sfps + 1e-6) + 0.01) / sfps, b: null, f: 0 };
   // +1% do quadro: buscar exatamente na borda faz alguns navegadores entregarem o quadro anterior
   if (f < 0.02 || f > 0.98) return { a: (Math.round(fr) + 0.01) / sfps, b: null, f: 0 };
   return { a: (i + 0.01) / sfps, b: (i + 1.01) / sfps, f };

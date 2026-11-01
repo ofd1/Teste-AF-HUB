@@ -135,3 +135,16 @@ test('Looks: Spot Exposure, Gradient Exposure e Edge Softness convertidos', asyn
   assert.ok(Math.abs(params.edgeSize - 135.1) < 0.01);
   assert.ok(used.includes('edgs') && used.includes('spex'));
 });
+
+test('presets nativos usam só efeitos/parâmetros existentes (inclui Shatter e Time Slice)', async () => {
+  const { BUILTIN_PRESETS } = await import('../js/presets.js');
+  const { EFFECT_MAP } = await import('../js/effects.js');
+  assert.ok(EFFECT_MAP.shatter && EFFECT_MAP.timeSlice);
+  for (const p of BUILTIN_PRESETS) for (const fx of p.effects || []) {
+    const def = EFFECT_MAP[fx.type];
+    assert.ok(def, `${p.name}: efeito ${fx.type}`);
+    for (const k of Object.keys(fx.params || {})) assert.ok(def.params.some((x) => x.key === k), `${p.name}: ${fx.type}.${k}`);
+  }
+  assert.equal(matchEffect('ADBE Shatter').def.type, 'shatter');
+  assert.equal(matchEffect('S_TimeSlice').def.type, 'timeSlice');
+});

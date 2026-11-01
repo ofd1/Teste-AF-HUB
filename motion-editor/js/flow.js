@@ -81,18 +81,25 @@ void main() {
   gl_FragColor = mix(ca, cb, w);
 }`;
 
-/**
- * Gera o quadro intermediário entre A e B (texturas do GLEngine) na fração f (0..1).
- * quality: 'preview' (fluxo em 1/8) ou 'final' (fluxo em 1/4).
- */
-export function flowInterpolate(gl, texA, texB, f, quality = 'final') {
-  if (f <= 0.001) return texA;
-  if (f >= 0.999) return texB;
+const VBLUR = `${PRELUDE}${FLOW_GLSL}
+uniform sampler2D u_flow; uniform vec2 u_ftexel; uniform float u_len, u_n;
+void main() {
+  vec2 f = decodeFlow(texture2D(u_flow, v_uv)) * u_ftexel * u_len;
+  vec4 acc = vec4(0.0);
+  for (int i = 0; i < 24; i++) {
+    if (float(i) >= u_n) break;
+    float k = u_n > 1.0 ? float(i) / (u_n - 1.0) - 0.5 : 0.0;
+    acc += texture2D(u_tex, v_uv + f * k);
+  }
+  gl_FragColor = acc / u_n;
+}`;
+
+/** Campo de fluxo óptico A→B (texturas do GLEngine). quality: 'preview' (1/8) ou 'final' (1/4). */
+export function computeFlow(gl, texA, texB, quality = 'final') {
   const base = quality === 'final' ? 4 : 8;
   const levels = [32, 16, 8, 4].filter((s) => s >= base);
   const radii = { 32: 4, 16: 2, 8: 1, 4: 1 };
   const W = texA.w, H = texA.h;
-  // pirâmide de luminância (reduções 2× sucessivas)
   const pyrA = {}, pyrB = {};
   let la = texA, lb = texB;
   for (let s = 2; s <= 32; s *= 2) {
@@ -108,5 +115,29 @@ export function flowInterpolate(gl, texA, texB, f, quality = 'final') {
   const guide = pyrA[base];
   flow = gl.pass(SMOOTH, { u_tex: flow, u_img: guide });
   flow = gl.pass(SMOOTH, { u_tex: flow, u_img: guide });
-  return gl.pass(INTERP, { u_tex: texA, u_b: texB, u_flow: flow, u_f: f, u_ftexel: [1 / flow.w, 1 / flow.h] }, W, H);
+  return flow;
+}
+
+/** Quadro intermediário a partir de um fluxo já calculado. */
+export function interpWithFlow(gl, texA, texB, flow, f) {
+  if (f <= 0.001) return texA;
+  if (f >= 0.999) return texB;
+  return gl.pass(INTERP, { u_tex: texA, u_b: texB, u_flow: flow, u_f: f, u_ftexel: [1 / flow.w, 1 / flow.h] }, texA.w, texA.h);
+}
+
+/** Motion blur por vetores (estilo RSMB / Twixtor Pro): borra ao longo do movimento. len = fração do fluxo entre quadros. */
+export function flowMotionBlur(gl, tex, flow, len) {
+  if (len < 0.05) return tex;
+  const n = Math.min(24, Math.max(4, Math.ceil(len * 10)));
+  return gl.pass(VBLUR, { u_tex: tex, u_flow: flow, u_ftexel: [1 / flow.w, 1 / flow.h], u_len: len, u_n: n });
+}
+
+/**
+ * Gera o quadro intermediário entre A e B (texturas do GLEngine) na fração f (0..1).
+ * quality: 'preview' (fluxo em 1/8) ou 'final' (fluxo em 1/4).
+ */
+export function flowInterpolate(gl, texA, texB, f, quality = 'final') {
+  if (f <= 0.001) return texA;
+  if (f >= 0.999) return texB;
+  return interpWithFlow(gl, texA, texB, computeFlow(gl, texA, texB, quality), f);
 }

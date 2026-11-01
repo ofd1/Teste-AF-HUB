@@ -133,8 +133,10 @@ export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } 
     muxer.finalize();
     const blob = new Blob([target.buffer], { type: 'video/mp4' });
     ui.close();
+    store.exporting = false;
+    keepAwake(false);
+    if (!audio && mix) toast('Vídeo exportado sem áudio: codec de áudio indisponível neste aparelho.', 'warn', 5000);
     await saveFile(`edit-${Date.now()}.mp4`, blob);
-    toast(`Vídeo exportado (${(blob.size / 1e6).toFixed(1)} MB${audio ? ', com áudio' : mix ? ', sem áudio: codec indisponível' : ''}).`, 'ok', 5000);
     return true;
   } catch (e) {
     console.error(e);
