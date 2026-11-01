@@ -17,7 +17,7 @@ const types = (p) => p.effects.map((e) => e.type);
 
 const EXPECTED = {
   'Shakes/Sonhei Shake.ffx': ['twitch', 'exposure'],
-  'Shakes/ZAZ Shake.ffx': ['motionTile', 'dirBlur', 'shake', 'motionBlur', 'twitch', 'tint'],
+  'Shakes/ZAZ Shake.ffx': ['motionTile', 'dirBlur', 'shake', 'twitch', 'tint'], // o motion blur do S_Shake agora é do próprio shake
   'Velocity & Reverse/Sonhei Reverse.ffx': ['twixtor', 'blurMoCurves'],
   'CC (Color Correction)/Sonhei CC.ffx': ['looks', 'looks', 'sharpen', 'fourColor', 'exposure', 'filmLook', 'sharpen', 'looks', 'exposure'],
   'CC (Color Correction)/Sonhei New CC.ffx': ['looks', 'looks', 'sharpen'],

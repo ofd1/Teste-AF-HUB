@@ -32,7 +32,7 @@ test('identifica plugins de terceiros e converte', () => {
   assert.equal(fx['Twixtor Pro'].params.frameBlend, true);
   assert.equal(fx.PEDG.params.radius, 300);
   assert.equal(fx.PEDG.params.threshold, 40);
-  assert.equal(fx.S_Shake.params.amount, 10.5); // amplitude 0.3 × 35 (escala calibrada com presets reais)
+  assert.equal(fx.S_Shake.params.amount, 30); // amplitude 0.3 × 100 px (Sapphire: Amplitude × X/Y Rand Amp)
   assert.equal(fx.S_Shake.params.frequency, 12);
   assert.equal(fx['VIDEOCOPILOT Twitch'].params.slide, true);
   assert.equal(fx.RSMB.params.amount, 100);
