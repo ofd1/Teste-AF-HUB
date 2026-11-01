@@ -335,8 +335,18 @@ export class GLEngine {
 
 let engine = null;
 let failed = false;
+let lostListener = () => {};
+/** Avisa quando a GPU derrubou o contexto (o app recria e redesenha). */
+export function setGLLostListener(fn) { lostListener = fn; }
 export function getGL() {
+  // o iPhone/Android derrubam o contexto WebGL quando um quadro pesa demais na GPU: antes disso deixava tudo preto
+  // (inclusive a exportação). Agora o motor é recriado automaticamente.
+  if (engine && engine.gl.isContextLost()) { engine = null; failed = false; lostListener(); }
   if (engine || failed) return engine;
-  try { engine = new GLEngine(); } catch (e) { failed = true; console.warn('WebGL indisponível — efeitos desativados', e); }
+  try {
+    engine = new GLEngine();
+    engine.canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); engine = null; lostListener(); }, { once: true });
+  } catch (e) { failed = true; console.warn('WebGL indisponível — efeitos desativados', e); }
   return engine;
 }
+export function glLost() { return !!engine && engine.gl.isContextLost(); }

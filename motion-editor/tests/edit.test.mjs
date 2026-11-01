@@ -167,3 +167,11 @@ test('Time Remap: o valor é o tempo do arquivo (congelar, acelerar e voltar)', 
   assert.equal(sourceTime(layer, 0.5), 1);          // congelado
   assert.ok(Math.abs(sourceTime(layer, 2) - 0.5) < 1e-6); // voltando (reverse)
 });
+
+test('gráfico personalizado (curva) nos keyframes, com overshoot', async () => {
+  const { anim, valueAt, curveOf } = await import('../js/anim.js');
+  const p = anim(0, [{ t: 0, v: 0, ease: 'curve', curve: [0.34, 1.56, 0.64, 1] }, { t: 1, v: 100, ease: 'linear' }]);
+  assert.ok(valueAt(p, 0.6) > 100);          // passa do alvo (back) e volta
+  assert.equal(valueAt(p, 1), 100);
+  assert.deepEqual(curveOf({ ease: 'easeInOut' }), [0.33, 0, 0.67, 1]);
+});

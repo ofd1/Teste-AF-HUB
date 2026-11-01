@@ -10,6 +10,7 @@ export const EASES = {
   bounce: 'Quicar',
   hold: 'Congelar (Hold)',
   bezier: 'Bézier (AE)',
+  curve: 'Gráfico personalizado',
 };
 
 export function anim(value, keys = []) {
@@ -70,6 +71,13 @@ const curves = {
 const bezierCache = new Map();
 function easeFn(key, next) {
   const e = key.ease || 'linear';
+  if (e === 'curve' && Array.isArray(key.curve)) {
+    // gráfico personalizado (como no Alight Motion): curva cúbica com 2 alças; y pode passar de 0..1 (overshoot)
+    const [x1, y1, x2, y2] = key.curve;
+    const id = `c:${key.curve.map((v) => (+v).toFixed(4)).join(',')}`;
+    if (!bezierCache.has(id)) bezierCache.set(id, cubicBezier(clamp01(x1), y1, clamp01(x2), y2));
+    return bezierCache.get(id);
+  }
   if (e === 'bezier') {
     // influências estilo AE (0..1). Velocidade 0 => tangente horizontal.
     const o = clamp01(key.outInf ?? 0.333);
@@ -173,4 +181,23 @@ export function prevKeyTime(p, t) {
 export function nextKeyTime(p, t) {
   for (const k of p?.keys || []) if (k.t > t + EPS) return k.t;
   return null;
+}
+
+/** Curva (x1,y1,x2,y2) equivalente ao easing atual do keyframe — ponto de partida do editor de gráfico. */
+export function curveOf(key, next) {
+  if (!key) return [0, 0, 1, 1];
+  switch (key.ease) {
+    case 'curve': return key.curve?.slice() || [0, 0, 1, 1];
+    case 'easeInOut': return [0.33, 0, 0.67, 1];
+    case 'easeIn': return [0.33, 0, 1, 1];
+    case 'easeOut': return [0, 0, 0.67, 1];
+    case 'back': return [0.34, 1.56, 0.64, 1];
+    case 'bezier': return [clamp01(key.outInf ?? 0.333), 0, 1 - clamp01(next?.inInf ?? 0.333), 1];
+    default: return [0, 0, 1, 1];
+  }
+}
+
+/** Avalia a curva (para desenhar o gráfico): x 0..1 → y. */
+export function evalCurve(c, x) {
+  return cubicBezier(clamp01(c[0]), c[1], clamp01(c[2]), c[3])(x);
 }

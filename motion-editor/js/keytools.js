@@ -1,6 +1,8 @@
 // Painel de ferramentas de keyframes: selecionar todos, esticar/comprimir, easing em lote, inverter.
 import { selectAll, selectionRange, snapshotTimes, stretchKeys, reverseKeys, shiftKeys, setEase, deleteKeys } from './keyframes.js';
 import { formatTime } from './util.js';
+import { graphHtml, bindGraph } from './graph.js';
+import { toast } from './ui.js';
 
 const EASE_BUTTONS = [
   ['linear', 'Linear', null], ['easeInOut', 'Easy Ease', null], ['easeIn', 'Ease In', null], ['easeOut', 'Ease Out', null],
@@ -36,7 +38,9 @@ export class KeyTools {
     const range = selectionRange(sel);
     const layers = new Set(sel.map((s) => s.layerId)).size;
     const fps = store.project.fps;
+    this.stopGraph?.();
     this.root.innerHTML = `
+      ${graphHtml(store)}
       <div class="kt-info">${sel.length ? `<b>${sel.length}</b> keyframe(s) em ${layers} camada(s) · ${formatTime(range[0], fps)} → ${formatTime(range[1], fps)} (${(range[1] - range[0]).toFixed(2)}s)` : 'Nenhum keyframe selecionado. Toque nos ◆ da timeline ou use “Selecionar todos”.'}</div>
       <div class="kt-row">
         <button data-act="all-layer" class="primary">◆◆ Selecionar todos${store.layer() ? ' (camada)' : ''}</button>
@@ -72,6 +76,7 @@ export class KeyTools {
   bind() {
     const { store } = this;
     const r = this.root;
+    this.stopGraph = bindGraph(r, store, { toast });
     const sel = () => store.selectedKeys;
     const on = (act, fn, ev = 'click') => r.querySelector(`[data-act="${act}"]`)?.addEventListener(ev, fn);
     on('all-layer', () => this.selectAllLayer());

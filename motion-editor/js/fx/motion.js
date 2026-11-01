@@ -54,7 +54,10 @@ function blurSamples(env, q, c, min = 8) {
   const w = env.w * env.scale, h = env.h * env.scale, R = Math.hypot(w, h) / 2;
   const move = Math.hypot((c.dx - q.dx) * env.scale, (c.dy - q.dy) * env.scale)
     + Math.abs(c.s - q.s) * R + Math.abs(rad(c.rot - q.rot)) * R;
-  return Math.max(min, Math.min(64, Math.ceil(move / 2.5)));
+  // prévia: no máximo 24 amostras (o iPhone derruba a GPU com laços longos em tela cheia); exportação: até 48
+  const cap = env.final ? 48 : 24;
+  const n = Math.max(Math.min(min, cap), Math.min(cap, Math.ceil(move / 2.5)));
+  return Number.isFinite(n) ? n : min;
 }
 
 /** Envelope aleatório por "evento" (0..1), estilo Twitch. */

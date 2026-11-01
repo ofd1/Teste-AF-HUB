@@ -1,6 +1,7 @@
 import { Store, LAYER_FACTORIES, RESOLUTIONS, createProject } from './state.js';
 import { compDialog } from './comp-dialog.js';
 import { setBgListener, ensureBgModel, bgStatus } from './bgremove.js';
+import { setGLLostListener } from './gl.js';
 import { createEffectInstance } from './presets.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
 import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, detectFps } from './media.js';
@@ -39,6 +40,7 @@ const curQuality = () => (qualitySel.value === 'auto' ? (store.playing ? 0.5 : 1
 let quality = curQuality();
 setMediaListener(() => { dirty = true; });
 setBgListener(() => { dirty = true; });
+setGLLostListener(() => { dirty = true; if (!setGLLostListener.warned) { setGLLostListener.warned = true; toast('A GPU do aparelho reiniciou; o app recuperou a prévia.', 'warn', 3500); } });
 // primeira vez no app: mostra o passo a passo
 setTimeout(() => { try { if (!localStorage.getItem('motionframe.helpSeen')) { localStorage.setItem('motionframe.helpSeen', '1'); showHelp(); } } catch { /* sem armazenamento */ } }, 900);
 
@@ -191,8 +193,9 @@ overlay.addEventListener('pointercancel', endPointer);
 // ------------------------------------------------------------------ sheet (painel inferior / lateral)
 const sheet = document.getElementById('sheet');
 const sheetTitle = document.getElementById('sheetTitle');
-const TITLES = { effects: 'Efeitos', browser: 'Adicionar efeito', props: 'Ajustes da camada', presets: 'Presets', keys: 'Keyframes', add: 'Adicionar camada' };
+const TITLES = { effects: 'Efeitos', browser: 'Adicionar efeito', props: 'Ajustes da camada', presets: 'Presets', keys: 'Keyframes e gráfico', add: 'Adicionar camada' };
 const desktop = window.matchMedia('(min-width: 1100px)');
+const appEl = document.querySelector('.app');
 let sheetPane = null;
 let sheetBackTo = null;
 
@@ -203,6 +206,7 @@ function openSheet(name, backTo = null) {
   document.querySelectorAll('.sheet .pane').forEach((p) => p.classList.toggle('active', p.dataset.pane === name));
   sheetTitle.textContent = TITLES[name] || '';
   sheet.classList.add('open');
+  appEl.classList.toggle('docked', !desktop.matches);
   sheet.classList.toggle('has-back', !!backTo);
   sheet.setAttribute('aria-hidden', 'false');
 }
@@ -210,6 +214,7 @@ function closeSheet() {
   if (desktop.matches) { openSheet(store.layer() ? 'effects' : 'presets'); return; }
   sheetPane = null;
   sheet.classList.remove('open');
+  appEl.classList.remove('docked');
   sheet.setAttribute('aria-hidden', 'true');
 }
 document.getElementById('sheetClose').addEventListener('click', closeSheet);
@@ -242,6 +247,7 @@ const timeline = new Timeline(document.getElementById('timeline'), store, {
   onPreview: () => { dirty = true; },
   videoThumb: (src) => videoThumb(src),
   multiSelect: () => keyTools?.multi,
+  onKeyTap: () => { if (sheetPane !== 'keys') openSheet('keys'); },
 });
 new Inspector(document.getElementById('effectsPanel'), store, 'effects', {
   browse: () => openSheet('browser', 'effects'),
@@ -386,7 +392,7 @@ function renderToolbar() {
       ...(t === 'video' ? [['speed', '⏱', 'Velocidade', true]] : []),
       ...(t === 'video' || t === 'audio' ? [['sound', '🔊', 'Som']] : []),
       ...(t === 'video' || t === 'image' ? [['bg-remove', '✂︎', 'Tirar fundo']] : []),
-      ['props', '☰', 'Propriedades'], ['keys', '◆', 'Animação'],
+      ['props', '☰', 'Propriedades'], ['keys', '📈', 'Keyframes / gráfico'],
       ['split', '✂', 'Dividir'], ['dup', '⧉', 'Duplicar'],
       t === 'group' ? ['ungroup', '⊟', 'Desagrupar'] : ['group', '⊞', 'Agrupar'],
       ['up', '▲', 'Subir'], ['down', '▼', 'Descer'],

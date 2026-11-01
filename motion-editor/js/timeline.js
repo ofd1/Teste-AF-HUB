@@ -379,6 +379,7 @@ export class Timeline {
         } else {
           if (!additive) store.setTime(t0);
           store.emit('keys');
+          this.hooks.onKeyTap?.(); // abre o gráfico do keyframe (como no Alight Motion)
         }
       };
       return;

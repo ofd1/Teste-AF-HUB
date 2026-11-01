@@ -1,5 +1,6 @@
 // Exportação: MP4 quadro a quadro (WebCodecs + mp4-muxer, com áudio) e fallback em tempo real (MediaRecorder).
 import { renderFrame } from './renderer.js';
+import { getGL, glLost } from './gl.js';
 import { prepare, pauseAll, setExporting } from './media.js';
 import { renderMix, stopAudio } from './audio.js';
 import { modal, toast } from './ui.js';
@@ -100,6 +101,12 @@ export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } 
       const t = i / fps;
       await prepare(project, t, { exact: true });
       renderFrame(ctx, project, t, width / project.width, { final: true });
+      // se a GPU caiu no meio do quadro, recria o contexto e refaz o quadro (antes saía preto até o fim)
+      for (let retry = 0; retry < 3 && glLost(); retry++) {
+        await new Promise((r) => setTimeout(r, 250));
+        getGL();
+        renderFrame(ctx, project, t, width / project.width, { final: true });
+      }
       const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
       venc.encode(frame, { keyFrame: i % (fps * 2) === 0 });
       frame.close();

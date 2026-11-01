@@ -147,9 +147,10 @@ function renderLayerImage(layer, t, scale, extra) {
   });
   let pad = 2;
   for (const { def, p } of evaluated) pad += def.pad ? Math.max(0, def.pad(p, { w, h, layer })) : 0;
-  pad = Math.ceil(Math.min(pad * scale, 4096));
+  pad = Number.isFinite(pad) ? Math.ceil(Math.min(pad * scale, 2048)) : 2; // nunca NaN (deixava a camada preta)
 
-  const W = Math.ceil(w * scale + pad * 2), H = Math.ceil(h * scale + pad * 2);
+  let W = Math.ceil(w * scale + pad * 2), H = Math.ceil(h * scale + pad * 2);
+  if (!Number.isFinite(W) || !Number.isFinite(H) || W < 1 || H < 1) { W = Math.max(1, Math.ceil(w * scale) || 1); H = Math.max(1, Math.ceil(h * scale) || 1); }
   const vf = layer.type === 'video' ? videoFrames(layer, lt, project?.fps || 30, renderOpts.final && !extra?.offTime) : null;
   const paint = (id, source) => {
     const canvas = poolCanvas(id, W, H);
@@ -207,7 +208,7 @@ function renderLayerImage(layer, t, scale, extra) {
   }
   const rect = [pad / tex.w, pad / tex.h, (w * scale) / tex.w, (h * scale) / tex.h];
   gl.env = { u_time: lt, u_scale: scale, u_rect: rect };
-  const env = { gl, t: lt, scale, pad, w, h, W: tex.w, H: tex.h, rect, layer, fps, srcCanvas: canvas };
+  const env = { gl, t: lt, scale, pad, w, h, W: tex.w, H: tex.h, rect, layer, fps, srcCanvas: canvas, final: renderOpts.final };
   for (const { def, p, prev, fx } of evaluated) {
     try {
       const input = tex;
@@ -217,6 +218,7 @@ function renderLayerImage(layer, t, scale, extra) {
       if (op < 99.95 && tex !== input) tex = gl.mix(input, tex, Math.max(0, op) / 100);
     } catch (e) { console.warn('efeito falhou', def.type, e); }
   }
+  if (gl.gl.isContextLost()) return { src: canvas, sw: W, sh: H, pad, w, h }; // GPU caiu: mostra sem efeitos em vez de preto
   const out = gl.toCanvas(tex);
   gl.releaseAll();
   return { src: out, sw: tex.w, sh: tex.h, pad, w, h };
