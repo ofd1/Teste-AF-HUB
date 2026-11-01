@@ -96,7 +96,8 @@ uniform float u_exp, u_sat, u_hue, u_con, u_fade, u_mojo, u_cool, u_skin, u_punc
 uniform vec3 u_filter, u_lift, u_gamma, u_gain;
 uniform vec3 u_hsl[8];
 uniform vec2 u_curve[4]; uniform float u_ncurve;
-uniform float u_spexp, u_spsize, u_spsoft, u_grexp, u_grang, u_groff, u_grsoft;
+uniform float u_spexp, u_spsize, u_spsoft, u_spasp, u_spinv, u_grexp, u_grang, u_groff, u_grsoft;
+uniform vec2 u_imgasp;
 uniform vec2 u_spc; uniform vec3 u_spcol, u_grcol;
 float hueCenter(int i) {
   if (i == 0) return 0.0; if (i == 1) return 30.0; if (i == 2) return 60.0; if (i == 3) return 120.0;
@@ -120,8 +121,10 @@ void main() {
   vec2 cuv = contentUV(v_uv);
   // Spot Exposure: luz numa elipse suave, tingida pela cor da ferramenta
   if (u_spexp != 0.0) {
-    float sd = length((cuv - u_spc) * vec2(1.0, 1.6));
-    float m = 1.0 - smoothstep(u_spsize * (1.0 - u_spsoft), u_spsize * (1.0 + u_spsoft), sd);
+    // como no Looks: centro, raio e "spread" (faixa de suavização) em meias-larguras da imagem, com proporção
+    vec2 dd = (cuv - u_spc) * u_imgasp * 2.0; dd.x /= max(u_spasp, 0.05);
+    float m = 1.0 - smoothstep(u_spsize, u_spsize + max(u_spsoft, 0.001), length(dd));
+    if (u_spinv > 0.5) m = 1.0 - m;
     lin *= mix(vec3(1.0), pow(2.0, u_spexp) * u_spcol, m);
   }
   // Gradient Exposure: exposição em degradê na direção do ângulo
@@ -159,12 +162,13 @@ void main() {
   // Mojo II: sombras/meios-tons para teal, pele para laranja
   float l = luma(r);
   float skin = smoothstep(22.0, 6.0, abs(mod(hv.x * 360.0 - 28.0 + 180.0, 360.0) - 180.0)) * smoothstep(0.1, 0.35, hv.y);
-  // (o Mojo não lava a imagem: separa as cores — fundo para teal, pele para laranja — e aumenta a saturação)
-  vec3 teal = r + vec3(-0.06, 0.012, 0.05) * (1.0 - l * 0.6);
-  vec3 warm = r * vec3(1.08, 1.0, 0.86);
-  r = mix(r, teal, u_mojo * u_cool * (1.0 - skin));
-  r = mix(r, warm, u_mojo * u_skin * skin);
-  r = mix(vec3(luma(r)), r, 1.0 + u_mojo * 0.22);
+  // Mojo II (manual do Looks): esquenta os realces e esfria as sombras, destacando a pele — sem mudar o contraste geral
+  float hiW = smoothstep(0.2, 0.85, l);
+  vec3 cool = r + vec3(-0.055, 0.008, 0.06) * (1.0 - hiW) * (1.0 - skin * 0.8);
+  vec3 warmH = r * mix(vec3(1.0), vec3(1.07, 1.01, 0.88), hiW);
+  r = mix(r, cool, u_mojo * u_cool);
+  r = mix(r, warmH, u_mojo * (0.6 + 0.4 * skin) * u_skin);
+  r = mix(vec3(luma(r)), r, 1.0 + u_mojo * 0.18 * (0.5 + skin));
   // Punch (curva S + saturação) e Bleach (bleach bypass)
   vec3 sc = r * r * (3.0 - 2.0 * r);
   r = mix(r, sc, u_punch);
@@ -173,7 +177,10 @@ void main() {
   vec3 ov = mix(2.0 * r * bl, 1.0 - 2.0 * (1.0 - r) * (1.0 - bl), step(0.5, bl));
   r = mix(r, mix(ov, vec3(bl), 0.4), u_bleach);
   // contraste, saturação, curva, haze/fade
-  r = (r - 0.45) * (1.0 + u_con) + 0.45;
+  // Contraste do Looks: curva de filme (S) em torno do pivô, não uma reta que estoura pretos/brancos
+  vec3 cx = clamp(r, 0.0, 1.0);
+  vec3 sCurve = mix(cx, cx * cx * (3.0 - 2.0 * cx), clamp(u_con, 0.0, 1.0) * 1.2);
+  r = u_con >= 0.0 ? sCurve + (r - cx) : (r - 0.45) * (1.0 + u_con) + 0.45;
   r = mix(vec3(luma(r)), r, u_sat);
   r += vec3(curveDy(clamp(r.r, 0.0, 1.0)), curveDy(clamp(r.g, 0.0, 1.0)), curveDy(clamp(r.b, 0.0, 1.0)));
   r = mix(r, vec3(0.08) + r * 0.86, u_fade);
@@ -188,11 +195,22 @@ export const HSL_COLORS = [['Red', 'vermelho'], ['Orange', 'laranja'], ['Yellow'
 const adv = (p) => ({ ...p, advanced: true });
 
 const EDGE_SOFT = frag(`
-uniform sampler2D u_tex2; uniform float u_esize, u_soft, u_asp;
+uniform sampler2D u_tex2; uniform float u_esize, u_soft, u_asp; uniform vec2 u_ec, u_imgasp;
 void main() {
-  vec2 cu = (contentUV(v_uv) - 0.5) * vec2(u_asp, 1.0) * 2.0;
-  float m = smoothstep(u_esize * (1.0 - u_soft), u_esize * (1.0 + u_soft), length(cu));
+  // Edge Softness (manual do Looks): nítido dentro do raio, desfoque total depois do "spread"; centro e proporção
+  vec2 cu = (contentUV(v_uv) - u_ec) * u_imgasp * 2.0; cu.x /= max(u_asp, 0.05);
+  float m = smoothstep(u_esize, u_esize + max(u_soft, 0.001), length(cu));
   gl_FragColor = mix(texture2D(u_tex, v_uv), texture2D(u_tex2, v_uv), m);
+}`);
+// Optical Diffusion (filtro de difusão na lente, tipo Pro-Mist): a luz das áreas claras "vaza" suavemente
+const OPTDIFF = frag(`
+uniform sampler2D u_tex2; uniform float u_dens, u_hl, u_glow;
+void main() {
+  vec4 c = texture2D(u_tex, v_uv), b = texture2D(u_tex2, v_uv);
+  float w = u_dens * mix(1.0, smoothstep(0.35, 0.95, luma(b.rgb)), u_hl);
+  vec3 lifted = max(c.rgb, mix(c.rgb, b.rgb, 0.85));      // a difusão clareia, nunca escurece os detalhes
+  vec3 o = mix(c.rgb, lifted, w) + b.rgb * u_glow * smoothstep(0.5, 1.0, luma(b.rgb));
+  gl_FragColor = vec4(min(o, vec3(c.a)), c.a);
 }`);
 const THRESH = frag(`
 uniform float u_thr;
@@ -225,8 +243,10 @@ export default [
       num('diffusion', 'Difusão (glow) %', 0, 0, 300), num('diffusionRadius', 'Raio da difusão', 60, 1, 600), num('diffusionThreshold', 'Limiar da difusão %', 60, 0, 100),
       num('chroma', 'Aberração cromática', 0, 0, 50, 0.1),
       num('spotExposure', 'Spot Exposure (luz)', 0, -4, 4, 0.01), col('spotColor', 'Spot – cor da luz', [1, 1, 1, 1]), pos('spotCenter', 'Spot – centro', [0.5, 0.5]),
-      num('spotSize', 'Spot – tamanho %', 70, 1, 200), num('spotSoft', 'Spot – suavidade %', 50, 0, 100),
-      num('edgeBlur', 'Edge Softness (desfoque nas bordas)', 0, 0, 100, 0.1), num('edgeSize', 'Edge – área nítida %', 100, 10, 300), num('edgeSoft', 'Edge – suavidade %', 50, 0, 100),
+      num('spotSize', 'Spot – raio %', 50, 0, 400), num('spotSoft', 'Spot – spread %', 50, 0, 400), adv(num('spotAspect', 'Spot – proporção', 1, 0.1, 4, 0.01)), adv(bool('spotInvert', 'Spot – inverter', false)),
+      num('edgeBlur', 'Edge Softness (desfoque nas bordas)', 0, 0, 100, 0.1), num('edgeSize', 'Edge – raio nítido %', 100, 0, 400), num('edgeSoft', 'Edge – spread %', 50, 0, 400),
+      adv(pos('edgeCenter', 'Edge – centro', [0.5, 0.5])), adv(num('edgeAspect', 'Edge – proporção', 1, 0.1, 4, 0.01)),
+      num('optDensity', 'Optical Diffusion – densidade %', 0, 0, 100), num('optSize', 'Optical Diffusion – tamanho', 50, 1, 500), num('optHighlights', 'Optical Diffusion – só realces %', 50, 0, 100), num('optGlow', 'Optical Diffusion – glow %', 0, 0, 200),
       adv(num('gradExposure', 'Gradient Exposure', 0, -4, 4, 0.01)), adv(ang('gradAngle', 'Gradient – ângulo', 0)), adv(num('gradOffset', 'Gradient – deslocamento', 0, -1, 1, 0.01)),
       adv(num('gradSoft', 'Gradient – suavidade', 0.5, 0.01, 2, 0.01)), adv(col('gradColor', 'Gradient – cor', [1, 1, 1, 1])),
       adv(col('filter', 'Filtro de cor', [1, 1, 1, 1])), adv(num('filterDensity', 'Densidade do filtro %', 0, 0, 100)), adv(ang('hue', 'Matiz global', 0)),
@@ -253,12 +273,19 @@ export default [
         u_lift: [p.liftR, p.liftG, p.liftB], u_gamma: [p.gammaR, p.gammaG, p.gammaB], u_gain: [p.gainR, p.gainG, p.gainB],
         u_hsl: { vec3: HSL_COLORS.flatMap(([k]) => [p[`hsl${k}H`] || 0, p[`hsl${k}S`] || 0, p[`hsl${k}L`] || 0]) },
         u_curve: { vec2: curve }, u_ncurve: pts.length,
-        u_spexp: p.spotExposure || 0, u_spc: p.spotCenter || [0.5, 0.5], u_spsize: (p.spotSize ?? 70) / 100, u_spsoft: Math.max(0.01, (p.spotSoft ?? 50) / 100), u_spcol: rgb(p.spotColor || [1, 1, 1, 1]),
+        u_spexp: p.spotExposure || 0, u_spc: p.spotCenter || [0.5, 0.5], u_spsize: (p.spotSize ?? 50) / 100, u_spsoft: Math.max(0.01, (p.spotSoft ?? 50) / 100), u_spcol: rgb(p.spotColor || [1, 1, 1, 1]),
+        u_spasp: p.spotAspect ?? 1, u_spinv: !!p.spotInvert, u_imgasp: [1, env.h / env.w],
         u_grexp: p.gradExposure || 0, u_grang: p.gradAngle || 0, u_groff: p.gradOffset || 0, u_grsoft: Math.max(0.01, p.gradSoft ?? 0.5), u_grcol: rgb(p.gradColor || [1, 1, 1, 1]),
       });
       if (p.edgeBlur * s > 0.05) {
         const b = gl.blur(out, p.edgeBlur * 2 * s * env.scale);
-        out = gl.pass(EDGE_SOFT, { u_tex: out, u_tex2: b, u_esize: (p.edgeSize ?? 100) / 100, u_soft: Math.max(0.01, (p.edgeSoft ?? 50) / 100), u_asp: 1 });
+        out = gl.pass(EDGE_SOFT, { u_tex: out, u_tex2: b, u_esize: (p.edgeSize ?? 100) / 100, u_soft: Math.max(0.01, (p.edgeSoft ?? 50) / 100), u_asp: p.edgeAspect ?? 1, u_ec: p.edgeCenter || [0.5, 0.5], u_imgasp: [1, env.h / env.w] });
+      }
+      if ((p.optDensity || 0) * s > 0.5 || (p.optGlow || 0) * s > 0.5) {
+        // tamanho em % da diagonal (como no Looks)
+        const sigma = ((p.optSize ?? 50) / 1000) * Math.hypot(env.w, env.h) * 0.25 * env.scale;
+        const b = gl.blur(out, Math.max(1, sigma));
+        out = gl.pass(OPTDIFF, { u_tex: out, u_tex2: b, u_dens: ((p.optDensity || 0) / 100) * s, u_hl: (p.optHighlights ?? 50) / 100, u_glow: ((p.optGlow || 0) / 100) * s });
       }
       if (p.diffusion * s >= 1) {
         const th = gl.pass(THRESH, { u_tex: out, u_thr: p.diffusionThreshold / 100 });

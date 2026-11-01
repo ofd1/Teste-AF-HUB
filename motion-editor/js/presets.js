@@ -20,7 +20,9 @@ const kv = (t, v, inf = 0.85) => ({ t, v, ease: 'bezier', outInf: inf, inInf: in
 
 export const BUILTIN_PRESETS = [
   // ---- Shakes (motion blur e bordas espelhadas já vêm no próprio Shake, como no S_Shake)
-  { name: 'Shake impacto', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 16, amount: { keys: [k(0, 70, 'easeOut'), k(0.45, 0)] }, rotation: { keys: [k(0, 4, 'easeOut'), k(0.45, 0)] }, zoom: 6, shutter: 1.5 } }] },
+  { name: 'Shake impacto', category: 'Shakes', anchorStart: true, duration: 0.5, effects: [{ type: 'shake', params: { mode: 2, impactAt: 0, decay: 0.45, frequency: 16, amount: 75, rotation: 4, zoom: 7, shutter: 1.5 } }] },
+  { name: 'Shake batida forte (impacto)', category: 'Shakes', anchorStart: true, duration: 0.7, effects: [{ type: 'shake', params: { mode: 2, impactAt: 0, decay: 0.7, frequency: 22, amount: 130, rotation: 6, zoom: 12, shutter: 2.2, complexity: 3 } }, { type: 'exposure', params: { exposure: { keys: [k(0, 0.9, 'easeOut'), k(0.25, 0)] } } }] },
+  { name: 'Shake cinematográfico (câmera na mão)', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 1.6, amount: 18, rotation: 0.9, zoom: 1.5, complexity: 4, shutter: 0.6 } }] },
   { name: 'Shake contínuo', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 9, amount: 22, rotation: 1.5, zoom: 2, shutter: 1 } }] },
   { name: 'Shake suave (câmera na mão)', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 2.5, amount: 14, rotation: 0.8, zoom: 1, complexity: 3, shutter: 0.5 } }] },
   { name: 'Shake horizontal + RGB', category: 'Shakes', effects: [{ type: 'shake', params: { frequency: 18, amount: { keys: [k(0, 60, 'easeOut'), k(0.35, 0)] }, rotation: 0, axis: 2, shutter: 2 } }, { type: 'rgbSplit', params: { amount: { keys: [k(0, 25, 'easeOut'), k(0.35, 0)] } } }] },
@@ -219,6 +221,15 @@ export function ffxToPreset(parsed) {
 
   const posDims = {};
   for (const p of parsed.properties) {
+    if (p.matchName === 'ADBE Time Remapping') {
+      // Time Remap do AE (propriedade da camada) → efeito Time Remap com os mesmos keyframes
+      const v = convertProp(p, 'number');
+      if (v !== undefined) {
+        preset.effects.unshift({ type: 'timeRemap', matchName: p.matchName, params: { time: v, frameBlend: true } });
+        preset.report.properties.push({ matchName: p.matchName, name: p.name || 'Time Remap', keys: p.keyframes.length, status: 'native' });
+      }
+      continue;
+    }
     const map = TRANSFORM_MAP[p.matchName];
     const rep = { matchName: p.matchName, name: p.name || p.matchName, keys: p.keyframes.length, status: map ? 'native' : 'unsupported' };
     preset.report.properties.push(rep);
@@ -288,7 +299,27 @@ export function createEffectInstance(type, params = {}, t0 = 0, extra = {}) {
   return inst;
 }
 
-export function applyPreset(layer, preset, playhead) {
+/** Reescala os tempos dos keyframes de um preset (k = nova duração / duração original). */
+export function stretchPreset(preset, k) {
+  const sk = (v) => (v && typeof v === 'object' && !Array.isArray(v) && Array.isArray(v.keys) ? { ...v, keys: v.keys.map((kk) => ({ ...kk, t: kk.t * k })) } : v);
+  return {
+    ...preset,
+    duration: (preset.duration || presetDuration(preset)) * k,
+    transform: Object.fromEntries(Object.entries(preset.transform || {}).map(([n, tr]) => [n, sk(tr)])),
+    effects: (preset.effects || []).map((fx) => ({ ...fx, params: Object.fromEntries(Object.entries(fx.params || {}).map(([n, v]) => [n, sk(v)])) })),
+  };
+}
+
+/**
+ * Aplica o preset. opts.fit = true: sincroniza os keyframes com a duração da camada
+ * (o preset começa no início da camada e termina no fim dela).
+ */
+export function applyPreset(layer, preset, playhead, opts = {}) {
+  const d0 = preset.duration || presetDuration(preset);
+  if (opts.fit && d0 > 0.01) {
+    preset = { ...stretchPreset(preset, (layer.outPoint - layer.inPoint) / d0), anchor: 'playhead' };
+    playhead = layer.inPoint;
+  }
   const dur = preset.duration || presetDuration(preset);
   const t0 = preset.anchor === 'end' ? Math.max(layer.inPoint, layer.outPoint - dur) : playhead;
 
@@ -313,7 +344,8 @@ export function applyPreset(layer, preset, playhead) {
 
   for (const fx of preset.effects || []) {
     if (fx.type !== 'generic' && !EFFECT_MAP[fx.type]) continue;
-    const params = preset.anchorStart && fx.params && 'start' in fx.params ? { ...fx.params, start: +(t0 - layer.inPoint + fx.params.start).toFixed(4) } : fx.params;
+    const ak = getEffectDef(fx.type).anchorParam;
+    const params = preset.anchorStart && ak && fx.params && ak in fx.params ? { ...fx.params, [ak]: +(t0 - layer.inPoint + fx.params[ak]).toFixed(4) } : fx.params;
     layer.effects.push(createEffectInstance(fx.type, params, t0, {
       ...(fx.label ? { label: fx.label } : {}),
       ...(fx.matchName ? { matchName: fx.matchName } : {}),

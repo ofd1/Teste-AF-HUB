@@ -5,6 +5,7 @@ export function toast(msg, kind = 'info', ms = 3200) {
     host.className = 'toasts';
     document.body.appendChild(host);
   }
+  while (host.children.length >= 2) host.firstChild.remove(); // no máximo 2 avisos na tela
   const el = document.createElement('div');
   el.className = `toast ${kind}`;
   el.textContent = msg;

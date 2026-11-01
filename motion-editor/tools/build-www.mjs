@@ -7,7 +7,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'www');
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out);
-for (const item of ['index.html', 'manifest.webmanifest', 'sw.js', 'css', 'js', 'icons', 'presets']) {
+for (const item of ['index.html', 'manifest.webmanifest', 'sw.js', 'css', 'js', 'icons', 'presets', 'vendor']) {
   cpSync(join(root, item), join(out, item), { recursive: true });
 }
 console.log('www/ pronto');

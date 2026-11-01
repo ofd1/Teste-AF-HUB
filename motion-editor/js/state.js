@@ -30,7 +30,15 @@ function baseLayer(project, type, name, props) {
   };
 }
 
+/** Todas as camadas, incluindo as que estão dentro de grupos. */
+export function flatLayers(layers) {
+  const out = [];
+  for (const l of layers) { out.push(l); if (l.type === 'group') out.push(...flatLayers(l.props.layers || [])); }
+  return out;
+}
+
 export const LAYER_FACTORIES = {
+  group: (p, layers = []) => baseLayer(p, 'group', 'Grupo', { width: p.width, height: p.height, layers }),
   text: (p) => baseLayer(p, 'text', 'Texto', { text: 'Seu texto', fontFamily: 'Inter, system-ui, sans-serif', fontSize: Math.round(p.width / 9), fontWeight: 800, color: '#ffffff', align: 'center', lineHeight: 1.15, strokeColor: '#000000', strokeWidth: 0, letterSpacing: 0 }),
   rect: (p) => baseLayer(p, 'rect', 'Retângulo', { width: Math.round(p.width * 0.5), height: Math.round(p.width * 0.3), radius: 24, fill: '#ff3d71', strokeColor: '#ffffff', strokeWidth: 0 }),
   ellipse: (p) => baseLayer(p, 'ellipse', 'Elipse', { width: Math.round(p.width * 0.4), height: Math.round(p.width * 0.4), fill: '#3d8bff', strokeColor: '#ffffff', strokeWidth: 0 }),

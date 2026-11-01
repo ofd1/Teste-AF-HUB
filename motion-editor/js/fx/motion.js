@@ -68,24 +68,33 @@ export function twitchEnv(t, p, channel) {
 
 export default [
   {
-    type: 'shake', label: 'Shake (tremor de câmera)', category: 'Movimento', plugin: 'S_Shake / Universe Camera Shake / wiggle()',
+    type: 'shake', anchorParam: 'impactAt', label: 'Shake (tremor de câmera)', category: 'Movimento', plugin: 'S_Shake / Universe Camera Shake / wiggle()',
     description: 'Tremor de câmera como o S_Shake: deslocamento, rotação e zoom aleatórios suaves, com motion blur calculado pela velocidade do tremor e bordas espelhadas (sem buracos pretos).',
     params: [
       num('frequency', 'Frequência (Hz)', 8, 0, 60, 0.5), num('amount', 'Amplitude (px)', 20, 0, 1000), num('rotation', 'Rotação (°)', 2, 0, 90, 0.5),
       num('zoom', 'Zoom %', 0, 0, 100, 0.5), sel('axis', 'Eixo', ['Ambos', 'Horizontal', 'Vertical']), num('complexity', 'Complexidade (oitavas)', 2, 1, 4, 1),
       num('shutter', 'Motion blur (quadros de obturador)', 1, 0, 4, 0.05), num('samples', 'Amostras do blur', 12, 1, 32, 1),
       sel('wrap', 'Bordas', ['Transparente', 'Repetir', 'Espelhar'], 3), num('seed', 'Semente', 1, 0, 999),
+      sel('mode', 'Modo', ['Contínuo', 'Impacto (tranco que decai)'], 1),
+      num('impactAt', 'Impacto – momento (s após o início da camada)', 0, 0, 600, 0.01), num('decay', 'Impacto – duração (s)', 0.45, 0.05, 5, 0.01),
     ],
     pad: (p, { layer, w, h } = {}) => (isFull(layer) ? 0 : p.amount * 1.3 + (Math.max(w || 0, h || 0) * (p.zoom + p.rotation)) / 100),
     render: (src, p, env) => {
       const fps = env.fps || 30;
       const oct = Math.max(1, Math.round(p.complexity ?? 1));
       const wig = (f, seed) => { let v = 0, a = 1, n = 0; for (let o = 0; o < oct; o++) { v += noiseG(f * 2 ** o + o * 0.37, seed + o * 7.7) * a; n += a; a *= 0.5; } return Math.max(-1, Math.min(1, v / n)); };
+      // Impacto: começa forte e decai (curva exponencial), como um tranco de câmera em batida
+      const env0 = (t) => {
+        if (p.mode !== 2) return 1;
+        const tt = t - (env.layer?.inPoint || 0) - (p.impactAt || 0);
+        if (tt < 0) return 0;
+        return Math.min(1, tt * fps * 2) * Math.exp(-tt / Math.max(0.02, (p.decay ?? 0.45) / 3));
+      };
       const at = (t) => {
-        const f = t * p.frequency;
+        const f = t * p.frequency, k = env0(t);
         return {
-          dx: p.axis === 3 ? 0 : wig(f, p.seed) * p.amount, dy: p.axis === 2 ? 0 : wig(f, p.seed + 17) * p.amount,
-          rot: wig(f, p.seed + 33) * p.rotation, s: 1 + Math.abs(wig(f * 0.9, p.seed + 51)) * (p.zoom / 100),
+          dx: p.axis === 3 ? 0 : wig(f, p.seed) * p.amount * k, dy: p.axis === 2 ? 0 : wig(f, p.seed + 17) * p.amount * k,
+          rot: wig(f, p.seed + 33) * p.rotation * k, s: 1 + Math.abs(wig(f * 0.9, p.seed + 51)) * (p.zoom / 100) * k,
         };
       };
       const c = at(env.t), q = at(env.t - (p.shutter ?? 1) / fps);

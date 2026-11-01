@@ -22,6 +22,7 @@ export class Library {
     this.store = store;
     this.hooks = hooks;
     this.user = storage.get(STORE_KEY, []);
+    this.fit = storage.get('motionframe.presetFit', false);
     this.free = [];
     this.filter = '';
     this.cat = 'Todos';
@@ -67,6 +68,10 @@ export class Library {
         <button class="primary" data-act="import">⤒ Importar .ffx / preset</button>
         <button data-act="save-layer">★ Salvar camada como preset</button>
       </div>
+      <label class="fit-toggle ${this.fit ? 'on' : ''}">
+        <span class="switch"><input type="checkbox" data-act="fit" ${this.fit ? 'checked' : ''}><i></i></span>
+        <span><b>⇔ Sincronizar com a duração da camada</b><br><span class="muted small">Os keyframes do preset são esticados/encolhidos para começar no início e terminar no fim da camada selecionada.</span></span>
+      </label>
       <input type="search" class="lib-search" placeholder="Buscar presets…" value="${escapeHtml(this.filter)}">
       <div class="chips">${['Todos', ...cats].map((c) => `<button class="chip ${c === this.cat ? 'on' : ''}" data-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}</div>
       ${this.cat === 'Todos' ? this.categories(items).map((c) => `<h4 class="lib-cat">${escapeHtml(c)}</h4><div class="lib-grid">${items.filter((p) => p.category === c).map((p) => this.card(p)).join('')}</div>`).join('') : `<div class="lib-grid">${items.map((p) => this.card(p)).join('')}</div>`}
@@ -98,6 +103,7 @@ export class Library {
       if (files.length) this.importFiles(files);
     });
     r.querySelector('[data-act="save-layer"]').addEventListener('click', () => this.saveLayer());
+    r.querySelector('[data-act="fit"]').addEventListener('change', (e) => { this.fit = e.target.checked; storage.set('motionframe.presetFit', this.fit); this.render(); });
     const search = r.querySelector('.lib-search');
     search.addEventListener('input', () => {
       this.filter = search.value;
@@ -174,9 +180,10 @@ export class Library {
       this.store.project.layers.unshift(layer);
       this.store.selectedLayerId = layer.id;
     }
-    const t0 = applyPreset(layer, p, this.store.time);
+    const canFit = this.fit && layer.type !== 'adjustment' && (p.duration || 0) > 0.01;
+    const t0 = applyPreset(layer, p, this.store.time, { fit: canFit });
     this.store.commit('structure');
-    toast(`“${p.name}” aplicado em ${layer.name} (${t0.toFixed(2)}s)`, 'ok');
+    toast(canFit ? `“${p.name}” sincronizado com ${layer.name}: ${(layer.outPoint - layer.inPoint).toFixed(2)}s (era ${p.duration.toFixed(2)}s)` : `“${p.name}” aplicado em ${layer.name} (${t0.toFixed(2)}s)`, 'ok');
     if (hasSpeed && layer.type === 'video') {
       // como no AE: o reverse volta no tempo a partir do ponto aplicado e precisa de vídeo antes dele
       let min = Infinity;
@@ -189,15 +196,26 @@ export class Library {
 
   async saveLayer() {
     const layer = this.store.layer();
-    if (!layer) { toast('Selecione uma camada.', 'warn'); return; }
-    const name = prompt('Nome do preset', `${layer.name} preset`);
-    if (!name) return;
-    const p = layerToPreset(layer, name);
+    if (!layer) { toast('Selecione a camada que tem os efeitos/animações que você quer salvar.', 'warn'); return; }
+    const cats = [...new Set(this.user.map((p) => p.category).filter(Boolean))];
+    const res = await modal('Salvar como preset', `
+      <p class="muted small">Salva os efeitos e as animações (keyframes) de “${escapeHtml(layer.name)}” para usar em qualquer camada.</p>
+      <label class="row"><span>Nome</span><input type="text" data-f="name" value="${escapeHtml(`${layer.name} preset`)}"></label>
+      <label class="row"><span>Categoria</span><input type="text" data-f="cat" list="presetCats" value="Meus presets"><datalist id="presetCats">${cats.map((c) => `<option value="${escapeHtml(c)}">`).join('')}</datalist></label>
+      <label class="row"><span>Incluir animação</span><label class="switch"><input type="checkbox" data-f="anim" checked><i></i></label></label>
+      <label class="row"><span>Incluir efeitos</span><label class="switch"><input type="checkbox" data-f="fx" checked><i></i></label></label>`,
+    [{ label: 'Cancelar', value: null }, { label: 'Salvar', primary: true, value: (w) => ({ name: w.querySelector('[data-f="name"]').value.trim(), cat: w.querySelector('[data-f="cat"]').value.trim(), anim: w.querySelector('[data-f="anim"]').checked, fx: w.querySelector('[data-f="fx"]').checked }) }]);
+    if (!res || !res.name) return;
+    const p = layerToPreset(layer, res.name);
+    if (!res.anim) p.transform = {};
+    if (!res.fx) p.effects = [];
+    p.category = res.cat || 'Meus presets';
     if (!Object.keys(p.transform).length && !p.effects.length) { toast('A camada não tem animações nem efeitos.', 'warn'); return; }
     this.user.unshift(p);
     this.save();
+    this.cat = 'Todos';
     this.render();
-    toast('Preset salvo na biblioteca.', 'ok');
+    toast(`Preset “${p.name}” salvo em ${p.category}.`, 'ok');
   }
 
   async importFiles(files) {

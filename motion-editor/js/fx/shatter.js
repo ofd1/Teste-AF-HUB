@@ -168,7 +168,7 @@ export function timeSliceLayout(p, w, h) {
 
 export default [
   {
-    type: 'shatter', label: 'Shatter (estilhaçar)', category: 'Transições', plugin: 'Shatter (After Effects)',
+    type: 'shatter', anchorParam: 'start', label: 'Shatter (estilhaçar)', category: 'Transições', plugin: 'Shatter (After Effects)',
     description: 'Estilhaça a camada em cacos 3D que explodem a partir da Força 1, com gravidade, rotação, câmera em perspectiva e motion blur. A explosão começa no "Início" (segundos após o começo da camada). Use "Preencher com cor" branca numa silhueta para o shatter branco dos edits.',
     params: [
       sel('render', 'Renderizar', ['Tudo', 'Só a camada', 'Só os cacos'], 1),

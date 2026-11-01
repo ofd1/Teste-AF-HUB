@@ -1,4 +1,6 @@
-// Áudio: camadas de música com reprodução sincronizada (WebAudio), forma de onda e mixagem offline.
+// Áudio: camadas de música e o som dos vídeos, com reprodução sincronizada (WebAudio), forma de onda e mixagem offline.
+import { flatLayers } from './state.js';
+import { speedEffect } from './timing.js';
 const buffers = new Map(); // src -> AudioBuffer
 const peaksCache = new Map();
 let ctx = null;
@@ -37,8 +39,33 @@ export function peaks(src, buckets = 2000) {
   return peaksCache.get(key);
 }
 
+/** Vídeos com velocidade/Twixtor têm o som desligado (como no AE, o áudio não acompanha o remapeamento). */
+export function videoAudioActive(l) {
+  return l.type === 'video' && l.props.hasAudio && !speedEffect(l) && !l.effects.some((fx) => fx.enabled && fx.type === 'timeRemap');
+}
+
 function audioLayers(project) {
-  return project.layers.filter((l) => l.type === 'audio' && l.visible && !l.props.muted && buffers.has(l.props.src));
+  return flatLayers(project.layers).filter((l) => (l.type === 'audio' || videoAudioActive(l)) && l.visible && !l.props.muted && buffers.has(l.props.src) && (l.props.volume ?? 100) > 0);
+}
+
+/** Volume com fade in/out (automação de ganho). t0 = instante do contexto em que a camada começa a tocar. */
+function scheduleGain(gain, l, ctxStart, fromT) {
+  const v = (l.props.volume ?? 100) / 100;
+  const fi = Math.max(0, l.props.fadeIn || 0), fo = Math.max(0, l.props.fadeOut || 0);
+  const g = gain.gain;
+  const at = (tt) => ctxStart + Math.max(0, tt - fromT);
+  const level = (tt) => {
+    let k = 1;
+    if (fi > 0) k = Math.min(k, (tt - l.inPoint) / fi);
+    if (fo > 0) k = Math.min(k, (l.outPoint - tt) / fo);
+    return v * Math.max(0, Math.min(1, k));
+  };
+  g.setValueAtTime(level(Math.max(fromT, l.inPoint)), at(Math.max(fromT, l.inPoint)));
+  if (fi > 0 && l.inPoint + fi > fromT) g.linearRampToValueAtTime(v, at(l.inPoint + fi));
+  if (fo > 0) {
+    if (l.outPoint - fo > fromT) g.setValueAtTime(v, at(l.outPoint - fo));
+    g.linearRampToValueAtTime(0, at(l.outPoint));
+  }
 }
 
 /** Inicia a reprodução de todas as camadas de áudio a partir do tempo t. */
@@ -53,12 +80,14 @@ export function playAudio(project, t) {
     const src = ac.createBufferSource();
     src.buffer = buf;
     const gain = ac.createGain();
-    gain.gain.value = (l.props.volume ?? 100) / 100;
+    const rate = l.type === 'video' ? (l.props.speed ?? 1) : 1;
+    src.playbackRate.value = rate;
     src.connect(gain).connect(ac.destination);
     const startAt = Math.max(0, l.inPoint - t);
-    const offset = (l.props.sourceStart || 0) + Math.max(0, t - l.inPoint);
-    const dur = l.outPoint - Math.max(t, l.inPoint);
+    const offset = (l.props.sourceStart || 0) + Math.max(0, t - l.inPoint) * rate;
+    const dur = (l.outPoint - Math.max(t, l.inPoint)) * rate;
     if (offset >= buf.duration) continue;
+    scheduleGain(gain, l, now, t);
     src.start(now + startAt, offset, dur);
     playing.push(src);
   }
@@ -80,10 +109,12 @@ export async function renderMix(project, sampleRate = 48000) {
     const src = oac.createBufferSource();
     src.buffer = buf;
     const gain = oac.createGain();
-    gain.gain.value = (l.props.volume ?? 100) / 100;
+    const rate = l.type === 'video' ? (l.props.speed ?? 1) : 1;
+    src.playbackRate.value = rate;
     src.connect(gain).connect(oac.destination);
     const offset = l.props.sourceStart || 0;
-    if (offset < buf.duration) src.start(Math.max(0, l.inPoint), offset, Math.max(0, l.outPoint - l.inPoint));
+    scheduleGain(gain, l, 0, 0);
+    if (offset < buf.duration) src.start(Math.max(0, l.inPoint), offset, Math.max(0, l.outPoint - l.inPoint) * rate);
   }
   return oac.startRendering();
 }

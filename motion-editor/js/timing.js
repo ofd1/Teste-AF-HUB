@@ -45,8 +45,15 @@ export function sourceTime(layer, t) {
 }
 
 /** Como sourceTime, sem limitar em 0 (negativo = o reverse pediria vídeo antes do início do arquivo). */
+export function remapEffect(layer) {
+  return layer.effects.find((fx) => fx.enabled && EFFECT_MAP[fx.type]?.sourceRemap) || null;
+}
+
 export function sourceTimeRaw(layer, t) {
   const lt = layerTime(layer, t);
+  // Time Remap (AE): o valor é diretamente o segundo do arquivo
+  const rm = remapEffect(layer);
+  if (rm) return valueAt(rm.params.time, lt);
   const start = layer.props.sourceStart || 0;
   const rate = layer.props.speed ?? 1;
   const fx = speedEffect(layer);
@@ -56,6 +63,8 @@ export function sourceTimeRaw(layer, t) {
 
 /** Velocidade instantânea da mídia (1 = normal) — usada como playbackRate na prévia. */
 export function sourceRate(layer, t) {
+  const rm = remapEffect(layer);
+  if (rm) { const h = 1 / 120; return (valueAt(rm.params.time, t + h) - valueAt(rm.params.time, t - h)) / (2 * h); }
   const fx = speedEffect(layer);
   const rate = layer.props.speed ?? 1;
   return fx ? (valueAt(fx.params.speed, t) / 100) * rate : rate;
@@ -65,6 +74,8 @@ export function sourceRate(layer, t) {
 /** Interpolação de quadros ligada? (Twixtor com frame blending ou "Suavizar movimento" da camada). */
 export function wantsInterp(layer, t) {
   if (layer.props.interpolate) return true;
+  const rm = remapEffect(layer);
+  if (rm) return !!valueAt(rm.params.frameBlend, t);
   const fx = speedEffect(layer);
   return !!(fx && valueAt(fx.params.frameBlend, t));
 }

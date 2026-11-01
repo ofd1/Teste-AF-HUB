@@ -1,5 +1,7 @@
 import { Store, LAYER_FACTORIES, RESOLUTIONS, createProject } from './state.js';
 import { compDialog } from './comp-dialog.js';
+import { setBgListener, ensureBgModel, bgStatus } from './bgremove.js';
+import { createEffectInstance } from './presets.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
 import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, detectFps } from './media.js';
 import { loadAudio, playAudio, stopAudio, detectBeats } from './audio.js';
@@ -10,11 +12,10 @@ import { Library } from './library.js';
 import { FxBrowser } from './fx-browser.js';
 import { KeyTools } from './keytools.js';
 import { deleteKeys } from './keyframes.js';
-import { createEffectInstance } from './presets.js';
 import { exportDialog } from './exporter.js';
 import { getEffectDef } from './effects.js';
 import { modal, toast, pickFiles, storage } from './ui.js';
-import { formatTime, uid, deepClone } from './util.js';
+import { formatTime, uid, deepClone, escapeHtml } from './util.js';
 import { putMedia, getMedia, pruneMedia } from './idb.js';
 import { saveFile, registerServiceWorker } from './platform.js';
 import { getGL } from './gl.js';
@@ -37,6 +38,9 @@ let dirty = true;
 const curQuality = () => (qualitySel.value === 'auto' ? (store.playing ? 0.5 : 1) : parseFloat(qualitySel.value));
 let quality = curQuality();
 setMediaListener(() => { dirty = true; });
+setBgListener(() => { dirty = true; });
+// primeira vez no app: mostra o passo a passo
+setTimeout(() => { try { if (!localStorage.getItem('motionframe.helpSeen')) { localStorage.setItem('motionframe.helpSeen', '1'); showHelp(); } } catch { /* sem armazenamento */ } }, 900);
 
 function layoutCanvas() {
   const { width, height } = store.project;
@@ -246,6 +250,7 @@ new Inspector(document.getElementById('effectsPanel'), store, 'effects', {
     copy.id = uid('fx');
     layer.effects.splice(layer.effects.indexOf(fx) + 1, 0, copy);
   },
+  savePreset: () => library.saveLayer(),
 });
 new Inspector(document.getElementById('propsPanel'), store, 'props', {
   speed: (layer) => { ensureSpeedEffect(layer); openSheet('effects'); },
@@ -263,8 +268,10 @@ new FxBrowser(document.getElementById('fxBrowser'), (type) => {
     store.project.layers.unshift(layer);
     store.selectedLayerId = layer.id;
   }
-  if (getEffectDef(type).sourceSpeed && layer.type !== 'video') toast('Velocidade (estilo Twixtor) só altera camadas de vídeo.', 'warn', 4000);
-  layer.effects.push(createEffectInstance(type));
+  if ((getEffectDef(type).sourceSpeed || getEffectDef(type).sourceRemap) && layer.type !== 'video') toast('Velocidade (estilo Twixtor) só altera camadas de vídeo.', 'warn', 4000);
+  const inst = createEffectInstance(type);
+  getEffectDef(type).init?.(inst, layer);
+  layer.effects.push(inst);
   store.commit('structure');
   openSheet('effects');
   toast(`${getEffectDef(type).label} adicionado em ${layer.name}`, 'ok', 2000);
@@ -365,22 +372,36 @@ addMenu.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click'
 
 // ------------------------------------------------------------------ toolbar contextual
 const toolbar = document.getElementById('toolbar');
+const TYPE_LABEL = { video: 'Vídeo', image: 'Foto', audio: 'Áudio', text: 'Texto', adjustment: 'Camada de ajuste', group: 'Grupo', rect: 'Forma', ellipse: 'Forma', solid: 'Sólido' };
+const hintBar = document.createElement('div');
+hintBar.className = 'hint-bar';
+toolbar.before(hintBar);
 function renderToolbar() {
   const layer = store.layer();
+  const t = layer?.type;
   const items = layer
     ? [
       ['deselect', '✕', 'Fechar'], ['sep'],
-      ['effects', '✦', 'Efeitos', true], ['presets', '★', 'Presets'], ['props', '☰', 'Ajustes'], ['keys', '◆', 'Keyframes'],
-      ...(layer.type === 'video' ? [['speed', '⏱', 'Velocidade', true]] : []),
-      ['split', '✂', 'Dividir'], ['dup', '⧉', 'Duplicar'], ['up', '▲', 'Subir'], ['down', '▼', 'Descer'],
+      ['effects', '✦', 'Efeitos', true], ['presets', '★', 'Presets'],
+      ...(t === 'video' ? [['speed', '⏱', 'Velocidade', true]] : []),
+      ...(t === 'video' || t === 'audio' ? [['sound', '🔊', 'Som']] : []),
+      ...(t === 'video' || t === 'image' ? [['bg-remove', '✂︎', 'Tirar fundo']] : []),
+      ['props', '☰', 'Propriedades'], ['keys', '◆', 'Animação'],
+      ['split', '✂', 'Dividir'], ['dup', '⧉', 'Duplicar'],
+      t === 'group' ? ['ungroup', '⊟', 'Desagrupar'] : ['group', '⊞', 'Agrupar'],
+      ['up', '▲', 'Subir'], ['down', '▼', 'Descer'],
       ['toggle-visible', layer.visible ? '👁' : '◌', layer.visible ? 'Ocultar' : 'Mostrar'], ['del', '🗑', 'Excluir'],
     ]
     : [
-      ['add', '＋', 'Camada', true], ['add-media', '🎞', 'Mídia'], ['add-audio', '♪', 'Áudio'], ['add-text', 'T', 'Texto'],
-      ['add-adjustment', '◐', 'Ajuste'], ['browse-fx', '✦', 'Efeitos'], ['presets', '★', 'Presets'], ['import-ffx', '⤒', '.ffx'], ['comp', '⚙', 'Projeto'],
+      ['add-media', '🎞', 'Vídeo / Foto', true], ['add-audio', '♪', 'Música'], ['add-text', 'T', 'Texto'], ['add', '＋', 'Mais camadas'],
+      ['presets', '★', 'Presets'], ['add-adjustment', '◐', 'Ajuste (CC)'], ['group', '⊞', 'Agrupar'], ['import-ffx', '⤒', 'Importar .ffx'], ['comp', '⚙', 'Composição'],
     ];
   toolbar.innerHTML = items.map(([cmd, icon, label, hot]) => (cmd === 'sep' ? '<span class="tool sep"></span>' : `<button class="tool ${hot ? 'hot' : ''}" data-cmd="${cmd}"><span class="ti">${icon}</span><span class="tl">${label}</span></button>`)).join('');
   toolbar.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => commands[b.dataset.cmd]?.()));
+  // faixa de ajuda: diz o que está selecionado e o próximo passo
+  if (!store.project.layers.length) hintBar.innerHTML = '👋 Comece tocando em <b>Vídeo / Foto</b> para importar seu clipe.';
+  else if (!layer) hintBar.innerHTML = 'Toque numa camada (na timeline ou na prévia) para editar. Arraste a régua azul para mudar o tempo.';
+  else hintBar.innerHTML = `<b>${escapeHtml(layer.name)}</b> · ${TYPE_LABEL[t] || t}${layer.effects.length ? ` · ${layer.effects.length} efeito(s)` : ''} — ${t === 'video' ? 'use <b>Presets</b> para CC/shake/reverse ou <b>Velocidade</b> para câmera lenta' : t === 'group' ? 'efeitos e presets valem para o grupo inteiro' : 'use <b>Efeitos</b> ou <b>Presets</b>'}`;
 }
 
 // ------------------------------------------------------------------ mídia
@@ -434,7 +455,12 @@ async function importMedia(files) {
     const fit = Math.max(width / dims.w, height / dims.h); // preenche a tela
     const l = LAYER_FACTORIES[isVideo ? 'video' : 'image'](store.project, src, Math.round(dims.w * fit), Math.round(dims.h * fit), name);
     l.props.mediaId = mediaId;
-    if (isVideo) detectFps(src).then((f) => { if (f) { l.props.sourceFps = f; store.commit(); } });
+    if (isVideo) {
+      detectFps(src).then((f) => { if (f) { l.props.sourceFps = f; store.commit(); } });
+      // o vídeo já vem com o som dele (some sozinho quando tiver Velocidade/Twixtor)
+      l.props.volume = 100;
+      loadAudio(src).then(() => { l.props.hasAudio = true; store.emit('change'); }).catch(() => { l.props.hasAudio = false; });
+    }
     const hasContent = store.project.layers.some((x) => x.type === 'video' || x.type === 'audio');
     l.inPoint = hasContent ? store.time : 0;
     if (isVideo && Number.isFinite(dims.d)) {
@@ -455,6 +481,7 @@ async function relinkMedia(project) {
     if (blob) {
       l.props.src = URL.createObjectURL(blob);
       if (l.type === 'audio') await loadAudio(l.props.src).catch(() => {});
+      if (l.type === 'video' && l.props.hasAudio) loadAudio(l.props.src).catch(() => {});
     } else l.missing = true;
   }
   pruneMedia(keep);
@@ -543,6 +570,7 @@ function updateTitle() {
 
 async function showMenu() {
   const res = await modal('Menu', `<div class="menu-list">
+    <button data-m="help">❓ Como usar (passo a passo)</button>
     <button data-m="new">✚ Nova composição (projeto)</button>
     <button data-m="open">📂 Abrir projeto (.json)</button>
     <button data-m="save">💾 Salvar projeto (.json)</button>
@@ -552,6 +580,7 @@ async function showMenu() {
   </div>`, [{ label: 'Fechar', value: null }], {
     onMount: (w, close) => w.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => close(b.dataset.m))),
   });
+  if (res === 'help') showHelp();
   if (res === 'new') commands.new();
   if (res === 'open') openProject();
   if (res === 'save') saveProject();
@@ -564,6 +593,20 @@ async function showMenu() {
   }
 }
 
+function showHelp() {
+  modal('Como usar', `<ol class="help-steps">
+    <li><b>Importe o clipe:</b> toque em <b>🎞 Vídeo / Foto</b>. O vídeo já vem com o som (ajuste em <b>🔊 Som</b>).</li>
+    <li><b>Selecione a camada</b> tocando nela na timeline (embaixo) ou na prévia. A faixa acima dos botões diz o que está selecionado.</li>
+    <li><b>Presets</b> (★): CC, shakes, reverse, shatter… Ligue <b>⇔ Sincronizar com a duração da camada</b> para o preset ocupar o clipe inteiro.</li>
+    <li><b>Efeitos</b> (✦): mais de 75 efeitos do After Effects e de plugins. Em cada efeito, o ◆ cria keyframes. Use <b>⎘ Copiar</b> / <b>📋 Colar</b> para levar efeitos a outra camada e <b>★ Salvar preset</b> para guardar.</li>
+    <li><b>Velocidade</b> (⏱, estilo Twixtor) e <b>Time Remap</b> para câmera lenta, congelar e reverse.</li>
+    <li><b>Tirar fundo</b> (✂︎) recorta o jogador com IA, no próprio aparelho.</li>
+    <li><b>Agrupar</b> (⊞) junta camadas para aplicar efeitos/animações em todas de uma vez.</li>
+    <li><b>Timeline:</b> arraste a régua azul para mudar o tempo; arraste a timeline livremente para navegar; pinça para zoom.</li>
+    <li><b>Exportar:</b> no fim, toque em <b>Salvar / Compartilhar</b> → Salvar vídeo (Fotos), Arquivos, TikTok…</li>
+  </ol>`, [{ label: 'Entendi', value: null, primary: true }]);
+}
+
 function addTransformKey() {
   const layer = store.layer();
   if (!layer) { toast('Selecione uma camada.', 'warn'); return; }
@@ -573,6 +616,45 @@ function addTransformKey() {
   }
   store.commit();
   toast('Keyframe em posição, escala, rotação e opacidade.', 'ok', 1800);
+}
+
+// ---- grupos (como a pré-composição do AE): várias camadas viram uma só, com transformação e efeitos próprios
+async function groupLayers() {
+  const p = store.project;
+  const sel = store.selectedLayerId;
+  const candidates = p.layers.filter((l) => l.type !== 'audio');
+  if (candidates.length < 2) { toast('Você precisa de pelo menos 2 camadas para agrupar.', 'warn'); return; }
+  const ids = await modal('Agrupar camadas', `
+    <p class="muted small">Escolha as camadas. Elas viram um <b>grupo</b> (como a pré-composição do After Effects): você move, anima e aplica efeitos/presets no grupo inteiro. Para editar cada camada de novo, use <b>Desagrupar</b>.</p>
+    <div class="group-list">${candidates.map((l) => `<label class="group-item"><input type="checkbox" value="${l.id}" ${l.id === sel ? 'checked' : ''}> <span>${escapeHtml(l.name)}</span> <em class="muted small">${l.type}</em></label>`).join('')}</div>
+    <label class="row"><span>Nome do grupo</span><input type="text" data-f="name" value="Grupo ${p.layers.filter((l) => l.type === 'group').length + 1}"></label>`,
+  [{ label: 'Cancelar', value: null }, { label: 'Agrupar', primary: true, value: (w) => ({ ids: [...w.querySelectorAll('.group-item input:checked')].map((i) => i.value), name: w.querySelector('[data-f="name"]').value.trim() }) }]);
+  if (!ids) return;
+  if (ids.ids.length < 2) { toast('Marque pelo menos 2 camadas.', 'warn'); return; }
+  const kids = p.layers.filter((l) => ids.ids.includes(l.id));
+  const at = p.layers.indexOf(kids[0]);
+  const g = LAYER_FACTORIES.group(p, kids);
+  g.name = ids.name || 'Grupo';
+  g.inPoint = Math.min(...kids.map((l) => l.inPoint));
+  g.outPoint = Math.max(...kids.map((l) => l.outPoint));
+  p.layers = p.layers.filter((l) => !ids.ids.includes(l.id));
+  p.layers.splice(Math.min(at, p.layers.length), 0, g);
+  store.selectedLayerId = g.id;
+  store.commit('structure');
+  toast(`${kids.length} camadas agrupadas em “${g.name}”.`, 'ok');
+}
+
+function ungroupLayer() {
+  const p = store.project;
+  const g = store.layer();
+  if (!g || g.type !== 'group') return;
+  const i = p.layers.indexOf(g);
+  const kids = g.props.layers || [];
+  p.layers.splice(i, 1, ...kids);
+  store.selectedLayerId = kids[0]?.id || null;
+  store.commit('structure');
+  if (g.effects.length || g.transform.position.keys.length || g.transform.scale.keys.length) toast('Grupo desfeito. Os efeitos/animações que estavam no grupo foram descartados.', 'warn', 5000);
+  else toast('Grupo desfeito.', 'ok');
 }
 
 function deleteSelection() {
@@ -635,6 +717,20 @@ const commands = {
   down: () => store.selectedLayerId && store.moveLayer(store.selectedLayerId, 1),
   'toggle-visible': () => { const l = store.layer(); if (l) { l.visible = !l.visible; store.commit(); } },
   del: deleteSelection,
+  group: groupLayers,
+  ungroup: ungroupLayer,
+  'bg-remove': async () => {
+    const l = store.layer();
+    if (!l || (l.type !== 'video' && l.type !== 'image')) { toast('Selecione um vídeo ou uma foto.', 'warn'); return; }
+    if (!l.effects.some((fx) => fx.type === 'bgRemove')) { l.effects.unshift(createEffectInstance('bgRemove', {})); store.commit(); }
+    openSheet('effects');
+    if (bgStatus(1) !== 'ready') {
+      toast('Baixando o modelo de IA (só na 1ª vez)…', 'info', 2500);
+      await ensureBgModel(1);
+      toast(bgStatus(1) === 'ready' ? 'Fundo removido ✓ Ajuste em Efeitos › Remover fundo.' : 'Não foi possível carregar o removedor de fundo neste aparelho.', bgStatus(1) === 'ready' ? 'ok' : 'error', 4000);
+    }
+  },
+  sound: () => { openSheet('props'); setTimeout(() => document.querySelector('#propsPanel [data-section="sound"]')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 120); },
 };
 document.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => commands[b.dataset.cmd]?.()));
 

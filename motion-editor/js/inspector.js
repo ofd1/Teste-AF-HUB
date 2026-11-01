@@ -2,7 +2,8 @@
 import { valueAt, isAnimated, setValue, toggleKey, toggleStopwatch, keyIndexAt, prevKeyTime, nextKeyTime } from './anim.js';
 import { resolveProp } from './state.js';
 import { getEffectDef } from './effects.js';
-import { escapeHtml, hexToRgba, rgbaToHex } from './util.js';
+import { escapeHtml, hexToRgba, rgbaToHex, deepClone, uid } from './util.js';
+import { toast } from './ui.js';
 
 const TRANSFORM_DEFS = [
   { key: 'position', label: 'Posição', kind: 'point', step: 1 },
@@ -15,6 +16,17 @@ const TRANSFORM_DEFS = [
 const BLENDS = { 'source-over': 'Normal', screen: 'Tela (Screen)', lighter: 'Adicionar (Add)', multiply: 'Multiplicar', overlay: 'Sobrepor', 'soft-light': 'Luz suave', 'hard-light': 'Luz direta', 'color-dodge': 'Subexpor cor', difference: 'Diferença', color: 'Cor', luminosity: 'Luminosidade' };
 const FONTS = ['Inter, system-ui, sans-serif', 'Impact, "Arial Black", sans-serif', '"Arial Black", sans-serif', 'Georgia, serif', '"Courier New", monospace', '"Trebuchet MS", sans-serif', '"Brush Script MT", cursive'];
 const TYPE_NAMES = { text: 'Texto', rect: 'Retângulo', ellipse: 'Elipse', solid: 'Sólido', image: 'Imagem', video: 'Vídeo', audio: 'Áudio', adjustment: 'Camada de ajuste' };
+
+// área de transferência de efeitos (vale entre camadas e entre projetos neste aparelho)
+let clipboard = null;
+function fxClipboard() {
+  if (!clipboard) { try { clipboard = JSON.parse(localStorage.getItem('motionframe.fxClipboard') || '[]'); } catch { clipboard = []; } }
+  return clipboard;
+}
+function setFxClipboard(list) {
+  clipboard = deepClone(list);
+  try { localStorage.setItem('motionframe.fxClipboard', JSON.stringify(clipboard)); } catch { /* sem espaço */ }
+}
 
 export class Inspector {
   constructor(root, store, mode, hooks = {}) {
@@ -84,9 +96,7 @@ export class Inspector {
         rows.push(f('Largura', num('width', 1, 1)), f('Altura', num('height', 1, 1)));
         break;
       case 'audio':
-        rows.push(f('Volume %', num('volume', 1, 0, 200)));
         rows.push(f('Início no áudio (s)', num('sourceStart', 0.01, 0)));
-        rows.push(f('Mudo', `<input type="checkbox" data-prop="muted" ${p.muted ? 'checked' : ''}>`));
         rows.push('<button class="wide" data-hook="beats">♪ Detectar batidas → marcadores</button>');
         break;
       case 'adjustment':
@@ -101,6 +111,16 @@ export class Inspector {
     rows.push(f('Entrada (s)', `<input type="number" inputmode="decimal" data-layer="inPoint" step="0.01" value="${layer.inPoint.toFixed(2)}">`));
     rows.push(f('Saída (s)', `<input type="number" inputmode="decimal" data-layer="outPoint" step="0.01" value="${layer.outPoint.toFixed(2)}">`));
     let html = this.section('layer', TYPE_NAMES[layer.type] || 'Camada', rows.join(''));
+    if (layer.type === 'audio' || layer.type === 'video') {
+      const sr = [];
+      if (layer.type === 'video' && !p.hasAudio) sr.push('<div class="note muted">Este vídeo não tem faixa de áudio (ou ainda está carregando).</div>');
+      if (layer.type === 'video' && p.hasAudio && layer.effects.some((fx) => fx.enabled && (fx.type === 'twixtor' || fx.type === 'timeRemap'))) sr.push('<div class="note">Com Velocidade/Twixtor ou Time Remap o som do vídeo fica desligado (como no After Effects). Use uma camada de música.</div>');
+      sr.push(f('Volume %', `<input type="range" data-prop="volume" min="0" max="200" step="1" value="${p.volume ?? 100}"><input type="number" class="num" data-prop="volume" min="0" max="200" step="1" value="${p.volume ?? 100}">`));
+      sr.push(f('Mudo', `<label class="switch"><input type="checkbox" data-prop="muted" ${p.muted ? 'checked' : ''}><i></i></label>`));
+      sr.push(f('Fade in (s)', num('fadeIn', 0.05, 0, 30)));
+      sr.push(f('Fade out (s)', num('fadeOut', 0.05, 0, 30)));
+      html += `<div data-section="sound">${this.section('sound', '🔊 Som', sr.join(''))}</div>`;
+    }
     if (layer.type !== 'audio') html += this.section('transform', 'Transformar', TRANSFORM_DEFS.map((d) => this.propRow(`transform.${d.key}`, d)).join(''));
     return html;
   }
@@ -115,7 +135,7 @@ export class Inspector {
         <div class="fx-head">
           <label class="switch"><input type="checkbox" data-fxact="enable" ${fx.enabled ? 'checked' : ''}><i></i></label>
           <span class="fx-title" data-fxact="collapse">${escapeHtml(fx.label || def.label)}</span>${badge}
-          <span class="fx-tools"><button data-fxact="up" ${i === 0 ? 'disabled' : ''} aria-label="Subir">↑</button><button data-fxact="down" ${i === layer.effects.length - 1 ? 'disabled' : ''} aria-label="Descer">↓</button><button data-fxact="dup" aria-label="Duplicar">⧉</button><button data-fxact="del" class="danger" aria-label="Remover">✕</button></span>
+          <span class="fx-tools"><button data-fxact="up" ${i === 0 ? 'disabled' : ''} aria-label="Subir">↑</button><button data-fxact="down" ${i === layer.effects.length - 1 ? 'disabled' : ''} aria-label="Descer">↓</button><button data-fxact="copy" aria-label="Copiar este efeito" title="Copiar este efeito">⎘</button><button data-fxact="dup" aria-label="Duplicar">⧉</button><button data-fxact="del" class="danger" aria-label="Remover">✕</button></span>
         </div>
         <div class="fx-body">
           ${def.plugin ? `<div class="plugin-note">Recriação estilo <b>${escapeHtml(def.plugin)}</b></div>` : ''}
@@ -126,7 +146,14 @@ export class Inspector {
         </div>
       </div>`;
     });
-    return `<button class="wide primary add-fx" data-hook="browse">＋ Adicionar efeito</button>${cards.join('') || '<div class="empty-note">Nenhum efeito nesta camada ainda.</div>'}`;
+    const clip = fxClipboard();
+    return `<button class="wide primary add-fx" data-hook="browse">＋ Adicionar efeito</button>
+      <div class="fx-clip">
+        <button data-clip="copy" ${layer.effects.length ? '' : 'disabled'}>⎘ Copiar efeitos</button>
+        <button data-clip="paste" ${clip.length ? '' : 'disabled'}>📋 Colar ${clip.length ? `(${clip.length})` : 'efeitos'}</button>
+        <button data-clip="save" ${layer.effects.length ? '' : 'disabled'}>★ Salvar preset</button>
+      </div>
+      ${cards.join('') || '<div class="empty-note">Nenhum efeito nesta camada ainda. Toque em “＋ Adicionar efeito” ou aplique um preset.</div>'}`;
   }
 
   propRow(path, d) {
@@ -164,8 +191,9 @@ export class Inspector {
     root.querySelectorAll('[data-prop]').forEach((el) => {
       const k = el.dataset.prop;
       const apply = () => {
-        let v = el.type === 'checkbox' ? el.checked : el.type === 'number' ? parseFloat(el.value) : el.value;
-        if (el.type === 'number' && !Number.isFinite(v)) return;
+        let v = el.type === 'checkbox' ? el.checked : el.type === 'number' || el.type === 'range' ? parseFloat(el.value) : el.value;
+        if ((el.type === 'number' || el.type === 'range') && !Number.isFinite(v)) return;
+        root.querySelectorAll(`[data-prop="${k}"]`).forEach((o) => { if (o !== el && o.type !== 'checkbox') o.value = v; });
         if (k === 'fontWeight') v = +v;
         layer.props[k] = v;
         store.emit('preview');
@@ -187,6 +215,19 @@ export class Inspector {
       });
     });
 
+    root.querySelectorAll('[data-clip]').forEach((b) => b.addEventListener('click', () => {
+      const act = b.dataset.clip;
+      if (act === 'copy') {
+        setFxClipboard(layer.effects);
+        toast(`${layer.effects.length} efeito(s) copiado(s). Selecione outra camada e toque em Colar.`, 'ok');
+        this.render();
+      } else if (act === 'paste') {
+        const list = fxClipboard();
+        for (const fx of list) layer.effects.push({ ...deepClone(fx), id: uid('fx') });
+        store.commit();
+        toast(`${list.length} efeito(s) colado(s) em ${layer.name}.`, 'ok');
+      } else if (act === 'save') this.hooks.savePreset?.(layer);
+    }));
     root.querySelectorAll('.fx-card').forEach((card) => {
       const fx = layer.effects.find((e) => e.id === card.dataset.fx);
       card.querySelectorAll('[data-fxact]').forEach((el) => {
@@ -195,6 +236,7 @@ export class Inspector {
           const i = layer.effects.indexOf(fx);
           if (act === 'enable') fx.enabled = el.checked;
           if (act === 'collapse') { if (this.collapsed.has(fx.id)) this.collapsed.delete(fx.id); else this.collapsed.add(fx.id); this.render(); return; }
+          if (act === 'copy') { setFxClipboard([fx]); toast(`“${fx.label || getEffectDef(fx.type).label}” copiado. Selecione outra camada e toque em Colar.`, 'ok'); this.render(); return; }
           if (act === 'del') layer.effects.splice(i, 1);
           if (act === 'dup') this.hooks.duplicateEffect?.(layer, fx);
           if (act === 'up' && i > 0) [layer.effects[i - 1], layer.effects[i]] = [layer.effects[i], layer.effects[i - 1]];

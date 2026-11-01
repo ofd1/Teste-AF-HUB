@@ -54,7 +54,7 @@ test('todo efeito tem parâmetros com default válido', () => {
   for (const e of EFFECTS) {
     const inst = createEffectInstance(e.type);
     for (const pd of e.params) assert.notEqual(inst.params[pd.key].value, undefined, `${e.type}.${pd.key}`);
-    assert.ok(e.render || e.transform || e.temporal || e.sourceSpeed || e.timeWarp, e.type);
+    assert.ok(e.render || e.transform || e.temporal || e.sourceSpeed || e.sourceRemap || e.timeWarp, e.type);
   }
 });
 
@@ -159,4 +159,11 @@ test('Shatter do AE (APC Shatter) é convertido com raio animado e duas forças'
   assert.equal(sh.strength, 15);
   assert.equal(sh.force2On, true);
   assert.equal(pr.effects[2].params.useTint, false); // Deep Glow: tint desligado no .ffx
+});
+
+test('Time Remap: o valor é o tempo do arquivo (congelar, acelerar e voltar)', async () => {
+  const { sourceTime } = await import('../js/timing.js');
+  const layer = { id: 'v', type: 'video', inPoint: 0, outPoint: 4, props: { sourceStart: 0, speed: 1 }, effects: [createEffectInstance('timeRemap', { time: { keys: [{ t: 0, v: 1, ease: 'linear' }, { t: 1, v: 1, ease: 'linear' }, { t: 3, v: 0, ease: 'linear' }] } })] };
+  assert.equal(sourceTime(layer, 0.5), 1);          // congelado
+  assert.ok(Math.abs(sourceTime(layer, 2) - 0.5) < 1e-6); // voltando (reverse)
 });

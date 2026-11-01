@@ -27,7 +27,8 @@ export function looksFromTools(tools, strength = 100) {
     liftR: 0, liftG: 0, liftB: 0, gammaR: 1, gammaG: 1, gammaB: 1, gainR: 1, gainG: 1, gainB: 1,
     hue: 0, saturation: 100, contrast: 0, mojo: 0, mojoCool: 50, mojoSkin: 50, punch: 0, bleach: 0, fade: 0,
     vignette: 0, vignetteSize: 50, diffusion: 0, diffusionRadius: 60, diffusionThreshold: 60, chroma: 0,
-    spotExposure: 0, spotColor: [1, 1, 1, 1], spotCenter: [0.5, 0.5], spotSize: 70, spotSoft: 50,
+    spotExposure: 0, spotColor: [1, 1, 1, 1], spotCenter: [0.5, 0.5], spotSize: 50, spotSoft: 50, spotAspect: 1, spotInvert: false,
+    optDensity: 0, optSize: 50, optHighlights: 50, optGlow: 0, edgeCenter: [0.5, 0.5], edgeAspect: 1,
     gradExposure: 0, gradAngle: 0, gradOffset: 0, gradSoft: 0.5, gradColor: [1, 1, 1, 1],
     edgeBlur: 0, edgeSize: 100, edgeSoft: 50,
   };
@@ -45,7 +46,8 @@ export function looksFromTools(tools, strength = 100) {
         break;
       case 'vign': p.vignette = Math.max(p.vignette, (v[5] || 0) * 0.8); p.vignetteSize = clampN(60 - ((v[2] || 1) - 1) * 50, 15, 85); break;
       case 'lenv': p.vignette = Math.max(p.vignette, (v[0] || 0) * 0.6); break;
-      case 'odif': p.diffusion += (v[0] || 0) * 0.6; p.diffusionRadius = Math.max(p.diffusionRadius, (v[1] || 100) * 0.3); break;
+      // Optical Diffusion (manual do Looks): Density, Size, Falloff, Glow, Highlights Only, Luster, Color…
+      case 'odif': p.optDensity = clampN(Math.max(p.optDensity, v[0] || 0), 0, 100); p.optSize = clampN(v[1] ?? 50, 1, 500); p.optGlow += v[3] || 0; p.optHighlights = clampN(v[4] ?? 50, 0, 100); break;
       case 'diff':
         if (v[0] <= 1) { p.diffusion += v[0] * 75; p.diffusionRadius = Math.max(p.diffusionRadius, (v[1] || 5) * 12); } else { p.diffusion += (v[3] || 50) * 0.2; p.diffusionRadius = Math.max(p.diffusionRadius, v[0] * 0.4); }
         break;
@@ -53,11 +55,16 @@ export function looksFromTools(tools, strength = 100) {
       case 'husa': p.hue += v[0] || 0; p.saturation *= (v[1] ?? 100) / 100; break;
       case 'mjo2':
         // Mojo II: [Mojo, tuning, …, Punch, Bleach, Cool It, Warm Skin, …]
-        p.mojo = Math.max(p.mojo, v[0] || 0);
-        p.punch += (v[3] || 0) * 0.45;
-        p.bleach += (v[4] || 0) * 0.5;
-        if (v[5] > 0) p.mojoCool = clampN(v[5] * 2, 0, 100);
-        if (v[6] > 0) p.mojoSkin = clampN(v[6] * 2, 0, 100);
+        // manual: Mojo esquenta realces e esfria sombras; Punch (contraste + saturação); Bleach; Cool/Warm; Strength (último)
+        {
+          const k = (v[11] ?? 100) / 100;
+          p.mojo = Math.max(p.mojo, (v[0] || 0) * k);
+          p.punch += (v[3] || 0) * 0.45 * k;
+          p.bleach += (v[4] || 0) * 0.5 * k;
+          if (v[5] > 0) p.mojoCool = clampN(v[5] * 2, 0, 100);
+          if (v[6] > 0) p.mojoSkin = clampN(v[6] * 2, 0, 100);
+          p.temperature += (v[7] || 0) * 10 * k;
+        }
         break;
       case 'haze': p.fade += (v[0] || 0) * 0.35; break;
       case 'csta': {
@@ -89,11 +96,14 @@ export function looksFromTools(tools, strength = 100) {
       case 'spex':
         // Spot Exposure: [exposição, deslocamento x %, deslocamento y %, ?, ?, ?, tamanho %, filtro de cor RGB (7-9), suavidade (10)]
         // a cor age como filtro da luz (ex.: +1.3 stops com cinza 0.465 ≈ leve clareada no centro)
+        // manual do Looks: Stops, Centro X/Y (% a partir do centro), Proporção, Raio, Spread, Falloff, Color Balance, …, Inverter
         p.spotExposure += v[0] || 0;
         p.spotCenter = [clampN(0.5 + (v[1] || 0) / 100, 0, 1), clampN(0.5 - (v[2] || 0) / 100, 0, 1)];
-        p.spotSize = clampN((v[6] ?? 100) * 0.75, 5, 200);
-        p.spotSoft = clampN((v[10] ?? 1) * 45, 5, 100);
+        p.spotAspect = clampN(v[3] ?? 1, 0.1, 4);
+        p.spotSize = clampN((v[4] ?? 0.5) * 100, 0, 400);
+        p.spotSoft = clampN((v[5] ?? 0.5) * 100, 1, 400);
         p.spotColor = [v[7] ?? 1, v[8] ?? 1, v[9] ?? 1, 1];
+        p.spotInvert = !!v[11];
         break;
       case 'grex':
         // Gradient Exposure: [exposição, ?, ângulo, ?, deslocamento %, suavidade, ?, cor RGB (7-9)]
@@ -104,9 +114,12 @@ export function looksFromTools(tools, strength = 100) {
         break;
       case 'edgs':
         // Edge Softness: [desfoque, ?, ?, ?, tamanho da área nítida, suavidade, proporção]
+        // manual do Looks: Blur Size, (qualidade), Centro X/Y (%), Raio, Spread, Proporção
         p.edgeBlur = Math.max(p.edgeBlur, v[0] || 0);
-        p.edgeSize = clampN((v[4] || 1) * 100, 10, 300);
-        p.edgeSoft = clampN((v[5] ?? 0.5) * 100, 1, 100);
+        p.edgeCenter = [clampN(0.5 + (v[2] || 0) / 100, 0, 1), clampN(0.5 - (v[3] || 0) / 100, 0, 1)];
+        p.edgeSize = clampN((v[4] ?? 1) * 100, 0, 400);
+        p.edgeSoft = clampN((v[5] ?? 0.5) * 100, 1, 400);
+        p.edgeAspect = clampN(v[6] ?? 1, 0.1, 4);
         break;
       default: ignored.push(t.id); continue;
     }
@@ -119,7 +132,7 @@ export function looksFromTools(tools, strength = 100) {
   p.temperature = clampN(p.temperature, -100, 100); p.tint = clampN(p.tint, -100, 100);
   p.mojo = clampN(p.mojo, 0, 100); p.punch = clampN(p.punch, 0, 100); p.bleach = clampN(p.bleach, 0, 100);
   p.fade = clampN(p.fade, 0, 60); p.vignette = clampN(p.vignette, 0, 100); p.diffusion = clampN(p.diffusion, 0, 150);
-  p.diffusionRadius = clampN(p.diffusionRadius, 1, 300); p.chroma = clampN(p.chroma, 0, 20);
+  p.diffusionRadius = clampN(p.diffusionRadius, 1, 300); p.chroma = clampN(p.chroma, 0, 20); p.optGlow = clampN(p.optGlow, 0, 200);
   p.spotExposure = clampN(p.spotExposure, -4, 4); p.gradExposure = clampN(p.gradExposure, -4, 4); p.edgeBlur = clampN(p.edgeBlur, 0, 100);
   return { params: p, used, ignored };
 }
@@ -172,7 +185,10 @@ export const IMPORT_RULES = [
   { vendor: 'Video Copilot', plugin: 'Saber', to: 'deepGlow', test: /\bsaber\b/i, map: { exposure: { n: ['glow intensity'] }, radius: { n: ['glow spread', 'glow size'], conv: (v) => v * 100 }, tint: { n: ['glow color'] } }, set: { useTint: true } },
   { vendor: 'Video Copilot', plugin: 'Heat Distortion', to: 'turbulentDisplace', test: /heat ?distort/i },
   { vendor: 'Red Giant', plugin: 'Shine', to: 'lightRays', test: /\bshine\b/i, map: { length: { n: ['ray length'], conv: (v) => Math.min(100, v * 10) }, intensity: { n: ['boost light'] } } },
-  { vendor: 'Red Giant', plugin: 'Starglow', to: 'deepGlow', test: /starglow/i, map: { radius: { n: ['streak length'], conv: (v) => v * 3 }, exposure: { n: ['boost light'] }, threshold: { n: ['threshold'], conv: (v) => v / 2.55 } } },
+  { vendor: 'Red Giant', plugin: 'Starglow', to: 'starGlow', test: /starglow/i, map: { length: { n: ['streak length'], conv: (v) => v * 3 }, amount: { n: ['boost light'], conv: (v) => Math.max(0.3, v) }, threshold: { n: ['threshold'], conv: (v) => v / 2.55 } } },
+  { vendor: 'Sapphire', plugin: 'S_Glint', to: 'starGlow', test: /s_glint/i, map: { length: { n: ['length', 'rays length'], conv: (v) => v * 100 }, amount: { n: ['brightness'] }, threshold: { n: ['threshold'], conv: (v) => v * 100 }, angle: { n: ['rotate'] } } },
+  { vendor: 'Pixel Sorter', plugin: 'Pixel Sorter', to: 'pixelSort', test: /pixel ?sort/i, map: { angle: { n: ['angle', 'direction'] }, length: { n: ['length', 'sort length'] }, low: { n: ['threshold low', 'lower threshold', 'threshold'] }, high: { n: ['threshold high', 'upper threshold'] } } },
+  { vendor: 'Sapphire', plugin: 'S_RackDefocus', to: 'lensBlur', test: /s_rackdefocus|s_defocus/i, map: { radius: { n: ['defocus', 'blur amount'], conv: (v) => v * 3 } } },
   { vendor: 'Red Giant', plugin: 'Universe Glow', to: 'deepGlow', test: /uni\.? ?glow|universe.*glow/i },
   { vendor: 'Red Giant', plugin: 'Universe Shake', to: 'shake', test: /uni\.?.*shake|universe.*shake/i },
   { vendor: 'Red Giant', plugin: 'Universe Glitch', to: 'glitch', test: /uni\.?.*(glitch|damage)|universe.*glitch/i },
@@ -227,6 +243,17 @@ export const IMPORT_RULES = [
   { vendor: ADOBE, plugin: 'Unsharp Mask', to: 'sharpen', match: ['ADBE Unsharp Mask2', 'ADBE Unsharp Mask'], map: { amount: { i: 1 }, radius: { i: 2 }, threshold: { i: 3 } } },
   { vendor: ADOBE, plugin: 'Sharpen', to: 'sharpen', match: ['ADBE Sharpen'], map: { amount: { i: 1, conv: (v) => v * 2 } }, set: { radius: 1 } },
   // Shatter do AE (matchName 'APC Shatter'; parâmetros por índice porque Força 1 e 2 têm os mesmos nomes)
+  { vendor: ADOBE, plugin: 'Keylight', to: 'keylight', match: ['Keylight 906'], map: { key: { n: ['screen colour', 'screen color'] }, tolerance: { n: ['clip black'], conv: (v) => Math.max(5, 30 - v * 0.2) } } },
+  { vendor: ADOBE, plugin: 'Ripple', to: 'ripple', match: ['ADBE Ripple'], map: { center: { n: ['center of ripple'] }, amplitude: { n: ['wave height'] }, wavelength: { n: ['wave width'] }, speed: { n: ['wave speed'] }, radius: { n: ['radius'], conv: (v) => v * 10 } } },
+  { vendor: ADOBE, plugin: 'CC Ripple Pulse', to: 'ripple', match: ['CC Ripple Pulse'], map: { center: { n: ['center'] }, amplitude: { n: ['amplitude'], conv: (v) => v * 0.3 } } },
+  { vendor: ADOBE, plugin: 'Polar Coordinates', to: 'polar', match: ['ADBE Polar Coordinates'], map: { amount: { i: 1, n: ['interpolation'] }, mode: { i: 2, n: ['type of conversion'] } } },
+  { vendor: ADOBE, plugin: 'Offset', to: 'offset', match: ['ADBE Offset'], map: { blend: { n: ['blend with original'] } } },
+  { vendor: ADOBE, plugin: 'Fractal Noise', to: 'fractalNoise', match: ['ADBE Fractal Noise'], map: { contrast: { n: ['contrast'], conv: (v) => v / 100 }, brightness: { n: ['brightness'], conv: (v) => v / 100 }, complexity: { n: ['complexity'] }, evolution: { n: ['evolution'], conv: (v) => v / 90 }, scale: { n: ['scale'] }, opacity: { n: ['opacity'] } } },
+  { vendor: ADOBE, plugin: 'Curves', to: 'curves', match: ['ADBE CurvesCustom', 'ADBE Curves'] },
+  { vendor: ADOBE, plugin: 'Tritone', to: 'tritone', match: ['ADBE Tritone'], map: { highlights: { n: ['highlights'] }, midtones: { n: ['midtones'] }, shadows: { n: ['shadows'] }, mix: { n: ['blend with original'], conv: (v) => 100 - v } } },
+  { vendor: ADOBE, plugin: 'CC Toner', to: 'tritone', match: ['CC Toner'], map: { highlights: { n: ['highlights'] }, midtones: { n: ['midtones'] }, shadows: { n: ['shadows'] }, mix: { n: ['blend w. original'], conv: (v) => 100 - v } } },
+  { vendor: ADOBE, plugin: 'CC Light Sweep', to: 'lightSweep', match: ['CC Light Sweep'], map: { center: { n: ['center'] }, direction: { n: ['direction'] }, shape: { n: ['shape'] }, width: { n: ['width'] }, intensity: { n: ['sweep intensity'], conv: (v) => v / 50 }, color: { n: ['light color'] } } },
+  { vendor: ADOBE, plugin: 'Camera Lens Blur', to: 'lensBlur', match: ['ADBE Camera Lens Blur', 'ADBE Lens Blur'], map: { radius: { n: ['blur radius', 'iris radius'] } } },
   { vendor: ADOBE, plugin: 'Shatter', to: 'shatter', match: ['APC Shatter', 'ADBE Shatter'],
     map: {
       render: { i: 4 },

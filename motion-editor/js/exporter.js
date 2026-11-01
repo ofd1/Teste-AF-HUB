@@ -4,6 +4,8 @@ import { prepare, pauseAll, setExporting } from './media.js';
 import { renderMix, stopAudio } from './audio.js';
 import { modal, toast } from './ui.js';
 import { saveFile, keepAwake } from './platform.js';
+import { prepareBgModels } from './bgremove.js';
+import { flatLayers } from './state.js';
 
 const even = (n) => Math.max(2, Math.round(n / 2) * 2);
 
@@ -66,6 +68,7 @@ export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } 
 
   const ui = progressModal('Exportando vídeo…', `${width}×${height} · ${fps} fps · ${video.config.codec}`);
   store.exporting = true; setExporting(true);
+  try { await prepareBgModels(flatLayers(store.project.layers)); } catch { /* segue sem IA */ }
   stopAudio();
   pauseAll();
   keepAwake(true);
@@ -163,6 +166,7 @@ export async function exportRealtime(store, { scale = 1, bitrate = 12 } = {}) {
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
   const ui = progressModal('Gravando (tempo real)…', 'Este navegador não tem WebCodecs: gravação em tempo real, sem áudio.');
   store.exporting = true; setExporting(true);
+  try { await prepareBgModels(flatLayers(store.project.layers)); } catch { /* segue sem IA */ }
   rec.start(250);
   const start = performance.now();
   await new Promise((resolve) => {
@@ -188,6 +192,7 @@ export async function exportRealtime(store, { scale = 1, bitrate = 12 } = {}) {
 
 export async function exportPNG(store) {
   const { project } = store;
+  try { await prepareBgModels(flatLayers(project.layers)); } catch { /* segue sem IA */ }
   const c = document.createElement('canvas');
   c.width = project.width; c.height = project.height;
   await prepare(project, store.time, { exact: true });

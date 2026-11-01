@@ -28,7 +28,7 @@ const fontOf = (p) => `${p.italic ? 'italic ' : ''}${p.fontWeight || 400} ${p.fo
 
 export function contentSize(layer, proj = project) {
   const p = layer.props;
-  if (layer.type === 'adjustment') return { w: proj?.width || 1080, h: proj?.height || 1920 };
+  if (layer.type === 'adjustment' || layer.type === 'group') return { w: proj?.width || 1080, h: proj?.height || 1920 };
   if (layer.type === 'text') {
     const ctx = textCtx();
     ctx.font = fontOf(p);
@@ -156,6 +156,19 @@ function renderLayerImage(layer, t, scale, extra) {
     const cx = canvas.getContext('2d');
     cx.setTransform(1, 0, 0, 1, 0, 0);
     cx.clearRect(0, 0, W, H);
+    if (layer.type === 'group') {
+      // grupo (pré-composição): desenha as camadas filhas como uma composição própria
+      cx.setTransform(1, 0, 0, 1, pad, pad);
+      const kids = layer.props.layers || [];
+      for (let i = kids.length - 1; i >= 0; i--) {
+        const k = kids[i];
+        if (!k.visible || k.type === 'audio' || k.type === 'adjustment' || t < k.inPoint || t >= k.outPoint) continue;
+        cx.save();
+        renderLayer(cx, k, t, scale, null, fps);
+        cx.restore();
+      }
+      return canvas;
+    }
     cx.translate(pad, pad);
     cx.scale(scale, scale);
     drawContent(cx, layer, w, h, { ...extra, videoSource: source });
@@ -194,7 +207,7 @@ function renderLayerImage(layer, t, scale, extra) {
   }
   const rect = [pad / tex.w, pad / tex.h, (w * scale) / tex.w, (h * scale) / tex.h];
   gl.env = { u_time: lt, u_scale: scale, u_rect: rect };
-  const env = { gl, t: lt, scale, pad, w, h, W: tex.w, H: tex.h, rect, layer, fps };
+  const env = { gl, t: lt, scale, pad, w, h, W: tex.w, H: tex.h, rect, layer, fps, srcCanvas: canvas };
   for (const { def, p, prev, fx } of evaluated) {
     try {
       const input = tex;

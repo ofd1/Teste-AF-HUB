@@ -1,6 +1,7 @@
 // Gerenciador de mídia: imagens, vídeos (com dois decodificadores para frame blending) e sincronização.
-import { blendFrames, sourceRate, sourceTime, speedEffect, wantsInterp, vectorBlur } from './timing.js';
+import { blendFrames, sourceRate, sourceTime, speedEffect, wantsInterp, vectorBlur, remapEffect } from './timing.js';
 import { valueAt } from './anim.js';
+import { flatLayers } from './state.js';
 
 const images = new Map();
 const videos = new Map(); // layerId -> { src, a: HTMLVideoElement, b: HTMLVideoElement|null, frame }
@@ -117,7 +118,7 @@ function waitMeta(v) {
 }
 
 function activeVideos(project, t) {
-  return project.layers.filter((l) => l.type === 'video' && l.visible && t >= l.inPoint && t < l.outPoint && l.props.src);
+  return flatLayers(project.layers).filter((l) => l.type === 'video' && l.visible && t >= l.inPoint && t < l.outPoint && l.props.src);
 }
 
 /**
@@ -240,7 +241,8 @@ export function setCacheListener(fn) { cacheListener = fn; }
 
 function cacheKey(layer) {
   const fx = speedEffect(layer);
-  return JSON.stringify([layer.props.src, layer.props.sourceStart || 0, layer.props.speed ?? 1, layer.inPoint, layer.outPoint, fx?.params.speed, fx?.enabled, !!layer.props.interpolate, layer.props.sourceFps]);
+  const rm = remapEffect(layer);
+  return JSON.stringify([JSON.stringify(rm?.params.time), layer.props.src, layer.props.sourceStart || 0, layer.props.speed ?? 1, layer.inPoint, layer.outPoint, fx?.params.speed, fx?.enabled, !!layer.props.interpolate, layer.props.sourceFps]);
 }
 
 export function cacheReady(layer) {
@@ -257,8 +259,8 @@ export function cacheStatus() {
 /** Garante cache para camadas de vídeo com Velocidade (Twixtor). Chamar após mudanças (debounced). */
 export function ensureCaches(project) {
   const ids = new Set();
-  for (const l of project.layers) {
-    if (l.type !== 'video' || !l.props.src || !(speedEffect(l) || l.props.interpolate || l.effects.some((fx) => fx.enabled && (fx.type === 'timeSlice' || fx.type === 'echo')))) continue;
+  for (const l of flatLayers(project.layers)) {
+    if (l.type !== 'video' || !l.props.src || !(speedEffect(l) || remapEffect(l) || l.props.interpolate || l.effects.some((fx) => fx.enabled && (fx.type === 'timeSlice' || fx.type === 'echo')))) continue;
     ids.add(l.id);
     const c = caches.get(l.id);
     if (c && c.key === cacheKey(l)) continue;
