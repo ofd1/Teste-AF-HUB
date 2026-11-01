@@ -45,7 +45,7 @@ test('regras de palavra-chave e nomes de exibição', () => {
   assert.equal(matchEffect('XYZ Super Glow FX').def.type, 'glow');
   assert.equal(matchEffect('XYZ Super Glow FX').kind, 'approx');
   assert.equal(matchEffect('uni.Glow').rule.plugin, 'Universe Glow');
-  assert.equal(matchEffect('S_BlurMoCurves').def.type, 'radialBlur'); // zoom blur (Z Dist), confirmado em preset real
+  assert.equal(matchEffect('S_BlurMoCurves').def.type, 'blurMoCurves'); // zoom blur (Z Dist), confirmado em preset real
   assert.equal(matchEffect('ADBE Wave Warp').kind, 'native');
   assert.equal(matchEffect('Plugin estranho 123'), null);
 });
@@ -119,4 +119,19 @@ test('detecção de batidas encontra pulsos', () => {
   const beats = detectBeatsFromSamples(ch, sr, 0.5);
   assert.ok(beats.length >= 7 && beats.length <= 9, `beats=${beats.length}`);
   near(beats[1] - beats[0], 0.5, 0.05);
+});
+
+test('Looks: Spot Exposure, Gradient Exposure e Edge Softness convertidos', async () => {
+  const { looksFromTools } = await import('../js/import-map.js');
+  const { params, used } = looksFromTools([
+    { id: 'spex', enabled: true, values: [0.4, 2.083, -0.741, 1, 0.5, 0.5, 100, 0.545, 0.463, 0.421, 1, 0] },
+    { id: 'grex', enabled: true, values: [0, -1.04, 96.6, 0.46, -40.8, 0.5, 100, 0.001, 0.001, 0.001] },
+    { id: 'edgs', enabled: true, values: [5.003, 10, 1.962, -1.61, 1.351, 0.634, 1.179] },
+  ]);
+  assert.equal(params.spotExposure, 0.4);
+  assert.deepEqual(params.spotColor, [0.545, 0.463, 0.421, 1]);
+  assert.equal(params.gradExposure, 0); // exposição 0 → ignorado
+  assert.equal(params.edgeBlur, 5.003);
+  assert.ok(Math.abs(params.edgeSize - 135.1) < 0.01);
+  assert.ok(used.includes('edgs') && used.includes('spex'));
 });

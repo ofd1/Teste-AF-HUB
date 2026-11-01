@@ -1,6 +1,6 @@
 import { Store, LAYER_FACTORIES, RESOLUTIONS, createProject } from './state.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
-import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus } from './media.js';
+import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, detectFps } from './media.js';
 import { loadAudio, playAudio, stopAudio, detectBeats } from './audio.js';
 import { valueAt, setValue, setKey } from './anim.js';
 import { Timeline } from './timeline.js';
@@ -17,6 +17,7 @@ import { formatTime, uid, deepClone } from './util.js';
 import { putMedia, getMedia, pruneMedia } from './idb.js';
 import { saveFile, registerServiceWorker } from './platform.js';
 import { getGL } from './gl.js';
+import { trackPoint, applyTrack } from './tracker.js';
 
 const store = new Store();
 const AUTOSAVE_KEY = 'motionframe.autosave.v2';
@@ -56,19 +57,18 @@ function drawOverlay() {
   octx.setTransform(1, 0, 0, 1, 0, 0);
   octx.clearRect(0, 0, overlay.width, overlay.height);
   const layer = store.layer();
+  // prévia limpa: a caixa só aparece enquanto você arrasta/redimensiona a camada
+  if (!gesture?.moved) return;
   if (!layer || store.playing || !layer.visible || layer.type === 'audio' || layer.type === 'adjustment' || store.time < layer.inPoint || store.time >= layer.outPoint) return;
   const pts = layerCorners(layer, store.time, store.project);
   const dpr = window.devicePixelRatio || 1;
-  octx.strokeStyle = '#fff';
-  octx.lineWidth = 1.5 * dpr;
-  octx.setLineDash([6 * dpr, 4 * dpr]);
+  octx.strokeStyle = '#2d8ceb';
+  octx.lineWidth = 1 * dpr;
   octx.beginPath();
   pts.forEach(([x, y], i) => (i ? octx.lineTo(x * k, y * k) : octx.moveTo(x * k, y * k)));
   octx.closePath();
   octx.stroke();
   octx.setLineDash([]);
-  octx.fillStyle = '#7c5cff';
-  for (const [x, y] of pts) { octx.beginPath(); octx.arc(x * k, y * k, 4 * dpr, 0, Math.PI * 2); octx.fill(); }
 }
 
 let lastFrame = performance.now();
@@ -130,10 +130,12 @@ function setPlaying(p) {
 // ---- gestos na prévia: 1 dedo move, 2 dedos escala + rotação
 const pointers = new Map();
 let gesture = null;
+let trackPick = null; // callback quando o tracker espera o toque no ponto
 overlay.addEventListener('pointerdown', (e) => {
   overlay.setPointerCapture(e.pointerId);
   const r = overlay.getBoundingClientRect();
   const toComp = (ev) => [((ev.clientX - r.left) / r.width) * store.project.width, ((ev.clientY - r.top) / r.height) * store.project.height];
+  if (trackPick) { const cb = trackPick; trackPick = null; cb(toComp(e)); return; }
   pointers.set(e.pointerId, toComp(e));
   if (pointers.size === 1) {
     const [x, y] = toComp(e);
@@ -169,8 +171,10 @@ overlay.addEventListener('pointermove', (e) => {
 const endPointer = (e) => {
   pointers.delete(e.pointerId);
   if (pointers.size === 0 && gesture) {
-    if (gesture.moved) store.commit();
+    const moved = gesture.moved;
     gesture = null;
+    if (moved) store.commit();
+    dirty = true;
   }
 };
 overlay.addEventListener('pointerup', endPointer);
@@ -242,6 +246,7 @@ new Inspector(document.getElementById('effectsPanel'), store, 'effects', {
 new Inspector(document.getElementById('propsPanel'), store, 'props', {
   speed: (layer) => { ensureSpeedEffect(layer); openSheet('effects'); },
   beats: (layer) => addBeatMarkers(layer),
+  track: (layer) => startTrack(layer),
 });
 const library = new Library(document.getElementById('library'), store, {
   onApplied: () => { if (!desktop.matches) closeSheet(); },
@@ -261,6 +266,61 @@ new FxBrowser(document.getElementById('fxBrowser'), (type) => {
   toast(`${getEffectDef(type).label} adicionado em ${layer.name}`, 'ok', 2000);
 });
 keyTools = new KeyTools(document.getElementById('keyTools'), store);
+
+// ---- tracker
+function drawTrackMarker(pt) {
+  const k = overlay.width / store.project.width, dpr = window.devicePixelRatio || 1;
+  octx.strokeStyle = '#2d8ceb'; octx.lineWidth = 2 * dpr;
+  octx.strokeRect(pt[0] * k - 14 * dpr, pt[1] * k - 14 * dpr, 28 * dpr, 28 * dpr);
+  octx.beginPath(); octx.moveTo(pt[0] * k - 22 * dpr, pt[1] * k); octx.lineTo(pt[0] * k + 22 * dpr, pt[1] * k);
+  octx.moveTo(pt[0] * k, pt[1] * k - 22 * dpr); octx.lineTo(pt[0] * k, pt[1] * k + 22 * dpr); octx.stroke();
+}
+
+async function startTrack(layer) {
+  if (layer.type !== 'video') { toast('O tracker funciona em camadas de vídeo.', 'warn'); return; }
+  setPlaying(false);
+  if (!desktop.matches) closeSheet();
+  toast('Toque no ponto que quer seguir. Escolha algo com detalhe (número da camisa, rosto, canto) — áreas lisas ou listradas escorregam.', 'info', 6000);
+  const point = await new Promise((res) => { trackPick = res; });
+  drawTrackMarker(point);
+  const others = store.project.layers.filter((l) => l !== layer && l.type !== 'audio');
+  const t0 = Math.max(store.time, layer.inPoint);
+  const res = await modal('Rastrear movimento', `
+    <p class="muted small">Do playhead (${t0.toFixed(2)}s) até o fim do clipe (${layer.outPoint.toFixed(2)}s).</p>
+    <label class="row"><span>Camada que vai seguir</span><select data-f="target">
+      <option value="__text">Novo texto</option>
+      ${others.map((l) => `<option value="${l.id}">${l.name.replace(/</g, '&lt;')}</option>`).join('')}
+    </select></label>`,
+  [{ label: 'Cancelar', value: null }, { label: 'Rastrear', primary: true, value: (w) => w.querySelector('[data-f="target"]').value }]);
+  dirty = true;
+  if (!res) return;
+  let target = store.project.layers.find((l) => l.id === res);
+  if (!target) {
+    target = LAYER_FACTORIES.text(store.project);
+    target.props.text = 'TEXTO'; target.props.fontSize = 70;
+    target.transform.position.value = [point[0], point[1] - 160];
+    target.inPoint = t0; target.outPoint = layer.outPoint;
+    store.project.layers.unshift(target);
+  }
+  let cancelled = false;
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-wrap';
+  wrap.innerHTML = '<div class="modal"><header><h2>Rastreando…</h2></header><div class="modal-body"><div class="progress"><div class="bar"></div></div></div><footer><button class="danger">Cancelar</button></footer></div>';
+  document.body.appendChild(wrap);
+  wrap.querySelector('button').onclick = () => { cancelled = true; };
+  try {
+    const track = await trackPoint({ layer, project: store.project, t0, t1: layer.outPoint - 1 / store.project.fps, point,
+      onProgress: (f) => { wrap.querySelector('.bar').style.width = `${Math.round(f * 100)}%`; }, isCancelled: () => cancelled });
+    const n = applyTrack(target, track);
+    store.selectedLayerId = target.id;
+    store.commit('structure');
+    toast(`${n} quadros rastreados → “${target.name}” segue o ponto.`, 'ok', 4000);
+  } catch (e) {
+    toast(`Falha no tracker: ${e.message}`, 'error');
+  } finally {
+    wrap.remove();
+  }
+}
 
 function ensureSpeedEffect(layer) {
   if (!layer || layer.type !== 'video') { toast('Selecione uma camada de vídeo.', 'warn'); return; }
@@ -370,6 +430,7 @@ async function importMedia(files) {
     const fit = Math.max(width / dims.w, height / dims.h); // preenche a tela
     const l = LAYER_FACTORIES[isVideo ? 'video' : 'image'](store.project, src, Math.round(dims.w * fit), Math.round(dims.h * fit), name);
     l.props.mediaId = mediaId;
+    if (isVideo) detectFps(src).then((f) => { if (f) { l.props.sourceFps = f; store.commit(); } });
     const hasContent = store.project.layers.some((x) => x.type === 'video' || x.type === 'audio');
     l.inPoint = hasContent ? store.time : 0;
     if (isVideo && Number.isFinite(dims.d)) {

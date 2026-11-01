@@ -96,6 +96,8 @@ uniform float u_exp, u_sat, u_hue, u_con, u_fade, u_mojo, u_cool, u_skin, u_punc
 uniform vec3 u_filter, u_lift, u_gamma, u_gain;
 uniform vec3 u_hsl[8];
 uniform vec2 u_curve[4]; uniform float u_ncurve;
+uniform float u_spexp, u_spsize, u_spsoft, u_grexp, u_grang, u_groff, u_grsoft;
+uniform vec2 u_spc; uniform vec3 u_spcol, u_grcol;
 float hueCenter(int i) {
   if (i == 0) return 0.0; if (i == 1) return 30.0; if (i == 2) return 60.0; if (i == 3) return 120.0;
   if (i == 4) return 180.0; if (i == 5) return 240.0; if (i == 6) return 275.0; return 315.0;
@@ -114,7 +116,22 @@ void main() {
   vec4 c0 = unpre(texture2D(u_tex, v_uv));
   vec3 r = c0.rgb;
   // exposição (luz linear) e filtro de cor (Warm/Cool)
-  r = pow(pow(max(r, 0.0), vec3(2.2)) * pow(2.0, u_exp), vec3(1.0 / 2.2));
+  vec3 lin = pow(max(r, 0.0), vec3(2.2)) * pow(2.0, u_exp);
+  vec2 cuv = contentUV(v_uv);
+  // Spot Exposure: luz numa elipse suave, tingida pela cor da ferramenta
+  if (u_spexp != 0.0) {
+    float sd = length((cuv - u_spc) * vec2(1.0, 1.6));
+    float m = 1.0 - smoothstep(u_spsize * (1.0 - u_spsoft), u_spsize * (1.0 + u_spsoft), sd);
+    lin *= mix(vec3(1.0), pow(2.0, u_spexp) * u_spcol, m);
+  }
+  // Gradient Exposure: exposição em degradê na direção do ângulo
+  if (u_grexp != 0.0) {
+    float a = radians(u_grang);
+    float g = dot(cuv - 0.5, vec2(sin(a), -cos(a))) + u_groff;
+    float m = smoothstep(-u_grsoft * 0.5, u_grsoft * 0.5, g);
+    lin *= mix(vec3(1.0), pow(2.0, u_grexp) * mix(vec3(1.0), u_grcol, min(1.0, abs(u_grexp))), m);
+  }
+  r = pow(lin, vec3(1.0 / 2.2));
   vec3 f = r * u_filter; f *= luma(r) / max(luma(f), 0.0001); r = mix(r, f, u_fdens);
   // temperatura / tint
   r += vec3(u_temp, u_temp * 0.15, -u_temp) * 0.09 + vec3(u_tint * 0.05, -u_tint * 0.07, u_tint * 0.05);
@@ -131,7 +148,7 @@ void main() {
     adj += u_hsl[i] * w * w * (3.0 - 2.0 * w);
   }
   adj *= smoothstep(0.02, 0.15, hv.y);
-  hv.x = fract(hv.x + u_hue + adj.x * 0.3 / 360.0);
+  hv.x = fract(hv.x + u_hue + adj.x * 0.6 / 360.0);
   hv.y = clamp(hv.y * (1.0 + adj.y / 100.0), 0.0, 1.0);
   hv.z = clamp(hv.z * (1.0 + adj.z / 100.0 * 0.6), 0.0, 1.0);
   r = hsv2rgb(hv);
@@ -164,6 +181,13 @@ void main() {
 export const HSL_COLORS = [['Red', 'vermelho'], ['Orange', 'laranja'], ['Yellow', 'amarelo'], ['Green', 'verde'], ['Aqua', 'ciano'], ['Blue', 'azul'], ['Purple', 'roxo'], ['Magenta', 'magenta']];
 const adv = (p) => ({ ...p, advanced: true });
 
+const EDGE_SOFT = frag(`
+uniform sampler2D u_tex2; uniform float u_esize, u_soft, u_asp;
+void main() {
+  vec2 cu = (contentUV(v_uv) - 0.5) * vec2(u_asp, 1.0) * 2.0;
+  float m = smoothstep(u_esize * (1.0 - u_soft), u_esize * (1.0 + u_soft), length(cu));
+  gl_FragColor = mix(texture2D(u_tex, v_uv), texture2D(u_tex2, v_uv), m);
+}`);
 const THRESH = frag(`
 uniform float u_thr;
 void main() { vec4 c = unpre(texture2D(u_tex, v_uv)); gl_FragColor = pre(vec4(c.rgb, c.a * smoothstep(u_thr - 0.1, u_thr + 0.15, luma(c.rgb)))); }`);
@@ -194,6 +218,11 @@ export default [
       num('vignette', 'Vinheta %', 0, 0, 100), num('vignetteSize', 'Tamanho da vinheta %', 50, 0, 100),
       num('diffusion', 'Difusão (glow) %', 0, 0, 300), num('diffusionRadius', 'Raio da difusão', 60, 1, 600), num('diffusionThreshold', 'Limiar da difusão %', 60, 0, 100),
       num('chroma', 'Aberração cromática', 0, 0, 50, 0.1),
+      num('spotExposure', 'Spot Exposure (luz)', 0, -4, 4, 0.01), col('spotColor', 'Spot – cor da luz', [1, 1, 1, 1]), pos('spotCenter', 'Spot – centro', [0.5, 0.5]),
+      num('spotSize', 'Spot – tamanho %', 70, 1, 200), num('spotSoft', 'Spot – suavidade %', 50, 0, 100),
+      num('edgeBlur', 'Edge Softness (desfoque nas bordas)', 0, 0, 100, 0.1), num('edgeSize', 'Edge – área nítida %', 100, 10, 300), num('edgeSoft', 'Edge – suavidade %', 50, 0, 100),
+      adv(num('gradExposure', 'Gradient Exposure', 0, -4, 4, 0.01)), adv(ang('gradAngle', 'Gradient – ângulo', 0)), adv(num('gradOffset', 'Gradient – deslocamento', 0, -1, 1, 0.01)),
+      adv(num('gradSoft', 'Gradient – suavidade', 0.5, 0.01, 2, 0.01)), adv(col('gradColor', 'Gradient – cor', [1, 1, 1, 1])),
       adv(col('filter', 'Filtro de cor', [1, 1, 1, 1])), adv(num('filterDensity', 'Densidade do filtro %', 0, 0, 100)), adv(ang('hue', 'Matiz global', 0)),
       adv(num('liftR', 'Sombras R', 0, -0.5, 0.5, 0.005)), adv(num('liftG', 'Sombras G', 0, -0.5, 0.5, 0.005)), adv(num('liftB', 'Sombras B', 0, -0.5, 0.5, 0.005)),
       adv(num('gammaR', 'Meios-tons R', 1, 0.3, 3, 0.01)), adv(num('gammaG', 'Meios-tons G', 1, 0.3, 3, 0.01)), adv(num('gammaB', 'Meios-tons B', 1, 0.3, 3, 0.01)),
@@ -218,7 +247,13 @@ export default [
         u_lift: [p.liftR, p.liftG, p.liftB], u_gamma: [p.gammaR, p.gammaG, p.gammaB], u_gain: [p.gainR, p.gainG, p.gainB],
         u_hsl: { vec3: HSL_COLORS.flatMap(([k]) => [p[`hsl${k}H`] || 0, p[`hsl${k}S`] || 0, p[`hsl${k}L`] || 0]) },
         u_curve: { vec2: curve }, u_ncurve: pts.length,
+        u_spexp: p.spotExposure || 0, u_spc: p.spotCenter || [0.5, 0.5], u_spsize: (p.spotSize ?? 70) / 100, u_spsoft: Math.max(0.01, (p.spotSoft ?? 50) / 100), u_spcol: rgb(p.spotColor || [1, 1, 1, 1]),
+        u_grexp: p.gradExposure || 0, u_grang: p.gradAngle || 0, u_groff: p.gradOffset || 0, u_grsoft: Math.max(0.01, p.gradSoft ?? 0.5), u_grcol: rgb(p.gradColor || [1, 1, 1, 1]),
       });
+      if (p.edgeBlur * s > 0.05) {
+        const b = gl.blur(out, p.edgeBlur * 2 * s * env.scale);
+        out = gl.pass(EDGE_SOFT, { u_tex: out, u_tex2: b, u_esize: (p.edgeSize ?? 100) / 100, u_soft: Math.max(0.01, (p.edgeSoft ?? 50) / 100), u_asp: 1 });
+      }
       if (p.diffusion * s >= 1) {
         const th = gl.pass(THRESH, { u_tex: out, u_thr: p.diffusionThreshold / 100 });
         const b = gl.blur(th, p.diffusionRadius * 0.5 * env.scale);

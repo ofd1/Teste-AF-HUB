@@ -121,44 +121,6 @@ h4 { margin: 16px 0 8px; font-size: 12px; text-transform: uppercase; letter-spac
   .sheet-grip { display: none; }
 }
 
-/* ---------- timeline ---------- */
-.timeline, .tl { height: 100%; position: relative; }
-.tl-scroll { height: 100%; overflow: auto; scrollbar-width: thin; }
-.tl-inner { position: relative; min-height: 100%; }
-.tl-ruler-wrap { position: sticky; top: 0; left: 0; z-index: 3; height: 22px; width: 100%; background: var(--panel-2); }
-.tl-ruler { position: sticky; left: 0; display: block; height: 22px; }
-.tl-rows { position: relative; padding: 6px 0 40px; }
-.tl-row { position: relative; height: 44px; margin: 4px 0; }
-.tl-row.prop { height: 22px; margin: 0; }
-.tl-row.off .clip { opacity: .4; }
-.clip {
-  position: absolute; top: 0; bottom: 0; border-radius: 8px; overflow: hidden; touch-action: pan-x pan-y;
-  background-color: color-mix(in srgb, var(--c) 45%, #15151f); background-size: auto 100%; background-repeat: repeat-x;
-  border: 1px solid color-mix(in srgb, var(--c) 70%, #000);
-}
-.tl-row.sel .clip { border: 2px solid #fff; box-shadow: 0 0 0 2px var(--accent); touch-action: none; }
-.clip canvas.wave { position: absolute; inset: 0; width: 100%; height: 100%; }
-.clip-label { position: sticky; left: 0; display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px; margin: 3px; border-radius: 6px; background: #000a; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
-.clip-label .exp { pointer-events: auto; background: none; border: 0; padding: 0 4px; font-size: 12px; }
-.clip-label .fxb { color: var(--accent-2); font-size: 10px; }
-.handle { position: absolute; top: 0; bottom: 0; width: 16px; background: #fff; touch-action: none; }
-.handle::after { content: ''; position: absolute; left: 7px; top: 30%; bottom: 30%; width: 2px; background: #0008; border-radius: 2px; }
-.handle.l { left: 0; border-radius: 6px 0 0 6px; }
-.handle.r { right: 0; border-radius: 0 6px 6px 0; }
-.kf { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; transform: rotate(45deg); background: var(--key); border: 1.5px solid #000; z-index: 2; touch-action: none; }
-.kf::before { content: ''; position: absolute; inset: -10px; }
-.kf.agg { top: auto; bottom: -6px; }
-.kf.ease { border-radius: 50% 0; }
-.kf.hold { background: #ff9f43; border-radius: 0; }
-.kf.sel { background: #fff; box-shadow: 0 0 0 2px var(--accent), 0 0 10px var(--accent); }
-.prop-label { position: sticky; left: 4px; font-size: 10px; color: var(--muted); pointer-events: none; padding-left: 4px; }
-.tl-playhead { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 6px #000; z-index: 5; pointer-events: none; }
-.tl-playhead::before { content: ''; position: absolute; top: 0; left: -5px; border: 6px solid transparent; border-top-color: #fff; }
-.tl-marker { position: absolute; top: 0; bottom: 0; width: 1px; background: #ffb54755; pointer-events: none; }
-.tl-zoom { position: absolute; right: 6px; bottom: 6px; display: flex; gap: 4px; z-index: 6; }
-.tl-zoom button { width: 30px; height: 30px; padding: 0; border-radius: 50%; background: #000b; }
-.tl-empty { position: sticky; left: 0; width: 100vw; max-width: 100%; padding: 22px; color: var(--muted); text-align: center; }
-
 /* ---------- inspector ---------- */
 .empty-note { color: var(--muted); padding: 22px 10px; text-align: center; }
 .insp-sec h4 { cursor: pointer; user-select: none; margin: 14px 0 6px; }
@@ -307,12 +269,71 @@ input, textarea, select { -webkit-user-select: text; user-select: text; }
 }
 @media (max-width: 1099px) {
   .app { grid-template-rows: auto minmax(0, 1fr) auto minmax(170px, 36vh) auto; }
-  .tl-row { height: 36px; margin: 3px 0; }
-  .clip-label { font-size: 11px; padding: 1px 6px; margin: 2px; }
 }
-/* zoom da timeline no canto da régua (não cobre os clipes) */
-.tl-zoom { top: 0; bottom: auto; right: 4px; height: 22px; align-items: center; }
-.tl-zoom button { width: 26px; height: 20px; border-radius: 6px; font-size: 13px; line-height: 1; background: #000d; }
 .adv { margin-top: 6px; }
 .adv summary { padding: 6px 0; font-size: 13px; }
 @media (pointer: coarse) { .quality select { font-size: 16px; padding: 2px 6px; } }
+
+/* =================== tema After Effects =================== */
+:root {
+  --bg: #1d1d1d; --panel: #232323; --panel-2: #2b2b2b; --panel-3: #353535; --line: #3a3a3a;
+  --text: #d6d6d6; --muted: #8a8a8a; --accent: #2d8ceb; --accent-2: #4fc3f7; --hot: #2d8ceb; --key: #c8c8c8;
+  --radius: 4px;
+}
+button { border-radius: 4px; }
+input[type="number"], input[type="text"], input[type="search"], select, textarea { background: #161616; border-radius: 3px; }
+.export-btn { background: var(--accent); border-radius: 4px; }
+/* prévia limpa: fundo escuro liso (sem xadrez), só o quadro */
+.stage { background: #161616; }
+.canvas-wrap { box-shadow: 0 0 0 1px #000; }
+.quality { right: 6px; top: 6px; opacity: .45; transition: opacity .15s; }
+.quality:hover, .quality:focus-within { opacity: 1; }
+.quality select { background: #0009; border: 0; border-radius: 3px; }
+.toasts { top: auto; bottom: calc(40vh + var(--safe-b)); }
+.toast { background: #2b2b2bee; border-radius: 4px; padding: 6px 12px; font-size: 12px; box-shadow: 0 4px 12px #0008; }
+.cache-pill { bottom: 6px; border-radius: 3px; font-size: 11px; color: #d6d6d6; }
+
+/* =================== timeline estilo After Effects (em pé) =================== */
+.timeline, .tl { height: 100%; position: relative; background: #232323; }
+.tl-scroll { height: 100%; overflow: auto; scrollbar-width: thin; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.tl-inner { position: relative; min-height: 100%; --names: 116px; }
+.tl-head { position: sticky; top: 0; z-index: 6; display: flex; height: 24px; background: #2b2b2b; border-bottom: 1px solid #111; }
+.tl-corner { position: sticky; left: 0; z-index: 7; flex: 0 0 var(--names); width: var(--names); display: flex; align-items: center; padding: 0 6px; background: #2b2b2b; border-right: 1px solid #111; }
+.tl-tc { font: 600 12px ui-monospace, Menlo, monospace; color: #2d8ceb; letter-spacing: .3px; }
+.tl-ruler-wrap { position: sticky; left: var(--names); height: 24px; cursor: ew-resize; touch-action: none; }
+.tl-ruler { display: block; }
+.tl-rows { position: relative; padding-bottom: 60px; }
+.tl-row { position: relative; display: flex; height: 28px; border-bottom: 1px solid #1a1a1a; }
+.tl-row.prop { height: 22px; background: #1f1f1f; }
+.tl-row.sel { background: #33363b; }
+.tl-row.sel .tl-name { background: #3a3e45; }
+.tl-row.off .clip { opacity: .35; }
+.tl-name { position: sticky; left: 0; z-index: 4; flex: 0 0 var(--names); width: var(--names); display: flex; align-items: center; gap: 4px; padding: 0 4px; background: #262626; border-right: 1px solid #111; font-size: 12px; overflow: hidden; }
+.tl-name.sub { padding-left: 22px; color: #a8a8a8; font-size: 11px; background: #212121; }
+.tl-name .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-name .num { color: #8a8a8a; font-size: 11px; min-width: 12px; text-align: right; }
+.tl-name .lbl { width: 9px; height: 9px; border-radius: 1px; flex: 0 0 auto; }
+.tl-name button { background: none; border: 0; padding: 0; width: 16px; height: 22px; font-size: 11px; color: #9a9a9a; border-radius: 0; }
+.tl-name .sw-on { color: #2d8ceb; font-size: 10px; }
+.tl-track { position: relative; flex: 0 0 auto; height: 100%; }
+.clip { position: absolute; top: 4px; bottom: 4px; border-radius: 2px; overflow: hidden; touch-action: pan-x pan-y;
+  background-color: color-mix(in srgb, var(--c) 55%, #222); background-size: auto 100%; background-repeat: repeat-x;
+  border: 1px solid color-mix(in srgb, var(--c) 80%, #000); }
+.tl-row.sel .clip { border-color: #fff; touch-action: none; }
+.clip canvas.wave { position: absolute; inset: 0; width: 100%; height: 100%; }
+.clip .fxb { position: absolute; right: 18px; top: 1px; font: 700 9px system-ui; color: #fff; opacity: .8; }
+.handle { position: absolute; top: 0; bottom: 0; width: 14px; background: #ffffffcc; touch-action: none; }
+.handle::after { content: ''; position: absolute; left: 6px; top: 25%; bottom: 25%; width: 2px; background: #0008; }
+.handle.l { left: 0; } .handle.r { right: 0; }
+.kf { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; transform: rotate(45deg); background: #bdbdbd; border: 1px solid #111; z-index: 2; touch-action: none; }
+.kf::before { content: ''; position: absolute; inset: -9px; }
+.kf.agg { top: auto; bottom: 0; width: 7px; height: 7px; margin: 0 0 0 -3.5px; }
+.kf.ease { border-radius: 50% 0; }
+.kf.hold { border-radius: 0; background: #8a8a8a; }
+.kf.sel { background: #2d8ceb; border-color: #9fd0ff; }
+.tl-cti { position: absolute; top: 0; bottom: 0; left: 0; width: 13px; margin-left: -6px; z-index: 5; cursor: ew-resize; touch-action: none; }
+.tl-cti::after { content: ''; position: absolute; top: 0; bottom: 0; left: 6px; width: 1px; background: #2d8ceb; pointer-events: none; }
+.tl-markers i { position: absolute; top: 0; height: 9999px; width: 1px; background: #e8a33d44; pointer-events: none; z-index: 1; }
+.tl-zoom { position: absolute; right: 4px; bottom: 6px; display: flex; gap: 3px; z-index: 8; }
+.tl-zoom button { width: 28px; height: 24px; padding: 0; border-radius: 3px; font-size: 13px; background: #2b2b2bdd; border: 1px solid #111; }
+.tl-empty { position: sticky; left: 0; width: 100%; max-width: 100vw; padding: 22px; color: var(--muted); text-align: center; font-size: 13px; }

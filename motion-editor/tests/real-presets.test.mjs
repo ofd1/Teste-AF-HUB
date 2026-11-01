@@ -18,7 +18,7 @@ const types = (p) => p.effects.map((e) => e.type);
 const EXPECTED = {
   'Shakes/Sonhei Shake.ffx': ['twitch', 'exposure'],
   'Shakes/ZAZ Shake.ffx': ['motionTile', 'dirBlur', 'shake', 'motionBlur', 'twitch', 'tint'],
-  'Velocity & Reverse/Sonhei Reverse.ffx': ['twixtor', 'radialBlur'],
+  'Velocity & Reverse/Sonhei Reverse.ffx': ['twixtor', 'blurMoCurves'],
   'CC (Color Correction)/Sonhei CC.ffx': ['looks', 'looks', 'sharpen', 'fourColor', 'exposure', 'filmLook', 'sharpen', 'looks', 'exposure'],
   'CC (Color Correction)/Sonhei New CC.ffx': ['looks', 'looks', 'sharpen'],
   'CC (Color Correction)/Galego CC.ffx': ['looks', 'sharpen', 'flicker', 'exposure', 'filmLook', 'hueSat', 'brightnessContrast'],
@@ -45,8 +45,10 @@ test('Sonhei Reverse: Twixtor com rampa até velocidade negativa (reverse)', () 
   assert.equal(tw.params.speed.keys[2].ease, 'bezier');
   assert.equal(tw.params.frameBlend, true);
   const zoom = preset.effects[1];
-  assert.equal(zoom.params.mode, 1);
+  assert.deepEqual(zoom.params.zDist.keys.map((k) => +k.v.toFixed(2)), [1.1, 0.8, 1.1]); // Z Dist animado = zoom de câmera
   assert.deepEqual(zoom.params.center.map((v) => +v.toFixed(3)), [0.5, 0.667]);
+  assert.equal(zoom.params.shutter, 1);
+  assert.equal(zoom.params.wrap, 3);
   // aplicado num vídeo, o tempo da mídia avança e depois volta (reverse)
   const layer = {
     id: 'v', type: 'video', inPoint: 0, outPoint: 4, props: { sourceStart: 3, speed: 1 },

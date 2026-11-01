@@ -1,5 +1,5 @@
 // Gerenciador de mídia: imagens, vídeos (com dois decodificadores para frame blending) e sincronização.
-import { blendFrames, sourceRate, sourceTime, speedEffect } from './timing.js';
+import { blendFrames, sourceRate, sourceTime, speedEffect, wantsInterp } from './timing.js';
 import { valueAt } from './anim.js';
 
 const images = new Map();
@@ -123,8 +123,7 @@ export function videoFrames(layer, t, fps, final = false) {
   if (!final && c?.ready && c.key === cacheKey(layer)) {
     const x = Math.max(0, Math.min(c.frames.length - 1, (sourceTime(layer, t) - c.t0) * c.fps));
     const i = Math.floor(x), f = x - i;
-    const fx = speedEffect(layer);
-    const blend = fx ? valueAt(fx.params.frameBlend, t) : false;
+    const blend = wantsInterp(layer, t);
     if (!blend || f < 0.02 || i + 1 >= c.frames.length) return { a: c.frames[Math.round(x)], b: null, f: 0 };
     if (f > 0.98) return { a: c.frames[i + 1], b: null, f: 0 };
     return { a: c.frames[i], b: c.frames[i + 1], f, quality: 'preview' };
@@ -150,7 +149,7 @@ export function setCacheListener(fn) { cacheListener = fn; }
 
 function cacheKey(layer) {
   const fx = speedEffect(layer);
-  return JSON.stringify([layer.props.src, layer.props.sourceStart || 0, layer.props.speed ?? 1, layer.inPoint, layer.outPoint, fx?.params.speed, fx?.enabled]);
+  return JSON.stringify([layer.props.src, layer.props.sourceStart || 0, layer.props.speed ?? 1, layer.inPoint, layer.outPoint, fx?.params.speed, fx?.enabled, !!layer.props.interpolate, layer.props.sourceFps]);
 }
 
 export function cacheReady(layer) {
@@ -168,7 +167,7 @@ export function cacheStatus() {
 export function ensureCaches(project) {
   const ids = new Set();
   for (const l of project.layers) {
-    if (l.type !== 'video' || !l.props.src || !speedEffect(l)) continue;
+    if (l.type !== 'video' || !l.props.src || !(speedEffect(l) || l.props.interpolate)) continue;
     ids.add(l.id);
     const c = caches.get(l.id);
     if (c && c.key === cacheKey(l)) continue;
@@ -180,9 +179,9 @@ export function ensureCaches(project) {
 
 async function buildCache(project, layer) {
   const key = cacheKey(layer);
-  const fps = project.fps;
+  const fps = layer.props.sourceFps || project.fps; // quadros no fps real do vídeo
   let lo = Infinity, hi = -Infinity;
-  for (let t = layer.inPoint; t <= layer.outPoint + 1e-6; t += 1 / fps) {
+  for (let t = layer.inPoint; t <= layer.outPoint + 1e-6; t += 1 / project.fps) {
     const s = sourceTime(layer, t);
     lo = Math.min(lo, s); hi = Math.max(hi, s);
   }
@@ -204,7 +203,7 @@ async function buildCache(project, layer) {
   const h = Math.round(w * aspect);
   for (let i = 0; i < n; i++) {
     if (entry.cancelled) return;
-    await seek(v, lo + i / entry.fps + 0.0001);
+    await seek(v, lo + (i + 0.01) / entry.fps);
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     c.getContext('2d').drawImage(v, 0, 0, w, h);
@@ -236,4 +235,25 @@ export async function videoThumb(src, time = 0.1, h = 60) {
   v.removeAttribute('src');
   v.load();
   return c.toDataURL('image/jpeg', 0.6);
+}
+
+/** Detecta o fps real do vídeo (requestVideoFrameCallback). Retorna null se não for possível. */
+export function detectFps(src) {
+  return new Promise((resolve) => {
+    const v = makeVideo(src);
+    if (!('requestVideoFrameCallback' in v)) { resolve(null); return; }
+    const times = [];
+    const done = () => {
+      v.pause(); v.removeAttribute('src'); v.load();
+      const d = times.slice(1).map((t, i) => t - times[i]).filter((x) => x > 0.001).sort((a, b) => a - b);
+      if (d.length < 3) { resolve(null); return; }
+      const raw = 1 / d[Math.floor(d.length / 2)];
+      const common = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 120];
+      resolve(common.reduce((best, c) => (Math.abs(c - raw) < Math.abs(best - raw) ? c : best), common[0]));
+    };
+    const onFrame = (now, meta) => { times.push(meta.mediaTime); if (times.length < 12) v.requestVideoFrameCallback(onFrame); else done(); };
+    v.requestVideoFrameCallback(onFrame);
+    v.play().catch(() => resolve(null));
+    setTimeout(() => { if (times.length < 12) done(); }, 2500);
+  });
 }

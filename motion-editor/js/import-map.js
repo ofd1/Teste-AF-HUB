@@ -27,6 +27,9 @@ export function looksFromTools(tools, strength = 100) {
     liftR: 0, liftG: 0, liftB: 0, gammaR: 1, gammaG: 1, gammaB: 1, gainR: 1, gainG: 1, gainB: 1,
     hue: 0, saturation: 100, contrast: 0, mojo: 0, mojoCool: 50, mojoSkin: 50, punch: 0, bleach: 0, fade: 0,
     vignette: 0, vignetteSize: 50, diffusion: 0, diffusionRadius: 60, diffusionThreshold: 60, chroma: 0,
+    spotExposure: 0, spotColor: [1, 1, 1, 1], spotCenter: [0.5, 0.5], spotSize: 70, spotSoft: 50,
+    gradExposure: 0, gradAngle: 0, gradOffset: 0, gradSoft: 0.5, gradColor: [1, 1, 1, 1],
+    edgeBlur: 0, edgeSize: 100, edgeSoft: 50,
   };
   const HSL = ['Red', 'Orange', 'Yellow', 'Green', 'Aqua', 'Blue', 'Purple', 'Magenta'];
   for (const k of HSL) { p[`hsl${k}H`] = 0; p[`hsl${k}S`] = 0; p[`hsl${k}L`] = 0; }
@@ -82,7 +85,28 @@ export function looksFromTools(tools, strength = 100) {
       case 'duto': p.mojo = Math.max(p.mojo, (v[3] || 0) * 2); break;
       case '2stp': p.mojo = Math.max(p.mojo, (v[0] || 0) * 0.6); p.saturation *= 0.9; break;
       case 'logc': p.fade += 8; p.contrast -= 8; break;
-      case 'spex': case 'grex': p.exposure += (v[0] || 0) * 0.1; break;
+      case 'spex':
+        // Spot Exposure: [exposição, deslocamento x %, deslocamento y %, ?, ?, ?, tamanho %, filtro de cor RGB (7-9), suavidade (10)]
+        // a cor age como filtro da luz (ex.: +1.3 stops com cinza 0.465 ≈ leve clareada no centro)
+        p.spotExposure += v[0] || 0;
+        p.spotCenter = [clampN(0.5 + (v[1] || 0) / 100, 0, 1), clampN(0.5 - (v[2] || 0) / 100, 0, 1)];
+        p.spotSize = clampN((v[6] ?? 100) * 0.75, 5, 200);
+        p.spotSoft = clampN((v[10] ?? 1) * 45, 5, 100);
+        p.spotColor = [v[7] ?? 1, v[8] ?? 1, v[9] ?? 1, 1];
+        break;
+      case 'grex':
+        // Gradient Exposure: [exposição, ?, ângulo, ?, deslocamento %, suavidade, ?, cor RGB (7-9)]
+        if (!v[0]) { ignored.push('grex (exposição 0)'); continue; }
+        p.gradExposure += v[0];
+        p.gradAngle = v[2] || 0; p.gradOffset = clampN((v[4] || 0) / 100, -1, 1); p.gradSoft = clampN(v[5] ?? 0.5, 0.01, 2);
+        p.gradColor = [v[7] ?? 1, v[8] ?? 1, v[9] ?? 1, 1];
+        break;
+      case 'edgs':
+        // Edge Softness: [desfoque, ?, ?, ?, tamanho da área nítida, suavidade, proporção]
+        p.edgeBlur = Math.max(p.edgeBlur, v[0] || 0);
+        p.edgeSize = clampN((v[4] || 1) * 100, 10, 300);
+        p.edgeSoft = clampN((v[5] ?? 0.5) * 100, 1, 100);
+        break;
       default: ignored.push(t.id); continue;
     }
     used.push(t.id);
@@ -95,6 +119,7 @@ export function looksFromTools(tools, strength = 100) {
   p.mojo = clampN(p.mojo, 0, 100); p.punch = clampN(p.punch, 0, 100); p.bleach = clampN(p.bleach, 0, 100);
   p.fade = clampN(p.fade, 0, 60); p.vignette = clampN(p.vignette, 0, 100); p.diffusion = clampN(p.diffusion, 0, 150);
   p.diffusionRadius = clampN(p.diffusionRadius, 1, 300); p.chroma = clampN(p.chroma, 0, 20);
+  p.spotExposure = clampN(p.spotExposure, -4, 4); p.gradExposure = clampN(p.gradExposure, -4, 4); p.edgeBlur = clampN(p.edgeBlur, 0, 100);
   return { params: p, used, ignored };
 }
 
@@ -121,8 +146,8 @@ export const IMPORT_RULES = [
   { vendor: 'Sapphire', plugin: 'S_Shake', to: 'shake', test: /s_shake|s_camerashake/i,
     map: { amount: { n: ['amplitude', 'shake amp', 'amp'], conv: (v) => (v < 20 ? v * 35 : v) }, frequency: { n: ['frequency', 'shake freq', 'freq'], conv: (v) => (v > 60 ? Math.min(40, v / 250) : v) }, rotation: { n: ['tilt rand amp', 'rotate amp'], conv: (v) => v * 0.05 }, seed: { n: ['seed'] } },
     extra: (raw) => (raw('motion blur') ? [{ type: 'motionBlur', params: { amount: 100 * (raw('mo blur length') ?? 1), samples: 12 } }] : []) },
-  { vendor: 'Sapphire', plugin: 'S_BlurMoCurves', to: 'radialBlur', test: /s_blurmocurves/i, set: { mode: 1 },
-    map: { amount: { n: ['z dist'], conv: (z) => Math.min(100, Math.abs(1 - z) * 220) }, center: { n: ['center xy'] } } },
+  { vendor: 'Sapphire', plugin: 'S_BlurMoCurves', to: 'blurMoCurves', test: /s_blurmocurves/i,
+    map: { center: { n: ['center xy'] }, zDist: { n: ['z dist'] }, rotate: { n: ['rotate'] }, shiftX: { n: ['shift x'] }, shiftY: { n: ['shift y'] }, shutter: { n: ['shutter duration'] }, wrap: { n: ['wrap x'], conv: (v) => Math.min(3, Math.max(1, v)) } } },
   { vendor: 'Sapphire', plugin: 'S_Sharpen', to: 'sharpen', test: /s_sharpen/i,
     map: { amount: { n: ['sharpen amp'], conv: (v) => v * 60 }, radius: { n: ['small detail size'], conv: (v) => v * 0.8 } } },
   { vendor: 'Sapphire', plugin: 'S_HueSatBright', to: 'looks', test: /s_huesat/i,

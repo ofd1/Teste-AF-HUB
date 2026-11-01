@@ -137,7 +137,14 @@ function renderLayerImage(layer, t, scale, extra) {
   const lt = layerTime(layer, t);
   const { w, h } = contentSize(layer);
   const active = layer.effects.filter((fx) => fx.enabled && EFFECT_MAP[fx.type]?.render);
-  const evaluated = active.map((fx) => ({ def: EFFECT_MAP[fx.type], p: evalParams(fx, lt) }));
+  const fps = project?.fps || 30;
+  const evaluated = active.map((fx) => {
+    const def = EFFECT_MAP[fx.type];
+    const p = evalParams(fx, lt);
+    // efeitos de "motion blur por curva" (S_BlurMoCurves) precisam do valor um obturador atrás
+    const prev = def.usesPrev ? evalParams(fx, lt - (p.shutter ?? 1) / fps) : null;
+    return { def, p, prev };
+  });
   let pad = 2;
   for (const { def, p } of evaluated) pad += def.pad ? Math.max(0, def.pad(p, { w, h })) : 0;
   pad = Math.ceil(Math.min(pad * scale, 4096));
@@ -176,8 +183,8 @@ function renderLayerImage(layer, t, scale, extra) {
   const rect = [pad / tex.w, pad / tex.h, (w * scale) / tex.w, (h * scale) / tex.h];
   gl.env = { u_time: lt, u_scale: scale, u_rect: rect };
   const env = { gl, t: lt, scale, pad, w, h, W: tex.w, H: tex.h, rect, layer };
-  for (const { def, p } of evaluated) {
-    try { tex = def.render(tex, p, env) || tex; } catch (e) { console.warn('efeito falhou', def.type, e); }
+  for (const { def, p, prev } of evaluated) {
+    try { tex = def.render(tex, p, env, prev) || tex; } catch (e) { console.warn('efeito falhou', def.type, e); }
   }
   const out = gl.toCanvas(tex);
   gl.releaseAll();

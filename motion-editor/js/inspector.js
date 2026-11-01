@@ -76,7 +76,11 @@ export class Inspector {
       case 'video':
         rows.push(f('Início no vídeo (s)', num('sourceStart', 0.01, 0)));
         rows.push(f('Velocidade base ×', num('speed', 0.05, 0.05, 16)));
+        rows.push(f('Suavizar movimento', `<label class="switch"><input type="checkbox" data-prop="interpolate" ${p.interpolate ? 'checked' : ''}><i></i></label>`));
+        rows.push('<div class="note muted">Interpolação de quadros por fluxo óptico: cria quadros intermediários (ex.: vídeo 30 fps exportado a 60 fps fica fluido).</div>');
+        rows.push(f('FPS do vídeo', num('sourceFps', 0.001, 1, 240)));
         rows.push('<button class="wide" data-hook="speed">⏱ Rampa de velocidade (estilo Twixtor)</button>');
+        rows.push('<button class="wide" data-hook="track">◎ Rastrear movimento (tracker)</button>');
         rows.push(f('Largura', num('width', 1, 1)), f('Altura', num('height', 1, 1)));
         break;
       case 'audio':

@@ -62,15 +62,24 @@ export function sourceRate(layer, t) {
 }
 
 /** Quadros para frame blending: { a, b, f } em segundos de mídia. */
+/** Interpolação de quadros ligada? (Twixtor com frame blending ou "Suavizar movimento" da camada). */
+export function wantsInterp(layer, t) {
+  if (layer.props.interpolate) return true;
+  const fx = speedEffect(layer);
+  return !!(fx && valueAt(fx.params.frameBlend, t));
+}
+
+/** Quadros de origem para o tempo t (no fps real do vídeo): { a, b, f } em segundos de mídia. */
 export function blendFrames(layer, t, fps) {
   const st = sourceTime(layer, t);
-  const fx = speedEffect(layer);
-  if (!fx || !valueAt(fx.params.frameBlend, t)) return { a: st, b: null, f: 0 };
-  const fr = st * fps;
+  const sfps = layer.props.sourceFps || fps;
+  if (!wantsInterp(layer, t)) return { a: (Math.floor(st * sfps + 1e-6) + 0.01) / sfps, b: null, f: 0 };
+  const fr = st * sfps;
   const i = Math.floor(fr);
   const f = fr - i;
-  if (f < 0.02 || f > 0.98) return { a: Math.round(fr) / fps, b: null, f: 0 };
-  return { a: (i + 0.0001) / fps, b: (i + 1.0001) / fps, f };
+  // +1% do quadro: buscar exatamente na borda faz alguns navegadores entregarem o quadro anterior
+  if (f < 0.02 || f > 0.98) return { a: (Math.round(fr) + 0.01) / sfps, b: null, f: 0 };
+  return { a: (i + 0.01) / sfps, b: (i + 1.01) / sfps, f };
 }
 
 /** Duração de mídia necessária para cobrir [inPoint, outPoint]. */
