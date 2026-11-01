@@ -242,8 +242,8 @@ export class GLEngine {
     if (dims !== 2) t = this.pass(BLUR, { u_tex: t, u_dir: [0, 1], u_sigma: s });
     for (let i = chain.length - 2; i >= 0; i--) {
       t = this.copy(t, chain[i].w, chain[i].h);
-      if (i > 0 || f > 1) {
-        // suaviza cada etapa de ampliação para evitar blocos
+      if (i > 0) {
+        // suaviza as etapas intermediárias (a última ampliação 2× bilinear já fica suave)
         if (dims !== 3) t = this.pass(BLUR, { u_tex: t, u_dir: [1, 0], u_sigma: 1.2 });
         if (dims !== 2) t = this.pass(BLUR, { u_tex: t, u_dir: [0, 1], u_sigma: 1.2 });
       }

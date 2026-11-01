@@ -63,8 +63,9 @@ export function parseFFX(buffer, opts = {}) {
     result.warnings.push(`Falha ao ler estrutura RIFX: ${e.message}`);
   }
 
-  const ctx = { r, fps, result, targetPath: [], groupPath: [] };
+  const ctx = { r, fps, result, targetPath: [], targets: [], sspcIndex: 0, groupPath: [] };
   if (root) walk(root.children, ctx);
+  retimeFFX(result, fps); // tempos relativos ao primeiro keyframe do preset inteiro (mantém o sincronismo)
 
   // Varredura bruta de match names (fallback).
   result.matchNames = scanMatchNames(r);
@@ -97,15 +98,24 @@ function walk(children, ctx, group = null) {
         let label = null;
         collectPath(c.children, ctx, path, (l) => { if (!label) label = l; });
         if (path.length) ctx.targetPath = path;
-        if (label && ctx.result.name === 'Preset FFX') ctx.result.name = label;
-        if (label) ctx.targetLabel = label;
+        // cada tdsp com um efeito-alvo corresponde, em ordem, a um bloco sspc
+        const target = [...path].reverse().find((m) => !STRUCTURAL.has(m) && !/-\d{4}$/.test(m));
+        if (target) ctx.targets.push({ mn: target, label });
         break;
       }
       case 'sspc': {
-        let mn = pending && !STRUCTURAL.has(pending) && !/-\d{4}$/.test(pending) ? pending : null;
+        const target = ctx.targets[ctx.sspcIndex++];
+        // ordem de preferência: prefixo dos parâmetros (parT), alvo do tdsp, tdmn anterior
+        const parT = c.children.find((x) => x.id === 'LIST' && x.listType === 'parT');
+        const first = parT?.children?.find((x) => x.id === 'tdmn');
+        const fromParT = first ? /^(.*)-\d{4}$/.exec(r.cstr(first.offset, first.size))?.[1] : null;
+        let mn = fromParT || target?.mn || (pending && !STRUCTURAL.has(pending) && !/-\d{4}$/.test(pending) ? pending : null);
         if (!mn) mn = [...ctx.targetPath].reverse().find((m) => !STRUCTURAL.has(m)) || 'Desconhecido';
         const fx = parseEffect(c, mn, ctx);
-        if (!fx.name || fx.name === mn) fx.name = ctx.targetLabel && ctx.targetPath.includes(mn) ? ctx.targetLabel : fx.name || mn;
+        if (fx.instanceName) fx.name = fx.instanceName;
+        else if (target?.label && target.mn === mn) fx.name = target.label;
+        if (!fx.name) fx.name = mn;
+        delete fx.instanceName;
         ctx.result.effects.push(fx);
         break;
       }
@@ -147,8 +157,15 @@ function readName(r, c) {
     const utf = c.children.find((x) => x.id === 'Utf8');
     return utf ? r.cstr(utf.offset, utf.size) : '';
   }
+  // no AE real, tdsn/fnam contêm um sub-chunk 'Utf8' (id + tamanho + texto)
+  if (c.size >= 8 && r.fourcc(c.offset) === 'Utf8') {
+    const n = r.u32(c.offset + 4);
+    return r.cstr(c.offset + 8, Math.min(n, c.size - 8));
+  }
   return r.cstr(c.offset, c.size);
 }
+
+const BUILT_IN = 'ADBE Effect Built In Params';
 
 function parseEffect(sspc, matchName, ctx) {
   const { r } = ctx;
@@ -180,7 +197,7 @@ function parseEffect(sspc, matchName, ctx) {
         defs.set(pm, last);
         pm = null;
       } else if (c.id === 'pdnm' && last) {
-        last.options = r.cstr(c.offset, c.size).split('|');
+        last.options = readName(r, c).split('|').map((o) => o.trim());
       }
     }
   }
@@ -190,7 +207,7 @@ function parseEffect(sspc, matchName, ctx) {
     let pm = null;
     for (const c of tdgp.children) {
       if (c.id === 'tdmn') { pm = r.cstr(c.offset, c.size); continue; }
-      if (c.id === 'tdsn' && !fx.name) fx.name = readName(r, c);
+      if (c.id === 'tdsn' && !pm) { const n = readName(r, c); if (n) fx.instanceName = n; } // nome da instância (ex.: "Looks 3")
       if (c.id === 'LIST' && c.listType === 'tdbs' && pm) {
         const def = defs.get(pm);
         const p = parseProperty(c, pm, def, ctx);
@@ -203,12 +220,15 @@ function parseEffect(sspc, matchName, ctx) {
         if (p.type !== 'group' && p.type !== 'custom' && !(p.index === 0 && !p.value.length)) fx.params.push(p);
         pm = null;
       } else if (c.id === 'LIST' && c.listType === 'tdgp') {
-        // grupo de parâmetros aninhado: achata
-        flattenGroup(c, defs, fx, ctx);
+        // grupo de parâmetros aninhado: achata (ignora "Compositing Options" do AE)
+        if (pm !== BUILT_IN) flattenGroup(c, defs, fx, ctx);
         pm = null;
       }
     }
   }
+
+  // Magic Bullet Looks: o "Look" é um blob proprietário com uma lista de ferramentas (tool + id + valores)
+  if (/^MB LookSuite/i.test(matchName)) fx.looksTools = decodeLooksTools(r, sspc.offset, sspc.offset + sspc.size);
 
   // definições sem valores (ex.: só parT)
   if (!fx.params.length && defs.size) {
@@ -232,7 +252,10 @@ function flattenGroup(tdgp, defs, fx, ctx) {
       if (def) { p.type = def.type; p.name = p.name || def.name; }
       fx.params.push(p);
       pm = null;
-    } else if (c.id === 'LIST' && c.listType === 'tdgp') flattenGroup(c, defs, fx, ctx);
+    } else if (c.id === 'LIST' && c.listType === 'tdgp') {
+      if (pm !== BUILT_IN) flattenGroup(c, defs, fx, ctx);
+      pm = null;
+    }
   }
 }
 
@@ -347,11 +370,32 @@ export function scanMatchNames(r) {
 
 /** Re-calcula tempos dos keyframes com outro fps (sem reler o arquivo). */
 export function retimeFFX(parsed, fps) {
-  const fix = (p) => {
-    if (!p.keyframes?.length) return;
-    const t0 = p.keyframes[0].raw;
-    for (const k of p.keyframes) k.t = (k.raw - t0) / fps;
-  };
-  parsed.effects.forEach((fx) => fx.params.forEach(fix));
-  parsed.properties.forEach(fix);
+  const all = [...parsed.effects.flatMap((fx) => fx.params), ...parsed.properties].filter((p) => p.keyframes?.length);
+  if (!all.length) return;
+  const t0 = Math.min(...all.map((p) => p.keyframes[0].raw));
+  for (const p of all) for (const k of p.keyframes) k.t = (k.raw - t0) / fps;
+  parsed.fps = fps;
+}
+
+/**
+ * Decodifica as ferramentas do Magic Bullet Looks: 'tool' + u32 tamanho + id(4) + u32 flags + u32 n + n×float64.
+ * flags & 0xff = estágio (Subject/Matte/Lens/Camera); flags & 0x100 = ferramenta desligada.
+ */
+export function decodeLooksTools(r, start, end) {
+  const b = r.bytes;
+  const tools = [];
+  for (let i = start; i + 20 < end; i++) {
+    if (b[i] !== 0x74 || b[i + 1] !== 0x6f || b[i + 2] !== 0x6f || b[i + 3] !== 0x6c) continue; // 'tool'
+    const size = r.u32(i + 4);
+    const id = r.fourcc(i + 8);
+    if (!/^[a-z0-9]{4}$/.test(id) || size < 12 || size > 20000) continue;
+    const flags = r.u32(i + 12);
+    const n = r.u32(i + 16);
+    if (n * 8 + 12 > size || i + 20 + n * 8 > end) continue;
+    const values = [];
+    for (let k = 0; k < n; k++) values.push(r.f64(i + 20 + k * 8));
+    tools.push({ id, flags, enabled: !(flags & 0x100), values });
+    i += 7 + size;
+  }
+  return tools;
 }

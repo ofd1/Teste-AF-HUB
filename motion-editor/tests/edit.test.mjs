@@ -32,7 +32,7 @@ test('identifica plugins de terceiros e converte', () => {
   assert.equal(fx['Twixtor Pro'].params.frameBlend, true);
   assert.equal(fx.PEDG.params.radius, 300);
   assert.equal(fx.PEDG.params.threshold, 40);
-  assert.equal(fx.S_Shake.params.amount, 30);
+  assert.equal(fx.S_Shake.params.amount, 10.5); // amplitude 0.3 × 35 (escala calibrada com presets reais)
   assert.equal(fx.S_Shake.params.frequency, 12);
   assert.equal(fx['VIDEOCOPILOT Twitch'].params.slide, true);
   assert.equal(fx.RSMB.params.amount, 100);
@@ -45,7 +45,7 @@ test('regras de palavra-chave e nomes de exibição', () => {
   assert.equal(matchEffect('XYZ Super Glow FX').def.type, 'glow');
   assert.equal(matchEffect('XYZ Super Glow FX').kind, 'approx');
   assert.equal(matchEffect('uni.Glow').rule.plugin, 'Universe Glow');
-  assert.equal(matchEffect('S_BlurMoCurves').def.type, 'dirBlur');
+  assert.equal(matchEffect('S_BlurMoCurves').def.type, 'radialBlur'); // zoom blur (Z Dist), confirmado em preset real
   assert.equal(matchEffect('ADBE Wave Warp').kind, 'native');
   assert.equal(matchEffect('Plugin estranho 123'), null);
 });

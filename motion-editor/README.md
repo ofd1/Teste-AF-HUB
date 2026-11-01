@@ -2,7 +2,7 @@
 
 Editor de vídeo e motion graphics com interface no estilo Alight Motion, feito para **edits** (futebol, velocity, shakes, glows…):
 
-- **52 efeitos** que recriam os plugins mais usados no After Effects (Twixtor, Deep Glow, Twitch, Sapphire, BCC, RSMB, Optical Flares…) e os efeitos nativos famosos do AE.
+- **59 efeitos** que recriam os plugins mais usados no After Effects (Twixtor, Deep Glow, Twitch, Sapphire, BCC, RSMB, Optical Flares…) e os efeitos nativos famosos do AE.
 - **Importador de `.ffx`** que identifica efeitos nativos e **plugins de terceiros** e converte cada um para o efeito equivalente do app, mantendo valores e keyframes.
 - **Pacote de presets FREE**: basta colocar arquivos `.ffx`/`.json` numa pasta.
 - **App Android e iOS** via Capacitor (projetos em `android/` e `ios/`) e também PWA instalável.
@@ -89,7 +89,24 @@ Depois da importação, um relatório mostra o status de cada efeito, o plugin i
 
 ## Pacote de presets FREE
 
-Coloque os arquivos em `presets/free/<Categoria>/`:
+O pacote já vem com **10 presets reais de edit** (exportados do After Effects), que ficam instalados e aparecem com o selo FREE:
+
+| Categoria | Preset | Efeitos no AE | Vira no app |
+|---|---|---|---|
+| Shakes | Sonhei Shake | Twitch + Exposure | Twitch + Exposição (keyframes) |
+| Shakes | ZAZ Shake | Motion Tile, BCC Directional Blur, S_Shake, Twitch, Tint | Motion Tile, Desfoque direcional, Shake + Motion blur, Twitch, Tint (tudo sincronizado) |
+| Velocity & Reverse | Sonhei Reverse | Twixtor Pro (100→270→25→−530%), S_BlurMoCurves | Velocidade estilo Twixtor (com reverse) + zoom blur |
+| CC | Sonhei CC | 2× Magic Bullet Looks, 2× S_Sharpen, 4-Color Gradient, S_MathOps, S_FilmDamage, S_HueSatBright, Exposure | Looks, Nitidez, Gradiente de 4 cores, Exposição, Film Look |
+| CC | Sonhei New CC | 2× Magic Bullet Looks, S_Sharpen | Looks + Nitidez |
+| CC | Galego CC | Looks, S_Sharpen, S_Flicker, S_MathOps, S_FilmDamage, Hue/Saturation, Brightness & Contrast | Looks, Nitidez, Flicker, Exposição, Film Look, Matiz/Sat, Brilho/Contraste |
+| CC | FTB Main CC | 4× Looks, S_Sharpen, Unsharp Mask, BCC Unsharp Mask, Hue/Saturation | Looks, Nitidez |
+| CC | FTB AEP CC | 4× Looks, 4-Color Gradient, Hue/Saturation, Brightness & Contrast | Looks, Gradiente de 4 cores, Matiz/Sat, Brilho/Contraste |
+| CC | ZAZ Reverse Dark CC | Looks, S_Sharpen, S_FilmDamage, Hue/Saturation, Brightness & Contrast | Looks, Nitidez, Film Look, Matiz/Sat, Brilho/Contraste |
+| Warp | ZAZ Warp | Motion Tile + Warp (Flag) | Motion Tile + Deformar |
+
+**Magic Bullet Looks:** o “Look” é um bloco proprietário dentro do `.ffx`. O app decodifica a lista de ferramentas (Exposure, Warm/Cool filter, Colorista, Mojo, Hue/Sat, Haze, Vignette, Diffusion, Chromatic Aberration, Duotone, 2-Strip…) com os valores de cada uma e a força (Strength), e monta o efeito **Looks** do app. Ferramentas desligadas no Looks são ignoradas. A conversão de cada ferramenta é aproximada: os valores vêm do arquivo, mas o algoritmo do Magic Bullet não é público.
+
+Para adicionar mais presets, coloque os arquivos em `presets/free/<Categoria>/`:
 
 ```
 presets/free/
@@ -131,7 +148,7 @@ npm run ios       # idem para Xcode (requer macOS) → Run / Archive
 ## Testes
 
 ```bash
-npm test          # 14 testes: parser FFX, plugins, conversão, presets, esticar keyframes, Twixtor, posterize, batidas
+npm test          # 20 testes, inclusive com os 10 presets .ffx reais do pacote FREE
 npm run samples   # regenera samples/*.ffx e presets/free/Exemplos AE/
 ```
 
@@ -149,12 +166,9 @@ Também foram verificados no Chromium:
 
 ## Limitações conhecidas
 
-- **Formato `.ffx`.** Não é documentado. Os testes usam arquivos gerados com o mesmo layout RIFX obtido por engenharia reversa. **Ainda é preciso validar com `.ffx` reais do seu After Effects**, principalmente:
-  - os match names exatos de plugins de terceiros (a detecção usa padrões de nome);
-  - os nomes de parâmetros de cada plugin;
-  - o layout binário dos keyframes (*best-effort*).
-
-  Quando algo não converter bem, o relatório de importação mostra a estrutura do arquivo.
+- **Formato `.ffx`.** Não é documentado. A leitura foi validada com 10 presets reais (AE 2020 a 2026, inclusive um salvo em AE alemão): efeitos, parâmetros, opções de menus, pontos, cores e keyframes com curvas Bézier batem com os valores esperados, e há testes de regressão em `tests/real-presets.test.mjs`. Plugins que ainda não apareceram em arquivos reais (ex.: Deep Glow, BCC Glow, Universe) usam detecção por padrão de nome e podem precisar de ajuste quando você testar um preset com eles.
+- **Tempo dos keyframes:** o `.ffx` não guarda o fps da composição; o app assume o fps do projeto (padrão 30). Se o preset foi feito em 24/25/60 fps, ajuste no relatório de importação.
+- **Recriações:** Looks, Sharpen, Twitch, S_Shake etc. são aproximações dos plugins originais; o resultado é parecido, não idêntico pixel a pixel.
 - **Expressões** (ex.: `wiggle()`) são preservadas como texto, mas não executadas. Use o efeito Shake.
 - **Não suportado:** animadores de texto, máscaras, 3D/câmera, Element 3D, Particular e outros plugins de geração 3D.
 - **Velocidade estilo Twixtor:** usa frame blending, não optical flow real. A interpolação fica mais suave em clipes com taxa de quadros alta.

@@ -1,31 +1,56 @@
 {
-  "generated": "2026-11-01T16:29:13.703Z",
-  "count": 5,
+  "generated": "2026-11-01T16:41:11.384Z",
+  "count": 10,
   "presets": [
     {
-      "name": "animacao pop tint",
-      "category": "Exemplos AE",
-      "file": "presets/free/Exemplos AE/animacao-pop-tint.ffx"
+      "name": "FTB AEP CC",
+      "category": "CC (Color Correction)",
+      "file": "presets/free/CC (Color Correction)/FTB AEP CC.ffx"
     },
     {
-      "name": "blur glow sombra",
-      "category": "Exemplos AE",
-      "file": "presets/free/Exemplos AE/blur-glow-sombra.ffx"
+      "name": "FTB Main CC",
+      "category": "CC (Color Correction)",
+      "file": "presets/free/CC (Color Correction)/FTB Main CC.ffx"
     },
     {
-      "name": "plugins de edit",
-      "category": "Exemplos AE",
-      "file": "presets/free/Exemplos AE/plugins-de-edit.ffx"
+      "name": "Galego CC",
+      "category": "CC (Color Correction)",
+      "file": "presets/free/CC (Color Correction)/Galego CC.ffx"
     },
     {
-      "name": "pseudo controles",
-      "category": "Exemplos AE",
-      "file": "presets/free/Exemplos AE/pseudo-controles.ffx"
+      "name": "Sonhei CC",
+      "category": "CC (Color Correction)",
+      "file": "presets/free/CC (Color Correction)/Sonhei CC.ffx"
     },
     {
-      "name": "Shake forte RSMB",
+      "name": "Sonhei New CC",
+      "category": "CC (Color Correction)",
+      "file": "presets/free/CC (Color Correction)/Sonhei New CC.ffx"
+    },
+    {
+      "name": "ZAZ Reverse Dark CC",
+      "category": "CC (Color Correction)",
+      "file": "presets/free/CC (Color Correction)/ZAZ Reverse Dark CC.ffx"
+    },
+    {
+      "name": "Sonhei Shake",
       "category": "Shakes",
-      "file": "presets/free/Shakes/Shake forte RSMB.json"
+      "file": "presets/free/Shakes/Sonhei Shake.ffx"
+    },
+    {
+      "name": "ZAZ Shake",
+      "category": "Shakes",
+      "file": "presets/free/Shakes/ZAZ Shake.ffx"
+    },
+    {
+      "name": "Sonhei Reverse",
+      "category": "Velocity & Reverse",
+      "file": "presets/free/Velocity & Reverse/Sonhei Reverse.ffx"
+    },
+    {
+      "name": "ZAZ Warp",
+      "category": "Warp",
+      "file": "presets/free/Warp/ZAZ Warp.ffx"
     }
   ]
 }

@@ -644,3 +644,6 @@ function demoProject() {
   registerServiceWorker();
   timeline.render();
 })();
+
+// Acesso para automação/testes (Playwright) e depuração no console.
+window.motionframe = { store, openSheet };

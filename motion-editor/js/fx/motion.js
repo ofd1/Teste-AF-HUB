@@ -77,8 +77,8 @@ export default [
   },
   {
     type: 'twixtor', label: 'Velocidade (estilo Twixtor)', category: 'Tempo', plugin: 'Twixtor / Timewarp',
-    description: 'Muda a velocidade do vídeo com rampas suaves (anime “Velocidade %” com keyframes). Frame blending mistura quadros vizinhos. Só afeta camadas de vídeo.',
-    params: [num('speed', 'Velocidade %', 50, 0, 1000, 1), bool('frameBlend', 'Frame blending', true)],
+    description: 'Muda a velocidade do vídeo com rampas suaves (anime “Velocidade %” com keyframes). Valores negativos tocam ao contrário (reverse). Frame blending mistura quadros vizinhos. Só afeta camadas de vídeo.',
+    params: [num('speed', 'Velocidade % (negativo = reverso)', 50, -1000, 1000, 1), bool('frameBlend', 'Frame blending', true)],
     sourceSpeed: true,
   },
   {

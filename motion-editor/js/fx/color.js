@@ -2,13 +2,18 @@
 // Vibrance, Tint, Preto e branco, Inverter, Fill, Gradiente, Posterize, Threshold.
 import { colorFrag, num, ang, col, bool, rgb } from './common.js';
 
+// Como no AE: exposição e offset em luz linear (gama 2.2), depois correção de gama.
 const EXPOSURE = colorFrag('uniform float u_exp, u_off, u_gamma;', `
-  r = r * pow(2.0, u_exp) + u_off;
+  vec3 lin = pow(max(r, 0.0), vec3(2.2)) * pow(2.0, u_exp) + u_off;
+  r = pow(max(lin, 0.0), vec3(1.0 / 2.2));
   r = pow(max(r, 0.0), vec3(1.0 / max(u_gamma, 0.01)));`);
 
+// Brilho e contraste "moderno" do AE: preserva preto e branco (curva), não soma um valor fixo.
 const BC = colorFrag('uniform float u_b, u_c;', `
-  r = r + u_b;
-  r = (r - 0.5) * u_c + 0.5;`);
+  r = clamp(r, 0.0, 1.0);
+  r = u_b >= 0.0 ? pow(r, vec3(1.0 / (1.0 + u_b))) : pow(r, vec3(1.0 - u_b));
+  vec3 s = r * r * (3.0 - 2.0 * r);
+  r = u_c >= 0.0 ? mix(r, s, u_c) : mix(r, vec3(0.5), -u_c * 0.5);`);
 
 const HUESAT = colorFrag('uniform float u_h, u_s, u_l, u_colorize; uniform vec3 u_ccol;', `
   vec3 h = rgb2hsv(r);
@@ -65,7 +70,7 @@ export default [
   {
     type: 'brightnessContrast', label: 'Brilho e contraste', category: 'Cor',
     params: [num('brightness', 'Brilho', 0, -150, 150), num('contrast', 'Contraste', 0, -100, 100)],
-    render: fx(BC, (p) => ({ u_b: p.brightness / 255, u_c: 1 + p.contrast / 100 })),
+    render: fx(BC, (p) => ({ u_b: p.brightness / 150, u_c: p.contrast / 100 })),
   },
   {
     type: 'hueSat', label: 'Matiz / Saturação', category: 'Cor',

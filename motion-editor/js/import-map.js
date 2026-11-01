@@ -12,26 +12,110 @@ const to255 = (v) => (v <= 1 ? v * 255 : v);
 
 const ADOBE = 'Adobe (nativo)';
 
+// Índices do popup "Blending Mode" do AE (com separadores "(-") → modos do efeito Gradiente de 4 cores
+const AE_BLEND = { 1: 1, 2: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 9: 8, 11: 9, 12: 10, 14: 11, 15: 12, 16: 13, 17: 14 };
+
+const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/**
+ * Converte as ferramentas do Magic Bullet Looks (decodificadas do .ffx) para o efeito "Looks" do app.
+ * Os valores vêm do arquivo; a correspondência ferramenta → parâmetro é uma aproximação.
+ */
+export function looksFromTools(tools, strength = 100) {
+  const p = {
+    strength, exposure: 0, filter: [1, 1, 1, 1], filterDensity: 0, liftR: 0, liftG: 0, liftB: 0, gammaR: 1, gammaG: 1, gammaB: 1, gainR: 1, gainG: 1, gainB: 1,
+    hue: 0, saturation: 100, contrast: 0, mojo: 0, fade: 0, vignette: 0, vignetteSize: 50, diffusion: 0, diffusionRadius: 60, diffusionThreshold: 60, chroma: 0,
+  };
+  const used = [], ignored = [];
+  for (const t of tools) {
+    const v = t.values;
+    if (!t.enabled) { ignored.push(`${t.id} (desligada)`); continue; }
+    switch (t.id) {
+      case 'expo': p.exposure += v[0] || 0; break;
+      case 'fltr':
+        if (Math.min(v[0], v[1], v[2]) < 0.995) { p.filter = [v[0], v[1], v[2], 1]; p.filterDensity = 100; } else { ignored.push('fltr (neutro)'); continue; }
+        break;
+      case 'vign': p.vignette = Math.max(p.vignette, (v[5] || 0) * 0.7); p.vignetteSize = clampN(60 - ((v[2] || 1) - 1) * 50, 15, 85); break;
+      case 'lenv': p.vignette = Math.max(p.vignette, (v[0] || 0) * 0.5); break;
+      case 'odif': p.diffusion += (v[0] || 0) * 0.6; p.diffusionRadius = Math.max(p.diffusionRadius, (v[1] || 100) * 0.3); break;
+      case 'diff':
+        if (v[0] <= 1) { p.diffusion += v[0] * 75; p.diffusionRadius = Math.max(p.diffusionRadius, (v[1] || 5) * 12); } else { p.diffusion += (v[3] || 50) * 0.2; p.diffusionRadius = Math.max(p.diffusionRadius, v[0] * 0.4); }
+        break;
+      case 'chab': p.chroma += Math.abs(v[0] || 0) * 4; break;
+      case 'husa': p.hue += v[0] || 0; p.saturation *= (v[1] ?? 100) / 100; break;
+      case 'mjo2': p.mojo += (v[0] || 0) * 0.5; p.contrast += (v[3] || 0) * 0.15; break;
+      case 'haze': p.fade += (v[0] || 0) * 0.3; break;
+      case 'csta':
+        p.liftR += ((v[3] ?? 1) - 1) * 0.6; p.liftG += ((v[4] ?? 1) - 1) * 0.6; p.liftB += ((v[5] ?? 1) - 1) * 0.6;
+        p.gammaR *= v[6] ?? 1; p.gammaG *= v[7] ?? 1; p.gammaB *= v[8] ?? 1;
+        p.gainR *= v[9] ?? 1; p.gainG *= v[10] ?? 1; p.gainB *= v[11] ?? 1;
+        p.exposure += (v[2] || 0) * 0.25;
+        if (v[12] > 0 && v[12] <= 200) p.saturation *= (100 + (v[12] - 100) * 0.4) / 100;
+        break;
+      case 'cmix': p.saturation *= 0.7 + 0.3 * ((v[1] ?? 100) / 100); break;
+      case 'duto': p.mojo += (v[3] || 0) * 0.5; break;
+      case '2stp': p.mojo += (v[0] || 0) * 0.3; p.saturation *= 0.9; break;
+      case 'crv2': p.contrast += v[0] < 1 ? (1 - v[0]) * 10 : 0; break;
+      case 'logc': p.fade += 8; p.contrast -= 8; break;
+      case 'spex': case 'grex': p.exposure += (v[0] || 0) * 0.1; break;
+      default: ignored.push(t.id); continue;
+    }
+    used.push(t.id);
+  }
+  p.exposure = clampN(p.exposure, -3, 3); p.saturation = clampN(p.saturation, 0, 300); p.contrast = clampN(p.contrast, -100, 100);
+  p.mojo = clampN(p.mojo, 0, 100); p.fade = clampN(p.fade, 0, 60); p.vignette = clampN(p.vignette, 0, 100); p.diffusion = clampN(p.diffusion, 0, 150);
+  p.diffusionRadius = clampN(p.diffusionRadius, 1, 300); p.chroma = clampN(p.chroma, 0, 20);
+  return { params: p, used, ignored };
+}
+
+function looksExpand(fx, raw) {
+  const strength = raw('strength') ?? 100;
+  const { params, used, ignored } = looksFromTools(fx.looksTools || [], strength);
+  return [{ type: 'looks', label: fx.name || 'Looks', params, note: `ferramentas: ${used.join(', ') || '—'}${ignored.length ? `; ignoradas: ${ignored.join(', ')}` : ''}` }];
+}
+
 export const IMPORT_RULES = [
   // ---------------------------------------------------------------- plugins de terceiros
+  // ---- regras ajustadas com presets reais de edit (sonhei, ftb, galego, ZAZ…)
   { vendor: 'RE:Vision', plugin: 'Twixtor', to: 'twixtor', test: /twixtor/i,
-    map: { speed: { n: ['speed %', 'speed'] }, frameBlend: { n: ['frame interp', 'frame interpolation', 'frame blending'], conv: (v) => v >= 2 } } },
+    map: { speed: { i: 5, n: ['speed %', 'speed'] }, frameBlend: { i: 1, n: ['frame interp', 'frame interpolation'], conv: (v) => v >= 2 } } },
+  { vendor: 'Red Giant', plugin: 'Magic Bullet Looks', to: 'looks', test: /^MB Look|magic ?bullet ?looks/i, expand: looksExpand },
+  { vendor: 'Red Giant', plugin: 'Magic Bullet Colorista / Mojo', to: 'colorGrade', test: /colorista|\bmojo\b/i },
+  { vendor: 'Video Copilot', plugin: 'Twitch', to: 'twitch', test: /twitch/i,
+    map: {
+      amount: { i: 2, n: ['amount'] }, speed: { i: 1, n: ['speed'] }, seed: { n: ['seed', 'random seed'] },
+      blur: { i: 7, n: ['blur', 'enable blur'] }, color: { i: 4, n: ['color', 'enable color'] }, light: { i: 5, n: ['light', 'enable light'] }, scale: { i: 6, n: ['scale', 'enable scale'] }, slide: { i: 8, n: ['slide', 'enable slide'] },
+      blurAmt: { n: ['blur amount'], conv: (v) => v * 0.6 }, colorAmt: { n: ['color amount'], conv: (v) => v * 0.4 }, lightAmt: { n: ['light amount'] },
+      scaleAmt: { n: ['scale amount'], conv: (v) => v * 0.4 }, slideAmt: { n: ['slide amount'], conv: (v) => v * 4 },
+    } },
+  { vendor: 'Sapphire', plugin: 'S_Shake', to: 'shake', test: /s_shake|s_camerashake/i,
+    map: { amount: { n: ['amplitude', 'shake amp', 'amp'], conv: (v) => (v < 20 ? v * 35 : v) }, frequency: { n: ['frequency', 'shake freq', 'freq'], conv: (v) => (v > 60 ? Math.min(40, v / 250) : v) }, rotation: { n: ['tilt rand amp', 'rotate amp'], conv: (v) => v * 0.05 }, seed: { n: ['seed'] } },
+    extra: (raw) => (raw('motion blur') ? [{ type: 'motionBlur', params: { amount: 100 * (raw('mo blur length') ?? 1), samples: 12 } }] : []) },
+  { vendor: 'Sapphire', plugin: 'S_BlurMoCurves', to: 'radialBlur', test: /s_blurmocurves/i, set: { mode: 1 },
+    map: { amount: { n: ['z dist'], conv: (z) => Math.min(100, Math.abs(1 - z) * 220) }, center: { n: ['center xy'] } } },
+  { vendor: 'Sapphire', plugin: 'S_Sharpen', to: 'sharpen', test: /s_sharpen/i,
+    map: { amount: { n: ['sharpen amp'], conv: (v) => v * 60 }, radius: { n: ['small detail size'], conv: (v) => v * 0.8 } } },
+  { vendor: 'Sapphire', plugin: 'S_HueSatBright', to: 'looks', test: /s_huesat/i,
+    expand: (fx, raw) => [{ type: 'looks', label: 'S_HueSatBright', params: { hue: (raw('hue shift') || 0) * 360, saturation: (raw('saturation') ?? 1) * 100, exposure: Math.log2(Math.max(0.01, raw('brightness') ?? 1)) } }] },
+  { vendor: 'Sapphire', plugin: 'S_MathOps', to: 'exposure', test: /s_mathops/i,
+    expand: (fx, raw) => [{ type: 'exposure', label: 'S_MathOps', params: { offset: (raw('a darks') || 0) + (raw('dest darks') || 0), exposure: Math.log2(Math.max(0.01, (raw('a lights') ?? 1) * (raw('dest lights') ?? 1))) } }] },
+  { vendor: 'Sapphire', plugin: 'S_FilmDamage / S_FilmEffect', to: 'filmLook', test: /s_film/i,
+    expand: (fx, raw) => [{ type: 'filmLook', label: fx.name, params: { grain: Math.min(100, (raw('grain amp') || 0) * 30), scratch: Math.min(100, (raw('dust density') || 0) * 10 + (raw('scratch density') || 0) * 10), vignette: 0, flicker: Math.min(100, (raw('flicker amp') || 0) * 100), warmth: 0, fade: 0 } }] },
+  { vendor: 'Sapphire', plugin: 'S_Flicker', to: 'flicker', test: /s_flicker/i,
+    map: { amount: { n: ['amplitude'], conv: (v) => v * 100 }, frequency: { n: ['rand freq'], conv: (v) => Math.min(60, v) }, colorAmount: { n: ['rand color amp'], conv: (v) => v * 100 }, brightness: { n: ['brightness'] } } },
+  { vendor: 'BCC', plugin: 'BCC Directional Blur', to: 'dirBlur', test: /bcc.*(directional|motion).*blur/i,
+    map: { length: { i: 2, n: ['blur amount'], conv: (v) => v * 1.5 }, angle: { i: 3, n: ['angle'] } } },
+  { vendor: 'BCC', plugin: 'BCC Unsharp Mask', to: 'sharpen', test: /bcc.*(unsharp|sharpen)/i,
+    map: { radius: { n: ['radius'], conv: (v) => v * 0.25 }, amount: { n: ['amount'], conv: (v) => (v <= 5 ? v * 100 : v) }, threshold: { n: ['threshold'] } } },
   { vendor: 'RE:Vision', plugin: 'ReelSmart Motion Blur', to: 'motionBlur', test: /reelsmart|\brsmb\b|motion ?blur ?pro/i,
     map: { amount: { n: ['blur amount', 'motion blur amount'], conv: (v) => (v <= 4 ? v * 200 : v) } } },
   { vendor: 'Plugin Everything', plugin: 'Deep Glow', to: 'deepGlow', test: /deep ?glow|\bpedg\b/i,
     map: { radius: { n: ['radius'] }, exposure: { n: ['exposure', 'intensity'] }, threshold: { n: ['threshold'], conv: pct }, tint: { n: ['tint color', 'color'] }, useTint: { n: ['tint', 'enable tint'] }, aspect: { n: ['aspect ratio', 'aspect'] } } },
-  { vendor: 'Video Copilot', plugin: 'Twitch', to: 'twitch', test: /twitch/i,
-    map: {
-      amount: { n: ['amount'] }, speed: { n: ['speed'] }, seed: { n: ['random seed', 'seed'] },
-      blur: { n: ['blur', 'enable blur'] }, color: { n: ['color', 'enable color'] }, light: { n: ['light', 'enable light'] }, scale: { n: ['scale', 'enable scale'] }, slide: { n: ['slide', 'enable slide'] },
-      blurAmt: { n: ['blur amount', 'max blur'] }, colorAmt: { n: ['color amount', 'rgb offset'] }, lightAmt: { n: ['light amount', 'exposure'] }, scaleAmt: { n: ['scale amount'] }, slideAmt: { n: ['slide amount', 'slide distance'] },
-    } },
   { vendor: 'Video Copilot', plugin: 'Optical Flares', to: 'lensFlare', test: /optical ?flares?/i, map: { brightness: { n: ['brightness'] }, size: { n: ['scale', 'size'] } } },
   { vendor: 'Video Copilot', plugin: 'Saber', to: 'deepGlow', test: /\bsaber\b/i, map: { exposure: { n: ['glow intensity'] }, radius: { n: ['glow spread', 'glow size'], conv: (v) => v * 100 }, tint: { n: ['glow color'] } }, set: { useTint: true } },
   { vendor: 'Video Copilot', plugin: 'Heat Distortion', to: 'turbulentDisplace', test: /heat ?distort/i },
   { vendor: 'Red Giant', plugin: 'Shine', to: 'lightRays', test: /\bshine\b/i, map: { length: { n: ['ray length'], conv: (v) => Math.min(100, v * 10) }, intensity: { n: ['boost light'] } } },
   { vendor: 'Red Giant', plugin: 'Starglow', to: 'deepGlow', test: /starglow/i, map: { radius: { n: ['streak length'], conv: (v) => v * 3 }, exposure: { n: ['boost light'] }, threshold: { n: ['threshold'], conv: (v) => v / 2.55 } } },
-  { vendor: 'Red Giant', plugin: 'Magic Bullet Looks / Colorista / Mojo', to: 'colorGrade', test: /magic ?bullet|\blooks\b|colorista|\bmojo\b/i },
   { vendor: 'Red Giant', plugin: 'Universe Glow', to: 'deepGlow', test: /uni\.? ?glow|universe.*glow/i },
   { vendor: 'Red Giant', plugin: 'Universe Shake', to: 'shake', test: /uni\.?.*shake|universe.*shake/i },
   { vendor: 'Red Giant', plugin: 'Universe Glitch', to: 'glitch', test: /uni\.?.*(glitch|damage)|universe.*glitch/i },
@@ -43,23 +127,17 @@ export const IMPORT_RULES = [
   // Sapphire (Boris FX)
   { vendor: 'Sapphire', plugin: 'S_Glow', to: 'deepGlow', test: /s_glow/i,
     map: { radius: { n: ['width'], conv: (v) => (v < 5 ? v * 500 : v) }, exposure: { n: ['brightness'] }, threshold: { n: ['threshold'], conv: pct }, tint: { n: ['color'] } }, set: { useTint: false } },
-  { vendor: 'Sapphire', plugin: 'S_Shake', to: 'shake', test: /s_shake|s_camerashake/i,
-    map: { amount: { n: ['amplitude', 'shake amp', 'amp'], conv: (v) => (v < 5 ? v * 100 : v) }, frequency: { n: ['frequency', 'shake freq', 'freq'] }, rotation: { n: ['rotate amp', 'rotation'] }, seed: { n: ['seed'] } } },
-  { vendor: 'Sapphire', plugin: 'S_BlurMoCurves', to: 'dirBlur', test: /s_blurmo|s_blurmotion|s_blurdirectional/i, map: { length: { n: ['length', 'blur length'], conv: (v) => (v < 5 ? v * 200 : v) }, angle: { n: ['angle', 'direction'] } } },
   { vendor: 'Sapphire', plugin: 'S_ZoomBlur', to: 'radialBlur', test: /s_zoomblur|s_blurzoom|s_radialblur/i, set: { mode: 1 } },
   { vendor: 'Sapphire', plugin: 'S_Blur', to: 'blur', test: /s_blur/i, map: { radius: { n: ['width', 'blur amount'], conv: (v) => (v < 5 ? v * 100 : v) } } },
   { vendor: 'Sapphire', plugin: 'S_WarpChroma', to: 'rgbSplit', test: /s_warpchroma|s_chroma/i, set: { mode: 2 }, map: { amount: { n: ['amount', 'shift'], conv: (v) => (v < 5 ? v * 60 : v) } } },
   { vendor: 'Sapphire', plugin: 'S_LensFlare', to: 'lensFlare', test: /s_lensflare|s_flare/i },
   { vendor: 'Sapphire', plugin: 'S_Rays', to: 'lightRays', test: /s_rays/i },
-  { vendor: 'Sapphire', plugin: 'S_FilmEffect / S_FilmDamage', to: 'filmLook', test: /s_film/i },
   { vendor: 'Sapphire', plugin: 'S_DigitalDamage', to: 'glitch', test: /s_digitaldamage|s_glitch|s_damage/i },
   { vendor: 'Sapphire', plugin: 'S_TVDamage', to: 'vhs', test: /s_tv|s_retro/i },
   { vendor: 'Sapphire', plugin: 'S_Vignette', to: 'vignette', test: /s_vignette/i },
   { vendor: 'Sapphire', plugin: 'S_Kaleido', to: 'kaleida', test: /s_kaleid/i },
   { vendor: 'Sapphire', plugin: 'S_Distort', to: 'turbulentDisplace', test: /s_distort|s_warp/i },
-  { vendor: 'Sapphire', plugin: 'S_HueSatBright', to: 'hueSat', test: /s_huesat/i },
   { vendor: 'Sapphire', plugin: 'S_Mosaic', to: 'mosaic', test: /s_mosaic/i },
-  { vendor: 'Sapphire', plugin: 'S_Flicker', to: 'strobe', test: /s_flicker/i, set: { mode: 3, blend: 30 } },
 
   // BCC (Boris Continuum)
   { vendor: 'BCC', plugin: 'BCC Glow / Film Glow', to: 'deepGlow', test: /bcc.*glow/i, map: { radius: { n: ['glow radius', 'radius'] }, exposure: { n: ['glow intensity', 'intensity'], conv: (v) => (v > 10 ? v / 100 : v) } } },
@@ -72,7 +150,6 @@ export const IMPORT_RULES = [
   { vendor: 'BCC', plugin: 'BCC Wiggle / Shake', to: 'shake', test: /bcc.*(shake|wiggle|jitter)/i },
   { vendor: 'BCC', plugin: 'BCC Rays', to: 'lightRays', test: /bcc.*rays/i },
   { vendor: 'BCC', plugin: 'BCC Radial / Zoom Blur', to: 'radialBlur', test: /bcc.*(radial|zoom|spin).*blur/i },
-  { vendor: 'BCC', plugin: 'BCC Directional Blur', to: 'dirBlur', test: /bcc.*(directional|motion).*blur/i },
   { vendor: 'BCC', plugin: 'BCC Blur', to: 'blur', test: /bcc.*blur/i, map: { radius: { n: ['blur radius', 'blur amount', 'amount'] } } },
   { vendor: 'BCC', plugin: 'BCC Film', to: 'filmLook', test: /bcc.*film/i },
   { vendor: 'BCC', plugin: 'BCC Vignette', to: 'vignette', test: /bcc.*vignette/i },
@@ -83,6 +160,17 @@ export const IMPORT_RULES = [
   { vendor: 'BCC', plugin: 'BCC Flicker / Strobe', to: 'strobe', test: /bcc.*(flicker|strobe)/i },
 
   // ---------------------------------------------------------------- nativos do After Effects
+  { vendor: ADOBE, plugin: 'Exposure', to: 'exposure', match: ['ADBE Exposure2'], map: { exposure: { i: 3, n: ['exposure'] }, offset: { i: 4, n: ['offset'] }, gamma: { i: 5, n: ['gamma correction', 'gamma'] } } },
+  { vendor: ADOBE, plugin: 'Hue/Saturation', to: 'hueSat', match: ['ADBE HUE SATURATION'],
+    map: { hue: { i: 4, n: ['master hue'] }, saturation: { i: 5, n: ['master saturation'] }, lightness: { i: 6, n: ['master lightness'] }, colorize: { i: 7, n: ['colorize'] } } },
+  { vendor: ADOBE, plugin: 'Color Balance (HLS)', to: 'hueSat', match: ['ADBE Color Balance (HLS)'], map: { hue: { i: 1, n: ['hue'] }, lightness: { i: 2, n: ['lightness'] }, saturation: { i: 3, n: ['saturation'] } } },
+  { vendor: ADOBE, plugin: 'Motion Tile', to: 'motionTile', match: ['ADBE Tile'], map: { outW: { i: 4, n: ['output width'] }, outH: { i: 5, n: ['output height'] }, mirror: { i: 6, n: ['mirror edges'] } } },
+  { vendor: ADOBE, plugin: '4-Color Gradient', to: 'fourColor', match: ['ADBE 4ColorGradient'],
+    map: { p1: { i: 1 }, c1: { i: 2 }, p2: { i: 3 }, c2: { i: 4 }, p3: { i: 5 }, c3: { i: 6 }, p4: { i: 7 }, c4: { i: 8 }, blend: { i: 9 }, opacity: { i: 13 }, mode: { i: 14, conv: (v) => AE_BLEND[v] ?? 2 } } },
+  { vendor: ADOBE, plugin: 'Unsharp Mask', to: 'sharpen', match: ['ADBE Unsharp Mask2', 'ADBE Unsharp Mask'], map: { amount: { i: 1 }, radius: { i: 2 }, threshold: { i: 3 } } },
+  { vendor: ADOBE, plugin: 'Sharpen', to: 'sharpen', match: ['ADBE Sharpen'], map: { amount: { i: 1, conv: (v) => v * 2 } }, set: { radius: 1 } },
+  { vendor: ADOBE, plugin: 'Warp', to: 'warp', match: ['ADBE WRPMESH'], map: { style: { i: 1 }, axis: { i: 2 }, bend: { i: 3 }, hDist: { i: 4 }, vDist: { i: 5 } } },
+  { vendor: ADOBE, plugin: 'Photo Filter', to: 'photoFilter', match: ['ADBE Photo Filter'], map: { color: { n: ['color'] }, density: { n: ['density'] }, preserve: { n: ['preserve luminosity'] } } },
   { vendor: ADOBE, plugin: 'Gaussian / Fast / Box Blur', to: 'blur', match: ['ADBE Gaussian Blur 2', 'ADBE Gaussian Blur', 'ADBE Fast Blur', 'ADBE Box Blur2', 'ADBE Box Blur', 'ADBE Camera Lens Blur', 'ADBE Compound Blur'],
     map: { radius: { i: 1, n: ['blurriness', 'blur radius', 'radius'] }, dims: { i: 2, n: ['blur dimensions'] } } },
   { vendor: ADOBE, plugin: 'Directional Blur', to: 'dirBlur', match: ['ADBE Motion Blur'], map: { angle: { i: 1, n: ['direction'] }, length: { i: 2, n: ['blur length'] } } },
@@ -91,10 +179,7 @@ export const IMPORT_RULES = [
   { vendor: ADOBE, plugin: 'Pixel Motion Blur / CC Force Motion Blur', to: 'motionBlur', match: ['ADBE Pixel Motion Blur', 'CC Force Motion Blur'], map: { amount: { n: ['shutter angle'], conv: (v) => (v / 180) * 100 }, samples: { n: ['shutter samples', 'motion blur levels'] } } },
   { vendor: ADOBE, plugin: 'Glow', to: 'glow', match: ['ADBE Glo2', 'ADBE Glow'],
     map: { threshold: { i: 2, n: ['glow threshold'], conv: pct }, radius: { i: 3, n: ['glow radius'] }, intensity: { i: 4, n: ['glow intensity'] }, color: { i: 9, n: ['color a'] } } },
-  { vendor: ADOBE, plugin: 'Exposure', to: 'exposure', match: ['ADBE Exposure2'], map: { exposure: { n: ['exposure'] }, offset: { n: ['offset'] }, gamma: { n: ['gamma correction', 'gamma'] } } },
   { vendor: ADOBE, plugin: 'Brightness & Contrast', to: 'brightnessContrast', match: ['ADBE Brightness & Contrast 2', 'ADBE Brightness & Contrast'], map: { brightness: { i: 1, n: ['brightness'] }, contrast: { i: 2, n: ['contrast'] } } },
-  { vendor: ADOBE, plugin: 'Hue/Saturation', to: 'hueSat', match: ['ADBE HUE SATURATION', 'ADBE Color Balance (HLS)'],
-    map: { hue: { n: ['master hue', 'hue'] }, saturation: { n: ['master saturation', 'saturation', 'colorize saturation'] }, lightness: { n: ['master lightness', 'lightness'] }, colorize: { n: ['colorize'] } } },
   { vendor: ADOBE, plugin: 'Levels', to: 'levels', match: ['ADBE Easy Levels2', 'ADBE Pro Levels2', 'ADBE Easy Levels'],
     map: { inBlack: { n: ['input black'], conv: to255 }, inWhite: { n: ['input white'], conv: to255 }, gamma: { n: ['gamma'] }, outBlack: { n: ['output black'], conv: to255 }, outWhite: { n: ['output white'], conv: to255 } } },
   { vendor: ADOBE, plugin: 'Lumetri Color', to: 'colorGrade', match: ['ADBE Lumetri'],
@@ -118,7 +203,6 @@ export const IMPORT_RULES = [
   { vendor: ADOBE, plugin: 'Optics Compensation', to: 'optics', match: ['ADBE Optics Compensation'], map: { fov: { n: ['field of view (fov)', 'field of view'] }, reverse: { n: ['reverse lens distortion'] } } },
   { vendor: ADOBE, plugin: 'Mirror', to: 'mirror', match: ['ADBE Mirror'], map: { angle: { n: ['reflection angle'] } } },
   { vendor: 'Cycore (CC)', plugin: 'CC Kaleida', to: 'kaleida', match: ['CC Kaleida'], map: { rotation: { n: ['rotation'] } } },
-  { vendor: ADOBE, plugin: 'Motion Tile', to: 'motionTile', match: ['ADBE Tile'], map: { outW: { n: ['output width'] }, outH: { n: ['output height'] }, mirror: { n: ['mirror edges'] } } },
   { vendor: ADOBE, plugin: 'Drop Shadow', to: 'dropShadow', match: ['ADBE Drop Shadow'],
     map: { color: { i: 1, n: ['shadow color'] }, opacity: { i: 2, n: ['opacity'], conv: (v) => (v > 100 ? v / 2.55 : v) }, angle: { i: 3, n: ['direction'] }, distance: { i: 4, n: ['distance'] }, softness: { i: 5, n: ['softness'] }, only: { i: 6, n: ['shadow only'] } } },
   { vendor: ADOBE, plugin: 'Mosaic', to: 'mosaic', match: ['ADBE Mosaic'], map: { hBlocks: { i: 1, n: ['horizontal blocks'] }, vBlocks: { i: 2, n: ['vertical blocks'] } } },
@@ -185,10 +269,14 @@ export function findParam(params, mapping, fallbackNames = []) {
     const hit = params.find((p) => normalize(p.name) === n);
     if (hit) return hit;
   }
+  // índice antes de nome parcial: funciona com After Effects em outros idiomas (ex.: alemão)
+  if (mapping?.i != null) {
+    const hit = params.find((p) => p.index === mapping.i);
+    if (hit) return hit;
+  }
   for (const n of mapping?.n || []) {
     const hit = params.find((p) => normalize(p.name).includes(normalize(n)));
     if (hit) return hit;
   }
-  if (mapping?.i != null) return params.find((p) => p.index === mapping.i) || null;
   return null;
 }

@@ -66,9 +66,14 @@ export function pluginsFFX() {
       { name: 'Amplitude', type: 'slider', values: [0.3] },
       { name: 'Frequency', type: 'slider', values: [12] },
     ]),
+    // mesma ordem de índices do Twitch real (Videocopilot Twitch-0001 speed, -0002 Amount, -0004 Color…)
     effectBlock('VIDEOCOPILOT Twitch', 'Twitch', [
-      { name: 'Amount', type: 'slider', values: [70] },
       { name: 'Speed', type: 'slider', values: [8] },
+      { name: 'Amount', type: 'slider', values: [70] },
+      { name: 'Colorize', type: 'color', values: [255, 255, 255, 255] },
+      { name: 'Color', type: 'checkbox', values: [0] },
+      { name: 'Light', type: 'checkbox', values: [0] },
+      { name: 'Scale', type: 'checkbox', values: [0] },
       { name: 'Blur', type: 'checkbox', values: [1] },
       { name: 'Slide', type: 'checkbox', values: [1] },
     ]),

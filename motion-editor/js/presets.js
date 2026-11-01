@@ -113,7 +113,10 @@ function convertValue(raw, kind, conv) {
     }
     case 'bool': v = raw[0] >= 0.5; break;
     case 'point': v = [raw[0] || 0, raw[1] || 0]; break;
-    case 'pos': return undefined; // pontos do AE estão em px da camada original — mantém o padrão
+    case 'pos': // o AE guarda pontos como fração da camada (0..1); valores fora disso não são confiáveis
+      if (raw.length < 2 || Math.abs(raw[0]) > 3 || Math.abs(raw[1]) > 3) return undefined;
+      v = [raw[0], raw[1]];
+      break;
     case 'select': v = Math.max(1, Math.round(raw[0])); break;
     default: v = raw[0];
   }
@@ -145,7 +148,18 @@ export function ffxToPreset(parsed) {
       matchName: fx.matchName, name: fx.name || fx.matchName, status: 'unsupported', mapped: [],
       params: fx.params.map((p) => ({ name: p.name, type: p.type, value: p.value, keys: p.keyframes.length })),
     };
-    if (m) {
+    const raw = (name) => fx.params.find((p) => (p.name || '').toLowerCase().trim() === name)?.value?.[0] ?? null;
+    if (m && m.rule.expand) {
+      // regra que gera um ou mais efeitos a partir do efeito original (ex.: Magic Bullet Looks)
+      const list = m.rule.expand(fx, raw);
+      for (const e of list) preset.effects.push({ type: e.type, label: e.label, matchName: fx.matchName, params: e.params });
+      rep.status = m.kind;
+      rep.vendor = m.rule.vendor;
+      rep.plugin = m.rule.plugin;
+      rep.mappedTo = list.map((e) => getEffectDef(e.type).label).join(' + ');
+      rep.mapped = list.map((e) => e.note).filter(Boolean);
+      if (!rep.mapped.length) rep.mapped = ['valores convertidos'];
+    } else if (m) {
       const { def, rule } = m;
       const inst = { type: def.type, label: fx.name && fx.name !== fx.matchName ? fx.name : undefined, matchName: fx.matchName, params: {} };
       const used = new Set();
@@ -160,10 +174,7 @@ export function ffxToPreset(parsed) {
         rep.mapped.push(`${src.name || src.matchName} → ${pd.label}${src.keyframes.length ? ` (${src.keyframes.length} keyframes)` : ''}`);
       }
       Object.assign(inst.params, rule.set || {});
-      if (rule.post) {
-        const raw = (name) => fx.params.find((p) => (p.name || '').toLowerCase() === name)?.value?.[0] ?? null;
-        rule.post(inst.params, raw);
-      }
+      if (rule.post) rule.post(inst.params, raw);
       if (def.type === 'glow' && inst.params.color !== undefined) inst.params.useColor = true;
       if (def.type === 'deepGlow' && inst.params.tint !== undefined && inst.params.useTint === undefined) inst.params.useTint = true;
       rep.status = m.kind;
@@ -171,6 +182,10 @@ export function ffxToPreset(parsed) {
       rep.plugin = rule.plugin;
       rep.mappedTo = def.label;
       preset.effects.push(inst);
+      for (const e of rule.extra?.(raw) || []) {
+        preset.effects.push({ type: e.type, matchName: fx.matchName, params: e.params });
+        rep.mappedTo += ` + ${getEffectDef(e.type).label}`;
+      }
     } else {
       const defs = [];
       const params = {};
