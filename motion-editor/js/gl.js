@@ -214,6 +214,7 @@ export class GLEngine {
         gl.uniform1i(l, unit++);
       } else if (v && v.vec3) gl.uniform3fv(l, v.vec3); // vetor de vec3 (ex.: uniform vec3 u_hsl[8])
       else if (v && v.vec2) gl.uniform2fv(l, v.vec2);
+      else if (v && v.f1) gl.uniform1fv(l, v.f1);
       else if (typeof v === 'number' || typeof v === 'boolean') gl.uniform1f(l, +v);
       else if (Array.isArray(v)) {
         if (v.length === 2) gl.uniform2fv(l, v);
@@ -274,6 +275,7 @@ export class GLEngine {
       const l = this.loc(p, name);
       if (l === null) continue;
       if (v && v.tex) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, v.tex); gl.uniform1i(l, unit++); }
+      else if (v && v.f1) gl.uniform1fv(l, v.f1);
       else if (typeof v === 'number' || typeof v === 'boolean') gl.uniform1f(l, +v);
       else if (Array.isArray(v)) [null, null, gl.uniform2fv, gl.uniform3fv, gl.uniform4fv][v.length]?.call(gl, l, v);
     }

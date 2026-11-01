@@ -148,3 +148,15 @@ test('presets nativos usam só efeitos/parâmetros existentes (inclui Shatter e 
   assert.equal(matchEffect('ADBE Shatter').def.type, 'shatter');
   assert.equal(matchEffect('S_TimeSlice').def.type, 'timeSlice');
 });
+
+test('Shatter do AE (APC Shatter) é convertido com raio animado e duas forças', async () => {
+  const { readFileSync } = await import('node:fs');
+  const b = readFileSync(new URL('../presets/free/Shatter/W Shatter.ffx', import.meta.url));
+  const pr = ffxToPreset(parseFFX(b.buffer.slice(b.byteOffset, b.byteOffset + b.length), { fps: 30 }));
+  assert.deepEqual(pr.effects.map((e) => e.type), ['fill', 'shatter', 'deepGlow']);
+  const sh = pr.effects[1].params;
+  assert.equal(sh.radius.keys.length, 2);
+  assert.equal(sh.strength, 15);
+  assert.equal(sh.force2On, true);
+  assert.equal(pr.effects[2].params.useTint, false); // Deep Glow: tint desligado no .ffx
+});

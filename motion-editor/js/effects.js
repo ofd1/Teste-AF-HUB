@@ -9,6 +9,12 @@ import extra from './fx/extra.js';
 import shatter from './fx/shatter.js';
 
 export const EFFECTS = [...blurLight, ...color, ...extra, ...distort, ...stylize, ...motion, ...shatter];
+// Como no AE (Compositing Options): todo efeito que altera a imagem tem "Opacidade do efeito", animável.
+for (const e of EFFECTS) {
+  if (e.render && !e.params.some((p) => p.key === 'fxOpacity')) {
+    e.params.push({ key: 'fxOpacity', label: 'Opacidade do efeito %', kind: 'number', default: 100, min: 0, max: 100, step: 1, advanced: true });
+  }
+}
 export const EFFECT_MAP = Object.fromEntries(EFFECTS.map((e) => [e.type, e]));
 export const CATEGORIES = ['Luz e brilho', 'Movimento', 'Tempo', 'Desfoque', 'Estilizar', 'Distorção', 'Cor', 'Transições'];
 

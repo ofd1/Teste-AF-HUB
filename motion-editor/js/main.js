@@ -1,4 +1,5 @@
 import { Store, LAYER_FACTORIES, RESOLUTIONS, createProject } from './state.js';
+import { compDialog } from './comp-dialog.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
 import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, detectFps } from './media.js';
 import { loadAudio, playAudio, stopAudio, detectBeats } from './audio.js';
@@ -486,37 +487,30 @@ async function openProject() {
 
 async function compSettings() {
   const p = store.project;
-  const res = await modal('Projeto', `
-    <label class="row"><span>Nome</span><input type="text" data-f="name" value="${(p.name || 'Meu edit').replace(/"/g, '&quot;')}"></label>
-    <label class="row"><span>Formato</span><select data-f="res">${Object.entries(RESOLUTIONS).map(([k, l]) => `<option value="${k}" ${k === `${p.width}x${p.height}` ? 'selected' : ''}>${l} (${k})</option>`).join('')}<option value="custom" ${RESOLUTIONS[`${p.width}x${p.height}`] ? '' : 'selected'}>Personalizado</option></select></label>
-    <label class="row"><span>Largura</span><input type="number" data-f="w" value="${p.width}" min="16" max="4096"></label>
-    <label class="row"><span>Altura</span><input type="number" data-f="h" value="${p.height}" min="16" max="4096"></label>
-    <label class="row"><span>FPS</span><select data-f="fps">${[24, 25, 30, 50, 60].map((f) => `<option ${f === p.fps ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
-    <label class="row"><span>Duração (s)</span><input type="number" data-f="dur" value="${p.duration}" min="0.5" max="600" step="0.1"></label>
-    <label class="row"><span>Fundo</span><input type="color" data-f="bg" value="${p.background}"></label>`,
-  [{ label: 'Cancelar', value: null }, { label: 'Aplicar', primary: true, value: (w) => ({
-    name: w.querySelector('[data-f="name"]').value, w: +w.querySelector('[data-f="w"]').value, h: +w.querySelector('[data-f="h"]').value,
-    fps: +w.querySelector('[data-f="fps"]').value, dur: +w.querySelector('[data-f="dur"]').value, bg: w.querySelector('[data-f="bg"]').value,
-  }) }], {
-    onMount: (w) => w.querySelector('[data-f="res"]').addEventListener('change', (e) => {
-      if (e.target.value === 'custom') return;
-      const [a, b] = e.target.value.split('x');
-      w.querySelector('[data-f="w"]').value = a;
-      w.querySelector('[data-f="h"]').value = b;
-    }),
-  });
+  const res = await compDialog({ mode: 'edit', project: p, resolution: qualitySel.value });
   if (!res) return;
-  const sx = res.w / p.width, sy = res.h / p.height;
+  applyResolution(res.resolution);
+  const sx = res.width / p.width, sy = res.height / p.height;
   if (sx !== 1 || sy !== 1) {
+    // como no AE: a âncora define para onde o conteúdo "cresce"; opcionalmente escala as camadas
+    const [ax, ay] = res.anchor;
+    const dx = (res.width - p.width) * ax, dy = (res.height - p.height) * ay;
+    const k = Math.min(sx, sy);
     for (const l of p.layers) {
       const pos = l.transform.position;
-      pos.value = [pos.value[0] * sx, pos.value[1] * sy];
-      pos.keys.forEach((k) => { k.v = [k.v[0] * sx, k.v[1] * sy]; });
-      if (l.type === 'solid') { l.props.width = res.w; l.props.height = res.h; }
+      const mv = (v) => (res.scaleLayers ? [v[0] * sx, v[1] * sy] : [v[0] + dx, v[1] + dy]);
+      pos.value = mv(pos.value);
+      pos.keys.forEach((kk) => { kk.v = mv(kk.v); });
+      if (res.scaleLayers && l.type !== 'solid' && l.type !== 'adjustment') {
+        const sc = l.transform.scale;
+        sc.value = sc.value.map((v) => v * k);
+        sc.keys.forEach((kk) => { kk.v = kk.v.map((v) => v * k); });
+      }
+      if (l.type === 'solid') { l.props.width = res.width; l.props.height = res.height; }
     }
   }
   const oldDur = p.duration;
-  Object.assign(p, { name: res.name, width: Math.round(res.w), height: Math.round(res.h), fps: res.fps, duration: Math.max(0.5, res.dur), background: res.bg });
+  Object.assign(p, { name: res.name, width: res.width, height: res.height, fps: res.fps, duration: res.duration, background: res.background, startTC: res.startTC });
   for (const l of p.layers) {
     if (l.outPoint >= oldDur - 1e-3 && l.type !== 'video' && l.type !== 'audio') l.outPoint = p.duration;
     l.outPoint = Math.min(l.outPoint, p.duration);
@@ -527,16 +521,32 @@ async function compSettings() {
   layoutCanvas();
 }
 
+function applyResolution(r) {
+  if (r && [...qualitySel.options].some((o) => o.value === r)) { qualitySel.value = r; quality = curQuality(); layoutCanvas(); }
+}
+
+async function newComposition() {
+  const res = await compDialog({ mode: 'new', project: store.project, hasContent: store.project.layers.length > 0, resolution: qualitySel.value });
+  if (!res) return;
+  const p = createProject(res.width, res.height);
+  Object.assign(p, { name: res.name, fps: res.fps, duration: res.duration, background: res.background, startTC: res.startTC });
+  store.load(p);
+  applyResolution(res.resolution);
+  updateTitle();
+  layoutCanvas();
+  toast(`Composição “${res.name}” criada: ${res.width}×${res.height}, ${res.fps} fps, ${res.duration.toFixed(2)}s.`, 'ok');
+}
+
 function updateTitle() {
   document.getElementById('projTitle').textContent = store.project.name || 'Meu edit';
 }
 
 async function showMenu() {
   const res = await modal('Menu', `<div class="menu-list">
-    <button data-m="new">✚ Novo projeto</button>
+    <button data-m="new">✚ Nova composição (projeto)</button>
     <button data-m="open">📂 Abrir projeto (.json)</button>
     <button data-m="save">💾 Salvar projeto (.json)</button>
-    <button data-m="comp">⚙ Formato, FPS e duração</button>
+    <button data-m="comp">⚙ Configurações da composição</button>
     <button data-m="ffx">⤒ Importar preset .ffx do After Effects</button>
     <button data-m="about">ⓘ Sobre os efeitos e plugins</button>
   </div>`, [{ label: 'Fechar', value: null }], {
@@ -579,10 +589,7 @@ function deleteSelection() {
 const frame = () => 1 / store.project.fps;
 const commands = {
   menu: showMenu,
-  new: async () => {
-    const ok = await modal('Novo projeto', '<p>Descartar o projeto atual e começar do zero?</p>', [{ label: 'Cancelar', value: false }, { label: 'Novo projeto', value: true, danger: true }]);
-    if (ok) { store.load(createProject(store.project.width, store.project.height)); updateTitle(); layoutCanvas(); }
-  },
+  new: newComposition,
   undo: () => store.undo(),
   redo: () => store.redo(),
   add: () => openSheet('add'),

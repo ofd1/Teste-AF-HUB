@@ -1,6 +1,6 @@
 {
-  "generated": "2026-11-01T18:27:33.780Z",
-  "count": 10,
+  "generated": "2026-11-01T19:15:24.850Z",
+  "count": 11,
   "presets": [
     {
       "name": "FTB AEP CC",
@@ -41,6 +41,11 @@
       "name": "ZAZ Shake",
       "category": "Shakes",
       "file": "presets/free/Shakes/ZAZ Shake.ffx"
+    },
+    {
+      "name": "W Shatter",
+      "category": "Shatter",
+      "file": "presets/free/Shatter/W Shatter.ffx"
     },
     {
       "name": "Sonhei Reverse",

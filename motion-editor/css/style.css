@@ -339,3 +339,31 @@ input[type="number"], input[type="text"], input[type="search"], select, textarea
 .tl-empty { position: sticky; left: 0; width: 100%; max-width: 100vw; padding: 22px; color: var(--muted); text-align: center; font-size: 13px; }
 .save-sheet .save-preview { display: block; width: 100%; max-height: 42vh; object-fit: contain; background: #000; border-radius: 4px; }
 .save-sheet .big { padding: 14px; font-size: 16px; font-weight: 700; }
+
+/* ---------- Configurações da composição (estilo AE) ---------- */
+.comp-dlg { width: min(560px, 100%); }
+.comp-dlg .modal-body { font-size: 13px; }
+.cd-name { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.cd-name input { flex: 1; }
+.cd-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.cd-tabs button { border: 0; border-radius: 3px 3px 0 0; background: none; color: var(--muted); padding: 6px 14px; }
+.cd-tabs button.on { background: var(--panel-2); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+.cd-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; gap: 4px 8px; margin: 8px 0; }
+.cd-row > span { color: var(--muted); text-align: right; }
+.cd-row > em { grid-column: 2; font-style: normal; color: var(--muted); font-size: 11.5px; }
+.cd-size { grid-template-columns: 150px 90px auto; }
+.cd-size > span:nth-of-type(2) { grid-column: 1; }
+.cd-size > em { grid-column: auto; }
+.cd-check { display: flex; align-items: center; gap: 8px; margin: 6px 0 6px 158px; color: var(--muted); }
+.cd-anchor { display: grid; grid-template-columns: repeat(3, 26px); gap: 3px; }
+.cd-anchor button { width: 26px; height: 26px; padding: 0; border-radius: 2px; background: #161616; }
+.cd-anchor button.on { background: var(--accent); }
+@media (max-width: 520px) {
+  .cd-row { grid-template-columns: 1fr; }
+  .cd-row > span { text-align: left; }
+  .cd-row > em { grid-column: 1; }
+  .cd-size { grid-template-columns: 1fr 1fr; }
+  .cd-size > span { grid-column: auto !important; }
+  .cd-size > em { display: none; }
+  .cd-check { margin-left: 0; }
+}

@@ -143,7 +143,7 @@ function renderLayerImage(layer, t, scale, extra) {
     const p = evalParams(fx, lt);
     // efeitos de "motion blur por curva" (S_BlurMoCurves) precisam do valor um obturador atrás
     const prev = def.usesPrev ? evalParams(fx, lt - (p.shutter ?? 1) / fps) : null;
-    return { def, p, prev };
+    return { def, p, prev, fx };
   });
   let pad = 2;
   for (const { def, p } of evaluated) pad += def.pad ? Math.max(0, def.pad(p, { w, h, layer })) : 0;
@@ -193,8 +193,14 @@ function renderLayerImage(layer, t, scale, extra) {
   const rect = [pad / tex.w, pad / tex.h, (w * scale) / tex.w, (h * scale) / tex.h];
   gl.env = { u_time: lt, u_scale: scale, u_rect: rect };
   const env = { gl, t: lt, scale, pad, w, h, W: tex.w, H: tex.h, rect, layer, fps };
-  for (const { def, p, prev } of evaluated) {
-    try { tex = def.render(tex, p, env, prev) || tex; } catch (e) { console.warn('efeito falhou', def.type, e); }
+  for (const { def, p, prev, fx } of evaluated) {
+    try {
+      const input = tex;
+      tex = def.render(input, p, { ...env, paramsAt: (tt) => evalParams(fx, tt) }, prev) || input;
+      // Opacidade do efeito (AE: Compositing Options → Effect Opacity)
+      const op = p.fxOpacity ?? 100;
+      if (op < 99.95 && tex !== input) tex = gl.mix(input, tex, Math.max(0, op) / 100);
+    } catch (e) { console.warn('efeito falhou', def.type, e); }
   }
   const out = gl.toCanvas(tex);
   gl.releaseAll();

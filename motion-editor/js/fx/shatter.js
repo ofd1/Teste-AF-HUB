@@ -6,32 +6,72 @@ import { frag, num, ang, bool, sel, pos, col, rgb, rad, hash1 } from './common.j
 const SHARD_VERT = `
 precision highp float;
 attribute vec2 a_pos; attribute vec2 a_cen; attribute vec3 a_rnd;
-uniform float u_t, u_asp, u_radius, u_strength, u_rand, u_spin, u_grav, u_gdir, u_focal, u_depth, u_zpush;
-uniform vec3 u_force;
+uniform float u_t, u_asp, u_rand, u_spin, u_grav, u_gdir, u_ginc, u_focal, u_zpush, u_visc, u_mass, u_tumble;
+uniform vec4 u_f1, u_f2;          // força: x, y, profundidade, intensidade
+uniform float u_r1[16], u_r2[16], u_th[16]; // raio de cada força ao longo do tempo (raio animado = onda de quebra)
+uniform float u_nh, u_f2on;
 uniform vec4 u_rect;
-varying vec2 v_src; varying float v_shade; varying float v_broken; varying float v_spec;
+varying vec2 v_src; varying float v_shade; varying float v_broken; varying float v_spec; varying float v_age;
 vec3 rot(vec3 p, vec3 a, float ang) {
   float c = cos(ang), s = sin(ang);
   return p * c + cross(a, p) * s + a * dot(a, p) * (1.0 - c);
 }
+// instante em que a esfera de força alcança o caco (−1 = nunca)
+float hitTime(float dist, float which) {
+  float prevR = 0.0, prevT = 0.0;
+  for (int i = 0; i < 16; i++) {
+    if (float(i) >= u_nh) break;
+    float r = which < 0.5 ? u_r1[i] : u_r2[i];
+    float t = u_th[i];
+    if (r >= dist) {
+      if (i == 0) return t;
+      return mix(prevT, t, clamp((dist - prevR) / max(r - prevR, 1e-5), 0.0, 1.0));
+    }
+    prevR = r; prevT = t;
+  }
+  return -1.0;
+}
 void main() {
   vec3 c = vec3((a_cen.x - 0.5) * u_asp, a_cen.y - 0.5, 0.0);
   vec3 lp = vec3((a_pos.x - a_cen.x) * u_asp, a_pos.y - a_cen.y, 0.0);
-  vec3 f = vec3((u_force.x - 0.5) * u_asp, u_force.y - 0.5, -u_force.z);
-  vec3 d = c - f;
-  float dist = length(d);
-  // a esfera de força cresce rápido (como a frente de onda do AE): quebra de dentro para fora
-  float k = clamp(1.0 - dist / max(u_radius, 1e-4), 0.0, 1.0);
-  float broken = step(0.0001, k);
-  float delay = (1.0 - k) * 0.08;
-  float t = max(0.0, u_t - delay) * broken;
   vec3 rn = a_rnd * 2.0 - 1.0;
-  vec3 dir = normalize(d + vec3(0.0, 0.0, 1e-3));
-  vec3 vel = (dir * (0.35 + k) + rn * u_rand + vec3(0.0, 0.0, u_zpush * (0.5 + a_rnd.z))) * u_strength * 0.075;
-  vec3 g = vec3(sin(u_gdir), cos(u_gdir), 0.0) * u_grav * 0.05;
-  vec3 p = c + vel * t + 0.5 * g * t * t;
-  vec3 axis = normalize(rn + vec3(1e-3));
-  float ang = u_spin * t * (0.4 + a_rnd.x) * (a_rnd.y > 0.5 ? 1.0 : -1.0) * 4.0;
+  float now = u_th[int(max(u_nh - 1.0, 0.0))];
+  vec3 vel = vec3(0.0);
+  float tb = 1e9;
+  float rnow1 = 0.0, rnow2 = 0.0;
+  for (int i = 0; i < 16; i++) { if (float(i) < u_nh) { rnow1 = u_r1[i]; rnow2 = u_r2[i]; } }
+  for (int f = 0; f < 2; f++) {
+    vec4 F = f == 0 ? u_f1 : u_f2;
+    if (f == 1 && u_f2on < 0.5) break;
+    vec3 fp = vec3((F.x - 0.5) * u_asp, F.y - 0.5, -F.z);
+    vec3 d = c - fp;
+    float dist = length(d);
+    float h = hitTime(dist, float(f));
+    if (h < 0.0) continue;
+    float R = max(f == 0 ? rnow1 : rnow2, 1e-4);
+    float k = clamp(1.0 - dist / R, 0.0, 1.0);
+    tb = min(tb, h + (1.0 - k) * 0.05);
+    vel += normalize(d + vec3(0.0, 0.0, 1e-3)) * (0.35 + k) * F.w;
+  }
+  float broken = tb < 1e8 ? 1.0 : 0.0;
+  float t = broken > 0.5 ? max(0.0, now - tb) : 0.0;
+  float strengthSum = max(length(vel), 1e-4);
+  vel += (rn * u_rand * 1.6 + vec3(0.0, 0.0, u_zpush * (0.5 + a_rnd.z))) * strengthSum * 0.6;
+  vel *= 0.075 * (1.0 + (a_rnd.z - 0.5) * u_mass * 2.0);
+  // viscosidade (atrito do ar) e gravidade com direção e inclinação, como no AE
+  float travel = u_visc > 0.001 ? (1.0 - exp(-u_visc * 4.0 * t)) / (u_visc * 4.0) : t;
+  vec3 g = vec3(sin(u_gdir) * cos(u_ginc), cos(u_gdir) * cos(u_ginc), sin(u_ginc)) * u_grav * 0.05;
+  vec3 p = c + vel * travel + 0.5 * g * t * t * broken;
+  vec3 axis = rn;
+  if (u_tumble > 7.5) axis = vec3(0.0, rn.y, rn.z);
+  else if (u_tumble > 6.5) axis = vec3(rn.x, 0.0, rn.z);
+  else if (u_tumble > 5.5) axis = vec3(rn.x, rn.y, 0.0);
+  else if (u_tumble > 4.5) axis = vec3(0.0, 0.0, 1.0);
+  else if (u_tumble > 3.5) axis = vec3(0.0, 1.0, 0.0);
+  else if (u_tumble > 2.5) axis = vec3(1.0, 0.0, 0.0);
+  axis = normalize(axis + vec3(1e-4));
+  float spinOn = u_tumble > 1.5 && u_tumble < 2.5 ? 0.0 : 1.0;
+  float ang = u_spin * travel * (0.4 + a_rnd.x) * (a_rnd.y > 0.5 ? 1.0 : -1.0) * 4.0 * spinOn;
   vec3 wp = p + rot(lp, axis, ang);
   vec3 n = rot(vec3(0.0, 0.0, 1.0), axis, ang);
   float zc = u_focal - wp.z;
@@ -44,22 +84,24 @@ void main() {
   v_shade = abs(n.z);
   v_spec = pow(max(0.0, dot(n, normalize(vec3(-0.4, -0.6, 1.0)))), 24.0);
   v_broken = broken;
+  v_age = t;
 }`;
 
 const SHARD_FRAG = `
 precision highp float;
-uniform sampler2D u_tex; uniform float u_fill, u_render, u_opacity, u_shade, u_life, u_tt;
+uniform sampler2D u_tex; uniform float u_front, u_render, u_opacity, u_shade, u_ambient, u_specAmt, u_life;
 uniform vec3 u_color;
-varying vec2 v_src; varying float v_shade; varying float v_broken; varying float v_spec;
+varying vec2 v_src; varying float v_shade; varying float v_broken; varying float v_spec; varying float v_age;
 void main() {
   if (u_render > 1.5 && u_render < 2.5 && v_broken > 0.5) discard;  // só a camada
   if (u_render > 2.5 && v_broken < 0.5) discard;                     // só os cacos
   vec4 c = texture2D(u_tex, v_src);
-  if (u_fill > 0.5) c = vec4(u_color, 1.0) * c.a;
+  if (u_front < 1.5) c = vec4(u_color, 1.0) * c.a;                   // Cor
+  else if (u_front > 2.5) c.rgb *= u_color;                           // Camada tingida
   if (v_broken > 0.5) {
-    float sh = mix(1.0, 0.55 + 0.6 * v_shade, u_shade);
-    c.rgb = c.rgb * sh + vec3(v_spec * u_shade * 0.6) * c.a;
-    c *= u_opacity * (u_life > 0.0 ? clamp(1.0 - u_tt / u_life, 0.0, 1.0) : 1.0);
+    float lit = mix(1.0, u_ambient + (1.0 - u_ambient) * (0.35 + 0.8 * v_shade), u_shade);
+    c.rgb = c.rgb * lit + vec3(v_spec * u_specAmt) * c.a;
+    c *= u_opacity * (u_life > 0.0 ? clamp(1.0 - v_age / u_life, 0.0, 1.0) : 1.0);
   }
   gl_FragColor = clamp(c, 0.0, 1.0);
 }`;
@@ -131,40 +173,58 @@ export default [
     params: [
       sel('render', 'Renderizar', ['Tudo', 'Só a camada', 'Só os cacos'], 1),
       sel('pattern', 'Padrão', PATTERNS, 1), num('repetitions', 'Repetições (tamanho dos cacos)', 22, 3, 80, 1),
-      num('start', 'Início da explosão (s)', 0, -10, 60, 0.01),
-      pos('force', 'Força 1 – posição', [0.5, 0.45]), num('forceDepth', 'Força 1 – profundidade', 0.1, 0, 2, 0.01),
-      num('radius', 'Força 1 – raio', 0.9, 0, 4, 0.01), num('strength', 'Força 1 – intensidade', 5, 0, 30, 0.1),
-      num('randomness', 'Aleatoriedade', 0.4, 0, 2, 0.01), num('spin', 'Velocidade de giro', 0.4, 0, 3, 0.01), num('zPush', 'Voar para a câmera', 0.8, -2, 4, 0.01),
-      num('gravity', 'Gravidade', 1.5, 0, 20, 0.1), ang('gravityDir', 'Direção da gravidade', 0),
-      num('cameraDist', 'Distância da câmera', 2.2, 0.5, 10, 0.05), num('shade', 'Luz nos cacos %', 70, 0, 100),
-      bool('keepOriginal', 'Manter a camada original atrás', false),
-      bool('fill', 'Preencher com cor (cacos sólidos)', false), col('fillColor', 'Cor do preenchimento', [1, 1, 1, 1]),
-      num('life', 'Sumir após (s, 0 = nunca)', 0, 0, 10, 0.05), num('opacity', 'Opacidade dos cacos %', 100, 0, 100),
+      num('start', 'Início da simulação (s)', 0, -10, 60, 0.01),
+      pos('force', 'Força 1 – posição', [0.5, 0.45]), num('forceDepth', 'Força 1 – profundidade', 0.1, -2, 2, 0.01),
+      num('radius', 'Força 1 – raio (anime para a onda de quebra)', 0.9, 0, 4, 0.01), num('strength', 'Força 1 – intensidade', 5, -30, 30, 0.1),
+      bool('force2On', 'Força 2 – ligada', false), pos('force2', 'Força 2 – posição', [0.5, 0.5]), num('force2Depth', 'Força 2 – profundidade', 0.5, -2, 2, 0.01),
+      num('radius2', 'Força 2 – raio', 0.5, 0, 4, 0.01), num('strength2', 'Força 2 – intensidade', 3, -30, 30, 0.1),
+      num('randomness', 'Aleatoriedade', 0.4, 0, 2, 0.01), num('spin', 'Velocidade de giro', 0.4, 0, 3, 0.01),
+      sel('tumble', 'Eixo de giro', ['Livre', 'Nenhum', 'X', 'Y', 'Z', 'XY', 'XZ', 'YZ'], 1),
+      num('viscosity', 'Viscosidade', 0, 0, 1, 0.01), num('massVariance', 'Variação de massa %', 15, 0, 100, 1),
+      num('zPush', 'Voar para a câmera', 0.8, -2, 4, 0.01),
+      num('gravity', 'Gravidade', 1.5, 0, 20, 0.1), ang('gravityDir', 'Direção da gravidade', 0), num('gravityIncl', 'Inclinação da gravidade', 0, -90, 90, 1),
+      sel('frontMode', 'Textura (frente)', ['Cor', 'Camada', 'Camada tingida'], 2), col('fillColor', 'Cor', [1, 1, 1, 1]),
+      bool('fill', 'Preencher com cor (atalho)', false), bool('keepOriginal', 'Manter a camada original atrás', false),
+      num('opacity', 'Opacidade dos cacos %', 100, 0, 100), num('life', 'Sumir após (s, 0 = nunca)', 0, 0, 10, 0.05),
+      num('cameraDist', 'Câmera – distância (Z)', 2.2, 0.5, 10, 0.05),
+      num('shade', 'Luz – intensidade %', 70, 0, 100), num('ambient', 'Luz ambiente %', 25, 0, 100), num('specular', 'Reflexo especular %', 40, 0, 200),
       num('shutter', 'Motion blur (quadros)', 1, 0, 4, 0.05), num('samples', 'Amostras do blur', 8, 1, 16, 1), num('seed', 'Semente', 1, 0, 999),
     ],
     render: (src, p, env) => {
       const { gl } = env;
       const fps = env.fps || 30;
-      const tt = env.t - (env.layer?.inPoint || 0) - p.start;
+      const t0 = (env.layer?.inPoint || 0) + p.start;
+      const tt = env.t - t0;
       if (tt < 0 && p.render !== 3) return src;
       if (tt < 0) return gl.pass(ACC, { u_tex: src, u_tex2: src, u_w: 0, u_first: 1 });
       const asp = env.w / env.h;
       const pattern = Math.round(p.pattern), reps = Math.round(p.repetitions), seed = Math.round(p.seed);
       const key = `shatter:${pattern}:${reps}:${asp.toFixed(3)}:${seed}`;
       const build = () => buildShards(pattern, reps, asp, seed);
+      const front = p.fill ? 1 : p.frontMode ?? 2;
       const base = {
-        u_tex: src, u_asp: asp, u_force: [p.force[0], p.force[1], p.forceDepth], u_radius: p.radius,
-        u_strength: p.strength, u_rand: p.randomness, u_spin: p.spin, u_grav: p.gravity, u_gdir: rad(p.gravityDir), u_focal: p.cameraDist,
-        u_zpush: p.zPush, u_fill: p.fill, u_color: rgb(p.fillColor), u_render: p.render, u_opacity: p.opacity / 100, u_shade: p.shade / 100,
-        u_life: p.life, u_rect: env.rect,
+        u_tex: src, u_asp: asp, u_f1: [p.force[0], p.force[1], p.forceDepth, p.strength], u_f2: [p.force2?.[0] ?? 0.5, p.force2?.[1] ?? 0.5, p.force2Depth ?? 0.5, p.strength2 ?? 0],
+        u_f2on: !!p.force2On, u_rand: p.randomness, u_spin: p.spin, u_tumble: p.tumble ?? 1, u_visc: p.viscosity || 0, u_mass: (p.massVariance ?? 15) / 100,
+        u_grav: p.gravity, u_gdir: rad(p.gravityDir), u_ginc: rad(p.gravityIncl || 0), u_focal: p.cameraDist, u_zpush: p.zPush,
+        u_front: front, u_color: rgb(p.fillColor), u_render: p.render, u_opacity: p.opacity / 100,
+        u_shade: (p.shade ?? 70) / 100, u_ambient: (p.ambient ?? 25) / 100, u_specAmt: (p.specular ?? 40) / 100 * (p.shade ?? 70) / 100, u_life: p.life, u_rect: env.rect,
+      };
+      // histórico do raio das forças (raio animado → os cacos quebram quando a onda chega, como no AE)
+      const hist = (tEnd) => {
+        const n = 16, r1 = [], r2 = [], th = [];
+        for (let i = 0; i < n; i++) {
+          const tl = (tEnd * i) / (n - 1);
+          const q = env.paramsAt ? env.paramsAt(t0 + tl) : p;
+          r1.push(q.radius); r2.push(q.radius2 ?? 0); th.push(tl);
+        }
+        return { u_r1: { f1: r1 }, u_r2: { f1: r2 }, u_th: { f1: th }, u_nh: n };
       };
       const n = p.shutter > 0 && tt > 0 ? Math.max(1, Math.round(p.samples)) : 1;
       let acc = null;
-      if (n === 1) acc = gl.mesh(key, build, SHARD_VERT, SHARD_FRAG, { ...base, u_t: tt, u_tt: tt }, src.w, src.h);
-      else for (let i = 0; i < n; i++) {
-        const ti = Math.max(0, tt - (p.shutter / fps) * (i / (n - 1)));
-        const s = gl.mesh(key, build, SHARD_VERT, SHARD_FRAG, { ...base, u_t: ti, u_tt: ti }, src.w, src.h);
-        acc = gl.pass(ACC, { u_tex: acc || s, u_tex2: s, u_w: 1 / n, u_first: acc ? 0 : 1 });
+      for (let i = 0; i < n; i++) {
+        const ti = n === 1 ? tt : Math.max(0, tt - (p.shutter / fps) * (i / (n - 1)));
+        const s = gl.mesh(key, build, SHARD_VERT, SHARD_FRAG, { ...base, ...hist(ti), u_t: ti }, src.w, src.h);
+        acc = n === 1 ? s : gl.pass(ACC, { u_tex: acc || s, u_tex2: s, u_w: 1 / n, u_first: acc ? 0 : 1 });
       }
       return p.keepOriginal ? gl.pass(OVER, { u_tex: src, u_tex2: acc }) : acc;
     },
