@@ -116,11 +116,18 @@ export function looksFromTools(tools, strength = 100) {
         p.spotInvert = !!v[11];
         break;
       case 'grex':
-        // Gradient Exposure: [exposição, ?, ângulo, ?, deslocamento %, suavidade, ?, cor RGB (7-9)]
-        if (!v[0]) { ignored.push('grex (exposição 0)'); continue; }
-        p.gradExposure += v[0];
-        p.gradAngle = v[2] || 0; p.gradOffset = clampN((v[4] || 0) / 100, -1, 1); p.gradSoft = clampN(v[5] ?? 0.5, 0.01, 2);
-        p.gradColor = [v[7] ?? 1, v[8] ?? 1, v[9] ?? 1, 1];
+        // Grad Exposure (painel do Looks): [Stops, X1 %, Y1 %, X2 %, Y2 %, Falloff, Strength, Color Balance RGB (7-9)]
+        // Pontos em % a partir do centro (Y para cima). Stops 0 com cor preta = escurece em degradê (filtro ND).
+        {
+          const col = [v[7] ?? 1, v[8] ?? 1, v[9] ?? 1];
+          if (!v[0] && col.every((c) => Math.abs(c - 1) < 0.005)) { ignored.push('grex (neutro)'); continue; }
+          p.gradTwoPoint = true;
+          p.gradExposure = clampN((p.gradTwoPoint && p.gradExposure ? p.gradExposure : 0) + (v[0] || 0), -4, 4);
+          p.gradP1 = [0.5 + (v[1] || 0) / 100, 0.5 - (v[2] || 0) / 100];
+          p.gradP2 = [0.5 + (v[3] || 0) / 100, 0.5 - (v[4] || 0) / 100];
+          p.gradSoft = clampN(v[5] ?? 0.5, 0.01, 2);
+          p.gradColor = [...col.map((c) => clampN(c, 0, 4)), 1];
+        }
         break;
       case 'edgs':
         // Edge Softness: [desfoque, ?, ?, ?, tamanho da área nítida, suavidade, proporção]

@@ -98,7 +98,7 @@ uniform vec3 u_hsl[8];
 uniform vec2 u_curve[4]; uniform float u_ncurve;
 uniform float u_spexp, u_spsize, u_spsoft, u_spasp, u_spinv, u_grexp, u_grang, u_groff, u_grsoft;
 uniform vec2 u_imgasp;
-uniform vec2 u_spc; uniform vec3 u_spcol, u_grcol;
+uniform vec2 u_spc, u_grp1, u_grp2; uniform float u_gr2; uniform vec3 u_spcol, u_grcol;
 float hueCenter(int i) {
   if (i == 0) return 0.0; if (i == 1) return 30.0; if (i == 2) return 60.0; if (i == 3) return 120.0;
   if (i == 4) return 180.0; if (i == 5) return 240.0; if (i == 6) return 275.0; return 315.0;
@@ -128,7 +128,14 @@ void main() {
     lin *= mix(vec3(1.0), pow(2.0, u_spexp) * u_spcol, m);
   }
   // Gradient Exposure: exposição em degradê na direção do ângulo
-  if (u_grexp != 0.0) {
+  if (u_gr2 > 0.5) {
+    // Looks “Grad Exposure”: de Ponto 1 (efeito total) até Ponto 2 (nenhum); Stops × Color Balance agem como
+    // um filtro de luz (cor preta = escurece, como um filtro ND degradê), Falloff controla a curva
+    vec2 d = (u_grp1 - u_grp2) * u_imgasp, q = (cuv - u_grp2) * u_imgasp;
+    float t = clamp(dot(q, d) / max(dot(d, d), 1e-6), 0.0, 1.0);
+    float m = pow(t * t * (3.0 - 2.0 * t), 0.5 / max(u_grsoft, 0.05));
+    lin *= mix(vec3(1.0), pow(2.0, u_grexp) * u_grcol, m);
+  } else if (u_grexp != 0.0) {
     float a = radians(u_grang);
     float g = dot(cuv - 0.5, vec2(sin(a), -cos(a))) + u_groff;
     float m = smoothstep(-u_grsoft * 0.5, u_grsoft * 0.5, g);
@@ -302,7 +309,8 @@ export default [
       adv(pos('edgeCenter', 'Edge – centro', [0.5, 0.5])), adv(num('edgeAspect', 'Edge – proporção', 1, 0.1, 4, 0.01)),
       num('optDensity', 'Optical Diffusion – densidade %', 0, 0, 100), num('optSize', 'Optical Diffusion – tamanho', 50, 1, 500), num('optHighlights', 'Optical Diffusion – só realces %', 50, 0, 100), num('optGlow', 'Optical Diffusion – glow %', 0, 0, 200),
       adv(num('gradExposure', 'Gradient Exposure', 0, -4, 4, 0.01)), adv(ang('gradAngle', 'Gradient – ângulo', 0)), adv(num('gradOffset', 'Gradient – deslocamento', 0, -1, 1, 0.01)),
-      adv(num('gradSoft', 'Gradient – suavidade', 0.5, 0.01, 2, 0.01)), adv(col('gradColor', 'Gradient – cor', [1, 1, 1, 1])),
+      adv(num('gradSoft', 'Gradient – suavidade / Falloff', 0.5, 0.01, 2, 0.01)), adv(col('gradColor', 'Gradient – cor (Color Balance)', [1, 1, 1, 1])),
+      adv(bool('gradTwoPoint', 'Grad Exposure – por 2 pontos (Looks)', false)), adv(pos('gradP1', 'Grad Exposure – Ponto 1 (efeito total)', [0.5, 0])), adv(pos('gradP2', 'Grad Exposure – Ponto 2 (sem efeito)', [0.5, 0.5])),
       adv(col('filter', 'Filtro de cor', [1, 1, 1, 1])), adv(num('filterDensity', 'Densidade do filtro %', 0, 0, 100)), adv(ang('hue', 'Matiz global', 0)),
       adv(num('liftR', 'Sombras R', 0, -0.5, 0.5, 0.005)), adv(num('liftG', 'Sombras G', 0, -0.5, 0.5, 0.005)), adv(num('liftB', 'Sombras B', 0, -0.5, 0.5, 0.005)),
       adv(num('gammaR', 'Meios-tons R', 1, 0.3, 3, 0.01)), adv(num('gammaG', 'Meios-tons G', 1, 0.3, 3, 0.01)), adv(num('gammaB', 'Meios-tons B', 1, 0.3, 3, 0.01)),
@@ -330,6 +338,7 @@ export default [
         u_spexp: p.spotExposure || 0, u_spc: p.spotCenter || [0.5, 0.5], u_spsize: (p.spotSize ?? 50) / 100, u_spsoft: Math.max(0.01, (p.spotSoft ?? 50) / 100), u_spcol: rgb(p.spotColor || [1, 1, 1, 1]),
         u_spasp: p.spotAspect ?? 1, u_spinv: !!p.spotInvert, u_imgasp: [1, env.h / env.w],
         u_grexp: p.gradExposure || 0, u_grang: p.gradAngle || 0, u_groff: p.gradOffset || 0, u_grsoft: Math.max(0.01, p.gradSoft ?? 0.5), u_grcol: rgb(p.gradColor || [1, 1, 1, 1]),
+        u_gr2: !!p.gradTwoPoint, u_grp1: p.gradP1 || [0.5, 0], u_grp2: p.gradP2 || [0.5, 0.5],
       });
       if (p.edgeBlur * s > 0.05) {
         const b = gl.blur(out, p.edgeBlur * 2 * s * env.scale);
