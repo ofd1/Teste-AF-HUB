@@ -1,0 +1,82 @@
+# Compila o MotionFrame para Android (APK) e iPhone (IPA sem assinatura + .app para o Simulador).
+# Os arquivos ficam em "Artifacts" na página da execução (aba Actions do GitHub).
+name: MotionFrame — APK e IPA
+
+on:
+  push:
+    branches: [claude/motion-editor-ffx]
+    paths: ['motion-editor/**', '.github/workflows/motionframe-apps.yml']
+  workflow_dispatch:
+
+jobs:
+  android:
+    name: Android (APK)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: motion-editor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Dependências
+        run: npm install --no-audit --no-fund
+      - name: Copia o app para o projeto Android
+        run: npm run build && npx cap sync android
+      - name: Compila o APK
+        run: cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - name: Renomeia
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk MotionFrame.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MotionFrame-Android-APK
+          path: motion-editor/MotionFrame.apk
+
+  ios:
+    name: iPhone (IPA sem assinatura + Simulador)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: motion-editor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Seleciona o Xcode mais novo
+        run: |
+          XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Usando $XC"
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+      - name: Dependências
+        run: npm install --no-audit --no-fund
+      - name: Copia o app para o projeto iOS
+        run: npm run build && npx cap sync ios
+      - name: Compila para iPhone (sem assinatura)
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/device \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          mkdir -p Payload
+          cp -R build/device/Build/Products/Release-iphoneos/App.app Payload/MotionFrame.app
+          zip -qry MotionFrame-unsigned.ipa Payload
+      - name: Compila para o Simulador
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/sim \
+            CODE_SIGNING_ALLOWED=NO build
+          cd build/sim/Build/Products/Release-iphonesimulator && cp -R App.app MotionFrame.app && zip -qry "$GITHUB_WORKSPACE/motion-editor/MotionFrame-Simulator.app.zip" MotionFrame.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MotionFrame-iOS-IPA-sem-assinatura
+          path: motion-editor/MotionFrame-unsigned.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MotionFrame-iOS-Simulador-app
+          path: motion-editor/MotionFrame-Simulator.app.zip
