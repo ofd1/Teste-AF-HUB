@@ -46,7 +46,7 @@ export class Library {
     if (!storage.set(STORE_KEY, this.user)) toast('Não foi possível salvar a biblioteca neste aparelho (armazenamento cheio).', 'warn');
   }
 
-  all() { return [...this.user, ...this.free, ...BUILTIN_PRESETS]; }
+  all() { return [...this.user, ...this.free]; } // só os seus presets (importados/salvos) — sem presets prontos
 
   categories(items) {
     const cats = [...new Set(items.map((p) => p.category))];
@@ -75,7 +75,7 @@ export class Library {
       <input type="search" class="lib-search" placeholder="Buscar presets…" value="${escapeHtml(this.filter)}">
       <div class="chips">${['Todos', ...cats].map((c) => `<button class="chip ${c === this.cat ? 'on' : ''}" data-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}</div>
       ${this.cat === 'Todos' ? this.categories(items).map((c) => `<h4 class="lib-cat">${escapeHtml(c)}</h4><div class="lib-grid">${items.filter((p) => p.category === c).map((p) => this.card(p)).join('')}</div>`).join('') : `<div class="lib-grid">${items.map((p) => this.card(p)).join('')}</div>`}
-      ${items.length ? '' : '<div class="empty-note">Nenhum preset encontrado.</div>'}
+      ${items.length ? '' : all.length ? '<div class="empty-note">Nenhum preset encontrado.</div>' : '<div class="empty-note lib-empty"><b>Sua biblioteca está vazia.</b><br>Importe arquivos <b>.ffx</b> do After Effects (botão acima ou arraste para a tela) ou salve os efeitos de uma camada com <b>★ Salvar camada como preset</b>.</div>'}
       <p class="muted small">Dica: arraste arquivos .ffx para a janela, ou use “Importar”. Presets só com efeitos podem ser aplicados sem camada selecionada — o app cria uma camada de ajuste.</p>`;
     this.bind();
   }

@@ -102,7 +102,11 @@ function drawContent(ctx, layer, w, h, extra) {
 
 export function evalParams(fx, t) {
   const out = {};
-  for (const [k, p] of Object.entries(fx.params)) out[k] = valueAt(p, t);
+  // efeitos salvos por versões antigas não têm os parâmetros novos: usa o padrão do efeito (nunca undefined/NaN,
+  // que deixava a imagem preta — ex.: shake vertical sem "Bordas Y")
+  const def = EFFECT_MAP[fx.type];
+  if (def) for (const pd of def.params) if (pd.default !== undefined) out[pd.key] = Array.isArray(pd.default) ? pd.default.slice() : pd.default;
+  for (const [k, p] of Object.entries(fx.params)) { const v = valueAt(p, t); if (v !== undefined && !(typeof v === 'number' && !Number.isFinite(v))) out[k] = v; }
   return out;
 }
 

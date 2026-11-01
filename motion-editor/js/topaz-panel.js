@@ -14,6 +14,7 @@ const LABELS = {
   reduceNoise: ['Reduce Noise', 'Remove ruído/granulado preservando as bordas.'],
   dehalo: ['Dehalo', 'Evita halos claros/escuros em volta das bordas.'],
   antialiasDeblur: ['Anti-alias / Deblur', 'Tira desfoque leve e serrilhado de vídeos ampliados.'],
+  aiSmooth: ['Suavização IA', 'Tira os pixels quadrados e deixa liso e “desenhado” (visual das IAs de upscale).'],
   recoverOriginal: ['Recover Original Detail', 'Mistura um pouco do original (aspecto natural).'],
   addNoise: ['Add Noise', 'Grão fino para parecer filmado (esconde o “plástico”).'],
 };

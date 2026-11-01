@@ -158,6 +158,7 @@ export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } 
       await aenc.flush();
       if (aerr) console.warn('áudio falhou', aerr);
     }
+    canvas.width = 0; canvas.height = 0; // libera a memória do canvas (o iPhone tem teto de memória para canvases)
     muxer.finalize();
     const blob = new Blob([target.buffer], { type: 'video/mp4' });
     ui.close();

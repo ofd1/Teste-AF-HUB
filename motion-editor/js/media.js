@@ -286,6 +286,15 @@ export function dedupeTimes(layer, st) {
   return { a: tt(d.ia), b: d.ib === null ? null : tt(d.ib), f: d.ib === null ? 0 : d.f };
 }
 
+// iPhone/iPad: o Safari tem um teto de memória para TODOS os canvases somados (~384 MB). Passou disso, os canvases
+// novos saem PRETOS (prévia e exportação). Por isso o cache é menor no iOS e os quadros antigos são liberados na hora.
+const IOS = typeof navigator !== 'undefined' && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)));
+const CACHE_BUDGET = IOS ? 70e6 : 160e6;
+function freeCache(c) {
+  for (const f of c.frames || []) { f.width = 0; f.height = 0; } // devolve a memória imediatamente (sem esperar o coletor)
+  c.frames = [];
+}
+
 export function cacheReady(layer) {
   const c = caches.get(layer.id);
   return !!(c?.ready && c.key === cacheKey(layer));
@@ -305,10 +314,10 @@ export function ensureCaches(project) {
     ids.add(l.id);
     const c = caches.get(l.id);
     if (c && c.key === cacheKey(l)) continue;
-    if (c) c.cancelled = true;
+    if (c) { c.cancelled = true; freeCache(c); }
     buildCache(project, l);
   }
-  for (const [id, c] of caches) if (!ids.has(id)) { c.cancelled = true; caches.delete(id); }
+  for (const [id, c] of caches) if (!ids.has(id)) { c.cancelled = true; freeCache(c); caches.delete(id); }
 }
 
 async function buildCache(project, layer) {
@@ -333,11 +342,11 @@ async function buildCache(project, layer) {
   // resolução limitada por memória (~160 MB), suficiente para a prévia
   const vw = v.videoWidth || 1080, vh = v.videoHeight || 1920;
   const aspect = vh / vw;
-  const w = Math.max(160, Math.min(vw, 720, Math.floor(Math.sqrt(160e6 / (n * 4 * aspect)))));
+  const w = Math.max(160, Math.min(vw, IOS ? 540 : 720, Math.floor(Math.sqrt(CACHE_BUDGET / (n * 4 * aspect)))));
   const h = Math.round(w * aspect);
   for (let i = 0; i < n; i++) {
     while (exportBusy && !entry.cancelled) await new Promise((r) => setTimeout(r, 250));
-    if (entry.cancelled) { releaseVideo(v); return; }
+    if (entry.cancelled) { releaseVideo(v); freeCache(entry); return; }
     await seekExact(v, lo + (i + 0.01) / entry.fps); // quadro confirmado: sem quadros repetidos no cache
     const c = document.createElement('canvas');
     c.width = w; c.height = h;

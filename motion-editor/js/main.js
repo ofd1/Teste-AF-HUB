@@ -1,5 +1,8 @@
 import { Store, LAYER_FACTORIES, RESOLUTIONS, createProject, flatLayers } from './state.js';
-import { compDialog } from './comp-dialog.js';
+import { compDialog, COMP_PRESETS } from './comp-dialog.js';
+import { HomeScreen, saveProjectData, loadProjectData, listProjects, allMediaIds, getSettings, settingsDialog } from './projects.js';
+import { parseFFX } from './ffx.js';
+import { ffxToPreset } from './presets.js';
 import { TopazPanel } from './topaz-panel.js';
 import { setBgListener, ensureBgModel, bgStatus } from './bgremove.js';
 import { setGLLostListener } from './gl.js';
@@ -407,6 +410,7 @@ function renderToolbar() {
   toolbar.innerHTML = items.map(([cmd, icon, label, hot]) => (cmd === 'sep' ? '<span class="tool sep"></span>' : `<button class="tool ${hot ? 'hot' : ''}" data-cmd="${cmd}"><span class="ti">${icon}</span><span class="tl">${label}</span></button>`)).join('');
   toolbar.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => commands[b.dataset.cmd]?.()));
   // faixa de ajuda: diz o que está selecionado e o próximo passo
+  hintBar.hidden = !getSettings().showTips;
   if (!store.project.layers.length) hintBar.innerHTML = '👋 Comece tocando em <b>Vídeo / Foto</b> para importar seu clipe.';
   else if (!layer) hintBar.innerHTML = 'Toque numa camada (na timeline ou na prévia) para editar. Arraste a régua azul para mudar o tempo.';
   else hintBar.innerHTML = `<b>${escapeHtml(layer.name)}</b> · ${TYPE_LABEL[t] || t}${layer.effects.length ? ` · ${layer.effects.length} efeito(s)` : ''} — ${t === 'video' ? 'use <b>Presets</b> para CC/shake/reverse ou <b>Velocidade</b> para câmera lenta' : t === 'group' ? 'efeitos e presets valem para o grupo inteiro' : 'use <b>Efeitos</b> ou <b>Presets</b>'}`;
@@ -493,6 +497,7 @@ async function relinkMedia(project) {
       if (l.type === 'video' && l.props.hasAudio !== false) loadAudio(l.props.src).then(() => { if (!l.props.hasAudio) { l.props.hasAudio = true; if (l.props.volume == null) l.props.volume = 100; } }).catch(() => { l.props.hasAudio = false; });
     } else l.missing = true;
   }
+  for (const id of allMediaIds()) keep.add(id); // não apaga mídias de outros projetos
   pruneMedia(keep);
 }
 
@@ -579,6 +584,7 @@ function updateTitle() {
 
 async function showMenu() {
   const res = await modal('Menu', `<div class="menu-list">
+    <button data-m="home">⌂ Meus projetos</button>
     <button data-m="help">❓ Como usar (passo a passo)</button>
     <button data-m="new">✚ Nova composição (projeto)</button>
     <button data-m="open">📂 Abrir projeto (.json)</button>
@@ -590,6 +596,7 @@ async function showMenu() {
     onMount: (w, close) => w.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => close(b.dataset.m))),
   });
   if (res === 'help') showHelp();
+  if (res === 'home') goHome();
   if (res === 'new') commands.new();
   if (res === 'open') openProject();
   if (res === 'save') saveProject();
@@ -680,7 +687,7 @@ function deleteSelection() {
 const frame = () => 1 / store.project.fps;
 const commands = {
   menu: showMenu,
-  new: newComposition,
+  new: () => createProjectFlow(),
   undo: () => store.undo(),
   redo: () => store.redo(),
   add: () => openSheet('add'),
@@ -728,6 +735,7 @@ const commands = {
   del: deleteSelection,
   group: groupLayers,
   ungroup: ungroupLayer,
+  home: () => goHome(),
   topaz: () => openSheet('topaz'),
   'bg-remove': async () => {
     const l = store.layer();
@@ -787,12 +795,21 @@ window.addEventListener('drop', (e) => {
 
 // ------------------------------------------------------------------ autosave
 let saveTimer = 0;
+function projectThumb() {
+  try {
+    if (!getSettings().autosaveThumb) return undefined;
+    const c = document.createElement('canvas');
+    const k = 180 / Math.max(view.width, view.height);
+    c.width = Math.max(1, Math.round(view.width * k)); c.height = Math.max(1, Math.round(view.height * k));
+    c.getContext('2d').drawImage(view, 0, 0, c.width, c.height);
+    const url = c.toDataURL('image/jpeg', 0.6);
+    c.width = c.height = 0;
+    return url;
+  } catch { return undefined; }
+}
 function autosave() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    const p = { ...store.project, layers: store.project.layers.map((l) => (l.props.mediaId ? { ...l, props: { ...l.props, src: null } } : l)) };
-    storage.set(AUTOSAVE_KEY, p);
-  }, 700);
+  saveTimer = setTimeout(() => { if (!home.visible) saveProjectData(store.project, projectThumb()); }, 700);
 }
 
 function demoProject() {
@@ -819,25 +836,116 @@ function demoProject() {
   return p;
 }
 
-(async () => {
-  const saved = storage.get(AUTOSAVE_KEY, null);
-  if (saved && Array.isArray(saved.layers)) {
-    await relinkMedia(saved);
-    const missing = saved.layers.filter((l) => l.missing);
-    saved.layers = saved.layers.filter((l) => !l.missing);
-    if (missing.length) toast(`${missing.length} mídia(s) não encontrada(s) neste aparelho.`, 'warn');
-    store.load(saved);
-  } else {
-    store.load(demoProject());
-    store.setTime(1.5);
-  }
-  updateTitle();
-  renderToolbar();
-  layoutCanvas();
+// ------------------------------------------------------------------ projetos e tela inicial (estilo Alight Motion)
+async function openProjectById(id) {
+  const data = loadProjectData(id);
+  if (!data) { toast('Projeto não encontrado.', 'error'); home.render(); return; }
+  data.id = id;
+  await relinkMedia(data);
+  const missing = flatLayers(data.layers).filter((l) => l.missing);
+  data.layers = data.layers.filter((l) => !l.missing);
+  if (missing.length) toast(`${missing.length} mídia(s) não encontrada(s) neste aparelho.`, 'warn');
+  store.load(data);
+  store.setTime(0);
+  home.hide();
+  updateTitle(); renderToolbar(); layoutCanvas(); timeline.render();
   if (desktop.matches) openSheet('presets');
+}
+
+async function createProjectFlow() {
+  const s = getSettings();
+  const pre = COMP_PRESETS.find((x) => x.id === s.compPreset) || COMP_PRESETS[0];
+  const res = await compDialog({ mode: 'new', project: { name: `Projeto ${listProjects().length + 1}`, width: pre.w, height: pre.h, fps: pre.fps, duration: 10, background: '#000000' }, resolution: s.quality });
+  if (!res) return;
+  const p = createProject(res.width, res.height);
+  Object.assign(p, { id: uid('prj'), name: res.name === 'Comp 1' ? `Projeto ${listProjects().length + 1}` : res.name, fps: res.fps, duration: res.duration, background: res.background, startTC: res.startTC });
+  saveProjectData(p, null);
+  applyResolution(res.resolution);
+  await openProjectById(p.id);
+  toast('Projeto criado. Comece importando um vídeo (🎞 Vídeo / Foto).', 'ok', 3500);
+}
+
+async function importProjectFile() {
+  const [f] = await pickFiles('.json,application/json', false);
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (!Array.isArray(data.layers) || !data.width) throw new Error('arquivo não é um projeto do MotionFrame');
+    data.id = uid('prj');
+    data.name = data.name || f.name.replace(/\.(motionframe\.)?json$/i, '');
+    saveProjectData(data, null);
+    await openProjectById(data.id);
+    toast('Projeto importado. Reimporte vídeos/áudios que não estavam neste aparelho.', 'ok', 4000);
+  } catch (e) { toast(`Não foi possível importar: ${e.message}`, 'error'); }
+}
+
+/** Arquivos do After Effects: .ffx (preset) e .aep/.aepx (efeitos e keyframes do projeto viram presets). */
+async function importAEFiles() {
+  const files = await pickFiles('.ffx,.aep,.aepx,.json,application/octet-stream');
+  if (!files.length) return;
+  const ffx = files.filter((f) => /\.(ffx|json)$/i.test(f.name));
+  const aep = files.filter((f) => /\.aepx?$/i.test(f.name));
+  if (home.visible) await ensureSomeProject();
+  if (ffx.length) { openSheet('presets'); library.importFiles(ffx); }
+  for (const f of aep) {
+    try {
+      const parsed = parseFFX(await f.arrayBuffer(), { fps: store.project.fps, fileName: f.name.replace(/\.aepx?$/i, '') });
+      const preset = ffxToPreset(parsed);
+      preset.name = `${f.name.replace(/\.aepx?$/i, '')} (AE)`;
+      preset.category = 'Importado do After Effects';
+      if (!preset.effects.length && !Object.keys(preset.transform).length) throw new Error('nenhum efeito ou animação encontrado');
+      library.addToLibrary(preset);
+      library.cat = 'Todos'; library.render(); openSheet('presets');
+      const plugins = [...new Set(preset.report.effects.map((e) => e.plugin).filter(Boolean))];
+      toast(`${f.name}: ${preset.effects.length} efeito(s) importado(s) como preset${plugins.length ? ` (${plugins.slice(0, 4).join(', ')})` : ''}.`, 'ok', 5000);
+    } catch (e) { toast(`${f.name}: ${e.message}`, 'error', 5000); }
+  }
+}
+
+async function ensureSomeProject() {
+  const list = listProjects();
+  if (list.length) await openProjectById(list[0].id);
+  else { const p = createProject(1080, 1920); Object.assign(p, { id: uid('prj'), name: 'Projeto 1' }); saveProjectData(p, null); await openProjectById(p.id); }
+}
+
+async function goHome() {
+  setPlaying(false);
+  clearTimeout(saveTimer);
+  saveProjectData(store.project, projectThumb());
+  closeSheet();
+  home.show();
+}
+
+const home = new HomeScreen({
+  open: (id) => openProjectById(id),
+  create: () => createProjectFlow(),
+  importProject: () => importProjectFile(),
+  importAE: () => importAEFiles(),
+  presets: async () => { await ensureSomeProject(); openSheet('presets'); },
+  settings: async () => {
+    const r = await settingsDialog(COMP_PRESETS);
+    if (r?.help) showHelp();
+    else if (r?.clear) { ensureCaches({ layers: [] }); toast('Cache de quadros limpo.', 'ok'); }
+    else if (r) { applyResolution(getSettings().quality); renderToolbar(); }
+  },
+  exportJSON: (p) => saveFile(`${(p.name || 'projeto').replace(/[^\w-]+/g, '_')}.motionframe.json`, new Blob([JSON.stringify(p)], { type: 'application/json' })),
+});
+
+(async () => {
+  // migração: o projeto único das versões anteriores vira o 1º projeto da lista
+  const old = storage.get(AUTOSAVE_KEY, null);
+  if (old && Array.isArray(old.layers) && !listProjects().length) {
+    old.id = old.id || uid('prj');
+    old.name = old.name || 'Meu edit';
+    saveProjectData(old, null);
+  }
+  try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ok */ }
+  applyResolution(getSettings().quality);
+  store.load(createProject(1080, 1920));
+  updateTitle(); renderToolbar(); layoutCanvas();
   registerServiceWorker();
-  timeline.render();
+  home.show();
 })();
 
 // Acesso para automação/testes (Playwright) e depuração no console.
-window.motionframe = { store, openSheet };
+window.motionframe = { store, openSheet, openProjectById, home, goHome };

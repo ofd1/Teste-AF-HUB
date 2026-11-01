@@ -129,7 +129,7 @@ export default [
         u_tex: src, u_c: cuv(env, p.center), u_s0: 1 / Math.max(0.01, q.zDist), u_s1: 1 / Math.max(0.01, p.zDist),
         u_r0: rad(q.rotate), u_r1: rad(p.rotate), u_sh0: [sx0 / env.w, sy0 / env.h], u_sh1: [sx1 / env.w, sy1 / env.h],
         u_n: moving && p.shutter > 0 ? blurSamples(env, { dx: sx0, dy: sy0, s: 1 / Math.max(0.01, q.zDist), rot: q.rotate }, { dx: sx1, dy: sy1, s: 1 / Math.max(0.01, p.zDist), rot: p.rotate }, Math.round(p.samples)) : 1,
-        u_wrap: [p.wrap ?? 3, p.wrapY ?? p.wrap ?? 3],
+        u_wrap: [p.wrap ?? 3, p.wrapY ?? 3],
       });
     },
   },

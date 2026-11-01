@@ -164,6 +164,20 @@ void main() {
   float skin = smoothstep(22.0, 6.0, abs(mod(hv.x * 360.0 - 28.0 + 180.0, 360.0) - 180.0)) * smoothstep(0.1, 0.35, hv.y);
   // Mojo II (manual do Looks): esquenta os realces e esfria as sombras, destacando a pele — sem mudar o contraste geral
   float hiW = smoothstep(0.2, 0.85, l);
+  // teal & orange de verdade: as matizes "frias" (verde, ciano, azul, roxo) são puxadas para verde-água (~185°)
+  // e as quentes (vermelho, laranja, amarelo) para laranja-pele (~28°). É isso que deixa grama e fundo ciano.
+  if (u_mojo > 0.001) {
+    vec3 mh = rgb2hsv(clamp(r, 0.0, 1.0));
+    float hd = mh.x * 360.0;
+    float warmSide = 1.0 - smoothstep(70.0, 95.0, hd) + smoothstep(310.0, 335.0, hd);
+    float target = warmSide > 0.5 ? 28.0 : 185.0;
+    float dh = mod(target - hd + 540.0, 360.0) - 180.0;
+    float k = u_mojo * (warmSide > 0.5 ? 0.45 * u_skin : 0.6 * u_cool) * smoothstep(0.04, 0.2, mh.y);
+    mh.x = fract((hd + dh * clamp(k, 0.0, 0.9)) / 360.0);
+    // fundo frio um pouco menos saturado, pele mais rica (como o Mojo)
+    mh.y = clamp(mh.y * (warmSide > 0.5 ? 1.0 + 0.15 * u_mojo : 1.0 - 0.18 * u_mojo * u_cool), 0.0, 1.0);
+    r = hsv2rgb(mh);
+  }
   vec3 cool = r + vec3(-0.055, 0.008, 0.06) * (1.0 - hiW) * (1.0 - skin * 0.8);
   vec3 warmH = r * mix(vec3(1.0), vec3(1.07, 1.01, 0.88), hiW);
   r = mix(r, cool, u_mojo * u_cool);

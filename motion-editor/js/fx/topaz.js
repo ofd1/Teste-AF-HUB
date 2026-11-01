@@ -24,6 +24,34 @@ void main() {
   gl_FragColor = vec4(mix(c.rgb, sm, k), c.a);
 }`);
 
+// "IA desenhado" (como os upscalers neurais): filtro Kuwahara de 4 setores — cada pixel vira a média do setor
+// mais uniforme ao redor. Some com os pixels quadrados e o ruído, deixa áreas lisas "pintadas" e mantém as bordas.
+const KUWAHARA = frag(`
+uniform float u_r, u_amt;
+void main() {
+  vec4 c = texture2D(u_tex, v_uv);
+  vec3 m[4]; vec3 s2[4]; float ws[4];
+  for (int k = 0; k < 4; k++) { m[k] = vec3(0.0); s2[k] = vec3(0.0); ws[k] = 0.0; }
+  vec2 st = u_texel * u_r / 3.0;
+  for (int j = 0; j <= 3; j++) for (int i = 0; i <= 3; i++) {
+    vec2 o = vec2(float(i), float(j));
+    float g = exp(-dot(o, o) / 8.0);          // amostras gaussianas (sem bordas duras de bloco)
+    o *= st;
+    vec3 a = texture2D(u_tex, v_uv + vec2(-o.x, -o.y)).rgb; m[0] += a * g; s2[0] += a * a * g; ws[0] += g;
+    vec3 b = texture2D(u_tex, v_uv + vec2( o.x, -o.y)).rgb; m[1] += b * g; s2[1] += b * b * g; ws[1] += g;
+    vec3 d = texture2D(u_tex, v_uv + vec2(-o.x,  o.y)).rgb; m[2] += d * g; s2[2] += d * d * g; ws[2] += g;
+    vec3 e = texture2D(u_tex, v_uv + vec2( o.x,  o.y)).rgb; m[3] += e * g; s2[3] += e * e * g; ws[3] += g;
+  }
+  // Kuwahara generalizado: mistura os setores pesando pela uniformidade (1/variância^q) — liso e sem blocos
+  vec3 acc = vec3(0.0); float wt = 0.0;
+  for (int k = 0; k < 4; k++) {
+    vec3 mu = m[k] / ws[k]; vec3 v = max(s2[k] / ws[k] - mu * mu, 0.0);
+    float w = 1.0 / (1.0 + pow((v.r + v.g + v.b) * 255.0, 2.0));
+    acc += mu * w; wt += w;
+  }
+  gl_FragColor = vec4(mix(c.rgb, acc / wt, u_amt), c.a);
+}`);
+
 // detalhe + nitidez: CAS (sharpen adaptativo ao contraste) + realce de alta frequência em 2 escalas, com dehalo
 const DETAIL = frag(`
 uniform sampler2D u_b1, u_b2; uniform float u_det, u_sharp, u_deblur, u_dehalo, u_px;
@@ -74,13 +102,13 @@ void main() {
 /** Valores "automáticos" de cada modelo (como os presets da Topaz). Proteus = manual. */
 export const TOPAZ_MODELS = [
   ['Proteus (manual)', null],
-  ['Artemis – ruído e compressão', { revertCompression: 55, recoverDetails: 30, sharpen: 25, reduceNoise: 40, dehalo: 30, antialiasDeblur: 20, recoverOriginal: 0, addNoise: 0 }],
-  ['Iris – rostos e pele', { revertCompression: 45, recoverDetails: 40, sharpen: 30, reduceNoise: 35, dehalo: 45, antialiasDeblur: 25, recoverOriginal: 10, addNoise: 2 }],
-  ['Gaia – fonte boa / alta qualidade', { revertCompression: 15, recoverDetails: 55, sharpen: 35, reduceNoise: 10, dehalo: 40, antialiasDeblur: 30, recoverOriginal: 0, addNoise: 0 }],
-  ['Nyx – só remover ruído', { revertCompression: 20, recoverDetails: 10, sharpen: 5, reduceNoise: 75, dehalo: 20, antialiasDeblur: 0, recoverOriginal: 0, addNoise: 0 }],
-  ['Rhea – detalhe máximo (4×)', { revertCompression: 40, recoverDetails: 75, sharpen: 45, reduceNoise: 25, dehalo: 55, antialiasDeblur: 45, recoverOriginal: 0, addNoise: 3 }],
+  ['Artemis – ruído e compressão', { revertCompression: 60, recoverDetails: 45, sharpen: 40, reduceNoise: 40, dehalo: 35, antialiasDeblur: 35, aiSmooth: 55, recoverOriginal: 0, addNoise: 0 }],
+  ['Iris – rostos e pele', { revertCompression: 55, recoverDetails: 55, sharpen: 45, reduceNoise: 40, dehalo: 45, antialiasDeblur: 40, aiSmooth: 75, recoverOriginal: 0, addNoise: 1 }],
+  ['Gaia – fonte boa / alta qualidade', { revertCompression: 25, recoverDetails: 60, sharpen: 40, reduceNoise: 15, dehalo: 40, antialiasDeblur: 35, aiSmooth: 35, recoverOriginal: 0, addNoise: 0 }],
+  ['Nyx – só remover ruído', { revertCompression: 30, recoverDetails: 15, sharpen: 10, reduceNoise: 75, dehalo: 20, antialiasDeblur: 5, aiSmooth: 60, recoverOriginal: 0, addNoise: 0 }],
+  ['Rhea – detalhe máximo (4×)', { revertCompression: 50, recoverDetails: 80, sharpen: 55, reduceNoise: 30, dehalo: 55, antialiasDeblur: 55, aiSmooth: 70, recoverOriginal: 0, addNoise: 2 }],
 ];
-export const TOPAZ_KEYS = ['revertCompression', 'recoverDetails', 'sharpen', 'reduceNoise', 'dehalo', 'antialiasDeblur', 'recoverOriginal', 'addNoise'];
+export const TOPAZ_KEYS = ['revertCompression', 'recoverDetails', 'sharpen', 'reduceNoise', 'dehalo', 'antialiasDeblur', 'aiSmooth', 'recoverOriginal', 'addNoise'];
 
 export default [
   {
@@ -91,6 +119,7 @@ export default [
       num('revertCompression', 'Revert Compression (tirar blocos)', 55, 0, 100), num('recoverDetails', 'Recover Details (detalhes)', 30, 0, 100),
       num('sharpen', 'Sharpen (nitidez)', 25, 0, 100), num('reduceNoise', 'Reduce Noise (ruído)', 40, 0, 100),
       num('dehalo', 'Dehalo (tirar halos)', 30, 0, 100), num('antialiasDeblur', 'Anti-alias / Deblur', 20, 0, 100),
+      num('aiSmooth', 'Suavização IA (visual “desenhado”, sem pixels quadrados)', 55, 0, 100),
       num('recoverOriginal', 'Recover Original Detail (misturar original)', 0, 0, 100), num('addNoise', 'Add Noise (grão)', 0, 0, 100), num('grainSize', 'Tamanho do grão', 1.5, 1, 6, 0.1),
       num('sourceScale', 'Escala da fonte (0 = automático)', 0, 0, 8, 0.1),
     ],
@@ -105,6 +134,12 @@ export default [
       const rc = v('revertCompression'), rn = v('reduceNoise');
       if (rc > 0.01) out = gl.pass(BILAT, { u_tex: out, u_rad: 2.2 * pxs, u_sigR: 0.06 + rc * 0.06, u_amt: Math.min(1, rc * 1.2), u_flat: 0.85 });
       if (rn > 0.01) out = gl.pass(BILAT, { u_tex: out, u_rad: 3 * pxs, u_sigR: 0.05 + rn * 0.12, u_amt: Math.min(1, rn * 1.1), u_flat: 0.3 });
+      // suavização "IA": duas passadas de Kuwahara (pequena e média) — o visual liso e desenhado dos upscalers
+      const ai = (m ? m.aiSmooth : p.aiSmooth ?? 55) / 100;
+      if (ai > 0.01) {
+        out = gl.pass(KUWAHARA, { u_tex: out, u_r: 1.2 * pxs, u_amt: Math.min(1, ai * 1.2) });
+        out = gl.pass(KUWAHARA, { u_tex: out, u_r: 2.0 * pxs, u_amt: ai * 0.6 });
+      }
       const det = v('recoverDetails'), sh = v('sharpen'), db = v('antialiasDeblur');
       if (det + sh + db > 0.01) {
         const b1 = gl.blur(out, 0.9 * pxs), b2 = gl.blur(out, 2.4 * pxs);
