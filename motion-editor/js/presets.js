@@ -110,9 +110,22 @@ const TRANSFORM_MAP = {
   'ADBE Opacity': { prop: 'opacity', mode: 'abs' },
 };
 
-function ffxEase(kf) {
+function ffxEase(kf, next) {
   if (kf.interp === 3) return { ease: 'hold' };
-  if (kf.interp === 2) return { ease: 'bezier', outInf: kf.outInf, inInf: kf.inInf };
+  if (kf.interp === 2) {
+    const e = { ease: 'bezier', outInf: kf.outInf, inInf: kf.inInf };
+    // Velocidades das alças do AE → altura das alças normalizada (0 = valor inicial, 1 = final).
+    // É isso que faz o gráfico "passar do ponto e voltar" (ex.: Shift Y que vai para um lado e chicoteia para o outro).
+    if (next && kf.v?.length === 1 && next.v?.length === 1 && Number.isFinite(kf.outSpeed) && Number.isFinite(next.inSpeed)) {
+      const dv = next.v[0] - kf.v[0], dt = next.t - kf.t;
+      if (Math.abs(dv) > 1e-9 && dt > 0) {
+        const y1 = (kf.outSpeed * (kf.outInf ?? 0.333) * dt) / dv, y2 = 1 - (next.inSpeed * (next.inInf ?? 0.333) * dt) / dv;
+        const lim = (y) => Math.max(-8, Math.min(9, y));
+        if (Math.abs(y1) > 1e-4 || Math.abs(y2 - 1) > 1e-4) e.bz = [lim(y1), lim(y2)];
+      }
+    }
+    return e;
+  }
   return { ease: 'linear' };
 }
 
@@ -142,7 +155,7 @@ function convertValue(raw, kind, conv) {
 
 function convertProp(src, kind, conv) {
   if (src.keyframes?.length) {
-    const keys = src.keyframes.map((kf) => ({ t: kf.t, v: convertValue(kf.v, kind, conv), ...ffxEase(kf) })).filter((x) => x.v !== undefined);
+    const keys = src.keyframes.map((kf, i, a) => ({ t: kf.t, v: convertValue(kf.v, kind, conv), ...ffxEase(kf, a[i + 1]) })).filter((x) => x.v !== undefined);
     return keys.length ? { keys } : undefined;
   }
   return convertValue(src.value, kind, conv);
@@ -252,7 +265,7 @@ function transformFromFfx(map, p) {
     return v[0];
   };
   if (p.keyframes.length) {
-    let keys = p.keyframes.map((kf) => ({ t: kf.t, v: fix(kf.v), ...ffxEase(kf) }));
+    let keys = p.keyframes.map((kf, i, a) => ({ t: kf.t, v: fix(kf.v), ...ffxEase(kf, a[i + 1]) }));
     if (map.mode === 'rel') {
       const base = keys[keys.length - 1].v;
       keys = keys.map((kk) => ({ ...kk, v: kk.v.map((x, i) => x - base[i]) }));
@@ -268,7 +281,7 @@ function mergeSeparated(px, py) {
     if (!p) return { value: 0, keys: [] };
     if (!p.keyframes.length) return { value: p.value[0] || 0, keys: [] };
     const last = p.keyframes[p.keyframes.length - 1].v[0];
-    return { value: 0, keys: p.keyframes.map((kf) => ({ t: kf.t, v: kf.v[0] - last, ...ffxEase(kf) })) };
+    return { value: 0, keys: p.keyframes.map((kf) => ({ t: kf.t, v: kf.v[0] - last, ...ffxEase(kf, p.keyframes[p.keyframes.indexOf(kf) + 1]) })) };
   };
   const ax = toProp(px), ay = toProp(py);
   const times = [...new Set([...ax.keys, ...ay.keys].map((x) => x.t))].sort((a, b) => a - b);
@@ -333,7 +346,7 @@ export function applyPreset(layer, preset, playhead, opts = {}) {
       for (const kk of tr.keys) {
         let v = kk.v;
         if (tr.mode === 'rel') v = Array.isArray(v) ? v.map((x, i) => x + base[i]) : v + base;
-        target.keys.push({ t: +(t0 + kk.t).toFixed(4), v: Array.isArray(v) ? v.slice() : v, ease: kk.ease || 'linear', inInf: kk.inInf, outInf: kk.outInf });
+        target.keys.push({ t: +(t0 + kk.t).toFixed(4), v: Array.isArray(v) ? v.slice() : v, ease: kk.ease || 'linear', inInf: kk.inInf, outInf: kk.outInf, ...(kk.bz ? { bz: kk.bz.slice() } : {}) });
       }
       sortKeys(target);
     } else if (tr.value !== undefined && tr.mode === 'abs') {

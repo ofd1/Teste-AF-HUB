@@ -82,8 +82,10 @@ function easeFn(key, next) {
     // influências estilo AE (0..1). Velocidade 0 => tangente horizontal.
     const o = clamp01(key.outInf ?? 0.333);
     const i = clamp01(next?.inInf ?? 0.333);
-    const id = `${o.toFixed(3)}:${i.toFixed(3)}`;
-    if (!bezierCache.has(id)) bezierCache.set(id, cubicBezier(o, 0, 1 - i, 1));
+    // bz: altura das alças vinda das velocidades do AE (pode passar de 0..1 = overshoot)
+    const y1 = Array.isArray(key.bz) ? key.bz[0] : 0, y2 = Array.isArray(key.bz) ? key.bz[1] : 1;
+    const id = `${o.toFixed(3)}:${i.toFixed(3)}:${y1.toFixed(4)}:${y2.toFixed(4)}`;
+    if (!bezierCache.has(id)) bezierCache.set(id, cubicBezier(o, y1, 1 - i, y2));
     return bezierCache.get(id);
   }
   return curves[e] || curves.linear;
@@ -192,7 +194,7 @@ export function curveOf(key, next) {
     case 'easeIn': return [0.33, 0, 1, 1];
     case 'easeOut': return [0, 0, 0.67, 1];
     case 'back': return [0.34, 1.56, 0.64, 1];
-    case 'bezier': return [clamp01(key.outInf ?? 0.333), 0, 1 - clamp01(next?.inInf ?? 0.333), 1];
+    case 'bezier': return [clamp01(key.outInf ?? 0.333), Array.isArray(key.bz) ? key.bz[0] : 0, 1 - clamp01(next?.inInf ?? 0.333), Array.isArray(key.bz) ? key.bz[1] : 1];
     default: return [0, 0, 1, 1];
   }
 }

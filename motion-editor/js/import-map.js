@@ -42,6 +42,9 @@ export function looksFromTools(tools, strength = 100) {
     if (!t.enabled) { ignored.push(`${t.id} (desligada)`); continue; }
     switch (t.id) {
       case 'expo': p.exposure += v[0] || 0; break;
+      // Contrast (painel do Looks): [Contrast, Pivot, Exposure Compensation] — ex.: -0.035 / 0.2 / 0
+      case 'cntr': case 'cont': case 'ctst': case 'cnst': case 'ctrs': case 'contr':
+        p.lkContrast = clampN((p.lkContrast || 0) + (v[0] || 0), -1, 2); p.lkPivot = clampN(v[1] ?? 0.5, 0, 1); p.lkComp = clampN(v[2] || 0, -2, 2); break;
       case 'fltr':
         if (Math.min(v[0], v[1], v[2]) < 0.995) { p.filter = [v[0], v[1], v[2], 1]; p.filterDensity = 100; } else { ignored.push('fltr (neutro)'); continue; }
         break;
@@ -173,9 +176,11 @@ export const IMPORT_RULES = [
       amount: { i: 2, n: ['amount'] }, speed: { i: 1, n: ['speed'] }, seed: { n: ['seed', 'random seed'] },
       blur: { i: 7, n: ['blur', 'enable blur'] }, color: { i: 4, n: ['color', 'enable color'] }, light: { i: 5, n: ['light', 'enable light'] }, scale: { i: 6, n: ['scale', 'enable scale'] }, slide: { i: 8, n: ['slide', 'enable slide'] }, time: { i: 9, n: ['time'] },
       blurAmt: { n: ['blur amount'] }, colorAmt: { n: ['color amount'] }, colorize: { n: ['colorize'] }, lightAmt: { n: ['light amount'] },
-      scaleAmt: { n: ['scale amount'] }, slideAmt: { n: ['slide amount'] }, slideDir: { n: ['slide direction'], conv: (v) => Math.min(3, Math.max(1, v + 1)) },
+      scaleAmt: { n: ['scale amount'] }, slideAmt: { n: ['slide amount'] }, slideAngle: { n: ['slide direction'] },
       slideRgb: { n: ['slide rgb split'] }, slideBlur: { n: ['slide motion blur'] }, timeAmt: { n: ['time amount'] },
-    } },
+    },
+    // Slide Direction do Twitch é um ÂNGULO (pode ser animado: -67°, -192°, -540°…), não um menu
+    post: (p) => { p.slideDir = p.slideAngle !== undefined ? 4 : 1; } },
   // S_Shake: deslocamento = Amplitude (mestre) × X/Y Rand Amp (px); motion blur, wrap e rajadas (Stillness) do próprio plugin
   { vendor: 'Sapphire', plugin: 'S_Shake', to: 'shake', test: /s_shake|s_camerashake/i,
     map: {
@@ -200,7 +205,7 @@ export const IMPORT_RULES = [
     // S_Flicker: a variação de brilho é Amplitude × Rand Luma Amp (Amplitude é o mestre), não só Amplitude
     post: (p, raw) => { const a = raw('amplitude') ?? 1, l = raw('rand luma amp') ?? 0.5, c = raw('rand color amp') ?? 0; p.amount = a * l * 100; p.colorAmount = l > 0 ? Math.min(100, (c / l) * 100) : 0; } },
   { vendor: 'BCC', plugin: 'BCC Directional Blur', to: 'dirBlur', test: /bcc.*(directional|motion).*blur/i,
-    map: { length: { i: 2, n: ['blur amount'], conv: (v) => v * 1.5 }, angle: { i: 3, n: ['angle'] } } },
+    map: { length: { i: 2, n: ['blur amount'], conv: (v) => v }, angle: { i: 3, n: ['angle'] } } },
   { vendor: 'BCC', plugin: 'BCC Unsharp Mask', to: 'sharpen', test: /bcc.*(unsharp|sharpen)/i,
     map: { radius: { n: ['radius'], conv: (v) => v * 0.25 }, amount: { n: ['amount'], conv: (v) => (v <= 5 ? v * 100 : v) }, threshold: { n: ['threshold'] } } },
   { vendor: 'RE:Vision', plugin: 'ReelSmart Motion Blur', to: 'motionBlur', test: /reelsmart|\brsmb\b|motion ?blur ?pro/i,

@@ -319,9 +319,9 @@ function parseKeyframes(list, p, ctx) {
 
   let layout;
   if (p.type === 'color' || dims === 4) layout = { valueOff: 8 + 8 + 32, n: 4, inf: [8 + 8 + 8, 8 + 8 + 24] };
-  else if (item === 8 + 40 * dims) layout = { valueOff: 8, n: dims, inf: [8 + 16 * dims, 8 + 32 * dims] };
+  else if (item === 8 + 40 * dims) layout = { valueOff: 8, n: dims, inf: [8 + 16 * dims, 8 + 32 * dims], spd: [8 + 8 * dims, 8 + 24 * dims] };
   else if (item === 8 + 8 + 32 + 24 * dims) layout = { valueOff: 48, n: dims, inf: [24, 40] }; // posição espacial
-  else if ((item - 8) % 40 === 0) layout = { valueOff: 8, n: (item - 8) / 40, inf: [8 + 16 * ((item - 8) / 40), 8 + 32 * ((item - 8) / 40)] };
+  else if ((item - 8) % 40 === 0) { const d = (item - 8) / 40; layout = { valueOff: 8, n: d, inf: [8 + 16 * d, 8 + 32 * d], spd: [8 + 8 * d, 8 + 24 * d] }; }
   else throw new Error(`tamanho de item ${item} desconhecido`);
 
   const keys = [];
@@ -337,7 +337,13 @@ function parseKeyframes(list, p, ctx) {
     }
     const inInf = r.f64(base + layout.inf[0]);
     const outInf = r.f64(base + layout.inf[1]);
-    keys.push({ raw, t: raw / ctx.fps, v, interp, inInf: normInf(inInf), outInf: normInf(outInf) });
+    const key = { raw, t: raw / ctx.fps, v, interp, inInf: normInf(inInf), outInf: normInf(outInf) };
+    // velocidade das alças (unidades/segundo) — cria as curvas que passam do valor e voltam (overshoot) como no AE
+    if (layout.spd) {
+      const si = r.f64(base + layout.spd[0]), so = r.f64(base + layout.spd[1]);
+      if (Number.isFinite(si) && Number.isFinite(so) && Math.abs(si) < 1e7 && Math.abs(so) < 1e7) { key.inSpeed = si; key.outSpeed = so; }
+    }
+    keys.push(key);
   }
   // validação de plausibilidade
   const ok = keys.every((k) => k.v.length && k.v.every((x) => Number.isFinite(x) && Math.abs(x) < 1e7));

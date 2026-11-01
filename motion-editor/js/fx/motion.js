@@ -112,6 +112,11 @@ export function twitchEnv(t, p, channel) {
 }
 function twitchDir(t, p) {
   const j = Math.floor(t * 24);
+  if (p.slideDir === 4) {
+    // ângulo do AE (0° = para cima, sentido horário); o tranco vai para um lado ou para o outro dessa direção
+    const a = rad(p.slideAngle || 0), sg = hash1(j * 3.3 + (p.seed || 0)) < 0.5 ? -1 : 1;
+    return [Math.sin(a) * sg, -Math.cos(a) * sg];
+  }
   const a = hash1(j * 3.3 + (p.seed || 0)) * Math.PI * 2;
   if (p.slideDir === 2) return [Math.sign(Math.cos(a)) || 1, 0];
   if (p.slideDir === 3) return [0, Math.sign(Math.sin(a)) || 1];
@@ -215,7 +220,7 @@ export default [
       bool('color', 'Color', false), num('colorAmt', 'Color Amount %', 50, 0, 200), col('colorize', 'Colorize', [1, 0.64, 0, 1]),
       bool('light', 'Light', true), num('lightAmt', 'Light Amount %', 50, 0, 300),
       bool('scale', 'Scale', false), num('scaleAmt', 'Scale Amount %', 50, 0, 300),
-      bool('slide', 'Slide', true), num('slideAmt', 'Slide Amount %', 50, 0, 300), sel('slideDir', 'Slide Direction', ['Todas', 'Horizontal', 'Vertical'], 1),
+      bool('slide', 'Slide', true), num('slideAmt', 'Slide Amount %', 50, 0, 300), sel('slideDir', 'Slide Direction', ['Todas', 'Horizontal', 'Vertical', 'Ângulo'], 1), ang('slideAngle', 'Slide – ângulo (AE)', 0),
       num('slideRgb', 'Slide RGB Split', 10, 0, 100), num('slideBlur', 'Slide Motion Blur %', 100, 0, 200),
       bool('time', 'Time (pulo de quadro)', false), num('timeAmt', 'Time Amount %', 50, 0, 200),
     ],
