@@ -1,6 +1,6 @@
 import { Store, LAYER_FACTORIES, RESOLUTIONS, createProject } from './state.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
-import { prepare, pauseAll, setMediaListener, videoThumb } from './media.js';
+import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus } from './media.js';
 import { loadAudio, playAudio, stopAudio, detectBeats } from './audio.js';
 import { valueAt, setValue, setKey } from './anim.js';
 import { Timeline } from './timeline.js';
@@ -92,8 +92,25 @@ function loop(now) {
 }
 requestAnimationFrame(loop);
 
+// cache de quadros para Velocidade/Twixtor (prévia suave e reverse)
+const cachePill = document.createElement('div');
+cachePill.className = 'cache-pill';
+stage.appendChild(cachePill);
+setCacheListener(() => {
+  const st = cacheStatus();
+  cachePill.textContent = st == null ? '' : `Preparando câmera lenta… ${st}%`;
+  cachePill.classList.toggle('show', st != null);
+  dirty = true;
+});
+let cacheTimer = 0;
+function scheduleCaches() {
+  clearTimeout(cacheTimer);
+  cacheTimer = setTimeout(() => { if (!store.exporting) ensureCaches(store.project); }, 600);
+}
+
 store.on((kind) => {
   dirty = true;
+  if (kind === 'structure' || kind === 'change') scheduleCaches();
   if (kind === 'structure' || kind === 'change') autosave();
   if (kind === 'selection' || kind === 'structure') { renderToolbar(); onSelectionChanged(); }
   else if (kind === 'change') renderToolbar();

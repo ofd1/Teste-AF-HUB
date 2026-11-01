@@ -79,7 +79,8 @@ test('CC: Looks decodificado e Gradiente de 4 cores', () => {
 
   const dark = load('CC (Color Correction)/ZAZ Reverse Dark CC.ffx').preset.effects[0].params;
   assert.equal(dark.saturation, 65);
-  assert.equal(dark.mojo, 50);
+  assert.equal(dark.mojo, 100); // Mojo II = 100 no Looks original
+  assert.equal(dark.punch, 22.5); // Punch It 50 × 0,45
 
   const de = load('CC (Color Correction)/FTB Main CC.ffx'); // salvo num After Effects em alemão
   const um = de.preset.effects.find((e) => e.matchName === 'ADBE Unsharp Mask2');
@@ -105,4 +106,15 @@ test('instâncias de efeito criadas a partir dos presets reais são válidas', (
       }
     }
   }
+});
+
+test('Looks: Colorista HSL por cor, temperatura e curvas vêm do arquivo', () => {
+  const sn = load('CC (Color Correction)/Sonhei New CC.ffx').preset.effects.filter((e) => e.type === 'looks').map((e) => e.params);
+  assert.equal(sn[0].hslAquaS, -50);
+  assert.equal(sn[0].hslYellowH, 50);
+  assert.equal(sn[0].temperature, -15);
+  assert.equal(sn[1].saturation, 70);
+  const ftb = load('CC (Color Correction)/FTB AEP CC.ffx').preset.effects.filter((e) => e.type === 'looks').map((e) => e.params);
+  assert.deepEqual([ftb[1].curve1x, ftb[1].curve1y].map((v) => +v.toFixed(3)), [0.292, 0.065]);
+  assert.ok(ftb[0].mojo > 30 && ftb[0].punch > 30);
 });

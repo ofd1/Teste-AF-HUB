@@ -210,7 +210,9 @@ export class GLEngine {
         gl.activeTexture(gl.TEXTURE0 + unit);
         gl.bindTexture(gl.TEXTURE_2D, v.tex);
         gl.uniform1i(l, unit++);
-      } else if (typeof v === 'number' || typeof v === 'boolean') gl.uniform1f(l, +v);
+      } else if (v && v.vec3) gl.uniform3fv(l, v.vec3); // vetor de vec3 (ex.: uniform vec3 u_hsl[8])
+      else if (v && v.vec2) gl.uniform2fv(l, v.vec2);
+      else if (typeof v === 'number' || typeof v === 'boolean') gl.uniform1f(l, +v);
       else if (Array.isArray(v)) {
         if (v.length === 2) gl.uniform2fv(l, v);
         else if (v.length === 3) gl.uniform3fv(l, v);

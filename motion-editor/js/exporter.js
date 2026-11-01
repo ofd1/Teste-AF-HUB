@@ -96,7 +96,7 @@ export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } 
       if (ui.cancelled || failure) break;
       const t = i / fps;
       await prepare(project, t, { exact: true });
-      renderFrame(ctx, project, t, width / project.width);
+      renderFrame(ctx, project, t, width / project.width, { final: true });
       const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
       venc.encode(frame, { keyFrame: i % (fps * 2) === 0 });
       frame.close();
@@ -189,7 +189,7 @@ export async function exportPNG(store) {
   const c = document.createElement('canvas');
   c.width = project.width; c.height = project.height;
   await prepare(project, store.time, { exact: true });
-  renderFrame(c.getContext('2d'), project, store.time, 1);
+  renderFrame(c.getContext('2d'), project, store.time, 1, { final: true });
   const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
   await saveFile(`frame-${store.time.toFixed(2)}s.png`, blob);
 }

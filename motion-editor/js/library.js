@@ -2,6 +2,7 @@
 import { parseFFX, retimeFFX } from './ffx.js';
 import { BUILTIN_PRESETS, ffxToPreset, applyPreset, layerToPreset, serializePreset, parsePresetJSON } from './presets.js';
 import { LAYER_FACTORIES } from './state.js';
+import { sourceTimeRaw } from './timing.js';
 import { modal, toast, pickFiles, storage } from './ui.js';
 import { escapeHtml } from './util.js';
 import { saveFile } from './platform.js';
@@ -147,18 +148,40 @@ export class Library {
   apply(p) {
     if (!p) return;
     let layer = this.store.layer();
+    const hasSpeed = (p.effects || []).some((e) => e.type === 'twixtor');
+    if (hasSpeed && layer?.type !== 'video') {
+      // Velocidade/Twixtor só faz sentido no vídeo: usa o clipe de vídeo sob o playhead
+      const t = this.store.time;
+      const v = this.store.project.layers.find((l) => l.type === 'video' && l.visible && t >= l.inPoint && t < l.outPoint);
+      if (!v) { toast('Este preset muda a velocidade do vídeo: coloque o playhead sobre um clipe de vídeo.', 'warn', 5000); return; }
+      layer = v;
+      this.store.selectedLayerId = v.id;
+    }
     if (!layer) {
       if (Object.keys(p.transform || {}).length) { toast('Selecione uma camada antes de aplicar este preset.', 'warn'); return; }
       layer = LAYER_FACTORIES.adjustment(this.store.project);
       layer.name = `Ajuste · ${p.name}`;
-      layer.inPoint = this.store.time;
-      layer.outPoint = Math.min(this.store.project.duration, this.store.time + Math.max(1, (p.duration || 0) + 0.5));
+      if ((p.duration || 0) < 0.01) {
+        // CC / look estático: vale para o vídeo inteiro
+        layer.inPoint = 0;
+        layer.outPoint = this.store.project.duration;
+      } else {
+        layer.inPoint = this.store.time;
+        layer.outPoint = Math.min(this.store.project.duration, this.store.time + (p.duration || 0) + 0.5);
+      }
       this.store.project.layers.unshift(layer);
       this.store.selectedLayerId = layer.id;
     }
     const t0 = applyPreset(layer, p, this.store.time);
     this.store.commit('structure');
     toast(`“${p.name}” aplicado em ${layer.name} (${t0.toFixed(2)}s)`, 'ok');
+    if (hasSpeed && layer.type === 'video') {
+      // como no AE: o reverse volta no tempo a partir do ponto aplicado e precisa de vídeo antes dele
+      let min = Infinity;
+      const end = Math.min(layer.outPoint, t0 + (p.duration || 0));
+      for (let t = t0; t <= end; t += 1 / this.store.project.fps) min = Math.min(min, sourceTimeRaw(layer, t));
+      if (min < -0.04) toast(`O reverse volta ${(-min).toFixed(2)}s antes do início do vídeo e vai congelar no 1º quadro. Aplique mais adiante no clipe (no momento do lance).`, 'warn', 7000);
+    }
     this.hooks.onApplied?.(layer, p);
   }
 

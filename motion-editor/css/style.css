@@ -293,3 +293,26 @@ details { margin-top: 8px; } summary { cursor: pointer; color: var(--muted); }
 .toast.out { opacity: 0; transform: translateY(-8px); }
 .drop-overlay { position: fixed; inset: 0; background: #7c5cff33; border: 3px dashed var(--accent); display: none; place-items: center; z-index: 50; font-size: 18px; font-weight: 700; pointer-events: none; }
 .drop-overlay.show { display: grid; }
+
+.cache-pill { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 5px 12px; border-radius: 99px; background: #000c; color: var(--key); font-size: 12px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.cache-pill.show { opacity: 1; }
+
+/* ---------- ajustes para iPhone / telas de toque ---------- */
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+.app, .toolbar, .transport, .timeline-wrap, .sheet-head, .tl, .preset, .fx-tile, button { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea, select { -webkit-user-select: text; user-select: text; }
+@media (pointer: coarse) {
+  /* o Safari do iPhone dá zoom na página inteira ao focar campos < 16px */
+  input[type="number"], input[type="text"], input[type="search"], select, textarea { font-size: 16px; }
+}
+@media (max-width: 1099px) {
+  .app { grid-template-rows: auto minmax(0, 1fr) auto minmax(170px, 36vh) auto; }
+  .tl-row { height: 36px; margin: 3px 0; }
+  .clip-label { font-size: 11px; padding: 1px 6px; margin: 2px; }
+}
+/* zoom da timeline no canto da régua (não cobre os clipes) */
+.tl-zoom { top: 0; bottom: auto; right: 4px; height: 22px; align-items: center; }
+.tl-zoom button { width: 26px; height: 20px; border-radius: 6px; font-size: 13px; line-height: 1; background: #000d; }
+.adv { margin-top: 6px; }
+.adv summary { padding: 6px 0; font-size: 13px; }
+@media (pointer: coarse) { .quality select { font-size: 16px; padding: 2px 6px; } }

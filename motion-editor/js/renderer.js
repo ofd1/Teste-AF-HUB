@@ -3,13 +3,15 @@
 import { valueAt } from './anim.js';
 import { EFFECT_MAP, makeCanvas } from './effects.js';
 import { getGL } from './gl.js';
-import { getImage, drawVideo } from './media.js';
+import { getImage, videoFrames } from './media.js';
+import { flowInterpolate } from './flow.js';
 import { layerTime } from './timing.js';
 
 const contentCanvases = new Map();
 let accumCanvas = null;
 let snapshotCanvas = null;
 let project = null; // projeto em renderização (para tamanho de camadas de ajuste)
+let renderOpts = { final: false }; // final=true na exportação (quadros em resolução total)
 
 function poolCanvas(id, w, h) {
   let c = contentCanvases.get(id);
@@ -86,9 +88,11 @@ function drawContent(ctx, layer, w, h, extra) {
       if (img.complete && img.naturalWidth) ctx.drawImage(img, 0, 0, w, h);
       break;
     }
-    case 'video':
-      drawVideo(ctx, layer, w, h);
+    case 'video': {
+      const src = extra?.videoSource;
+      if (src) ctx.drawImage(src, 0, 0, w, h);
       break;
+    }
     case 'adjustment':
       if (extra?.snapshot) ctx.drawImage(extra.snapshot, 0, 0, w, h);
       break;
@@ -139,18 +143,36 @@ function renderLayerImage(layer, t, scale, extra) {
   pad = Math.ceil(Math.min(pad * scale, 4096));
 
   const W = Math.ceil(w * scale + pad * 2), H = Math.ceil(h * scale + pad * 2);
-  const canvas = poolCanvas(layer.id, W, H);
-  const cx = canvas.getContext('2d');
-  cx.setTransform(1, 0, 0, 1, 0, 0);
-  cx.clearRect(0, 0, W, H);
-  cx.translate(pad, pad);
-  cx.scale(scale, scale);
-  drawContent(cx, layer, w, h, extra);
+  const vf = layer.type === 'video' ? videoFrames(layer, lt, project?.fps || 30, renderOpts.final) : null;
+  const paint = (id, source) => {
+    const canvas = poolCanvas(id, W, H);
+    const cx = canvas.getContext('2d');
+    cx.setTransform(1, 0, 0, 1, 0, 0);
+    cx.clearRect(0, 0, W, H);
+    cx.translate(pad, pad);
+    cx.scale(scale, scale);
+    drawContent(cx, layer, w, h, { ...extra, videoSource: source });
+    return canvas;
+  };
+  const canvas = paint(layer.id, vf?.a);
 
-  const gl = evaluated.length ? getGL() : null;
-  if (!gl) return { src: canvas, sw: W, sh: H, pad, w, h };
+  const gl = evaluated.length || vf?.b ? getGL() : null;
+  if (!gl) {
+    if (vf?.b) { // sem WebGL: mistura simples
+      const cx = canvas.getContext('2d');
+      cx.globalAlpha = vf.f;
+      cx.drawImage(paint(`${layer.id}#b`, vf.b), 0, 0);
+      cx.globalAlpha = 1;
+    }
+    return { src: canvas, sw: W, sh: H, pad, w, h };
+  }
 
   let tex = gl.upload(canvas);
+  if (vf?.b) {
+    // Twixtor: quadro intermediário por fluxo óptico
+    const texB = gl.upload(paint(`${layer.id}#b`, vf.b));
+    try { tex = flowInterpolate(gl, tex, texB, vf.f, renderOpts.final ? 'final' : 'preview'); } catch (e) { console.warn('fluxo óptico falhou', e); }
+  }
   const rect = [pad / tex.w, pad / tex.h, (w * scale) / tex.w, (h * scale) / tex.h];
   gl.env = { u_time: lt, u_scale: scale, u_rect: rect };
   const env = { gl, t: lt, scale, pad, w, h, W: tex.w, H: tex.h, rect, layer };
@@ -222,8 +244,9 @@ export function renderLayer(ctx, layer, t, scale, extra, fps = 30) {
   ctx.restore();
 }
 
-export function renderFrame(ctx, proj, t, scale = 1) {
+export function renderFrame(ctx, proj, t, scale = 1, opts = {}) {
   project = proj;
+  renderOpts = { final: !!opts.final };
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;

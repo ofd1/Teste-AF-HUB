@@ -117,7 +117,8 @@ export class Inspector {
           ${def.plugin ? `<div class="plugin-note">Recriação estilo <b>${escapeHtml(def.plugin)}</b></div>` : ''}
           ${def.description ? `<div class="desc">${escapeHtml(def.description)}</div>` : ''}
           ${generic ? '<div class="note">Efeito do AE sem equivalente: controles importados (editáveis e animáveis) sem alterar a imagem.</div>' : ''}
-          ${def.params.map((pd) => this.propRow(`fx:${fx.id}.${pd.key}`, pd)).join('')}
+          ${def.params.filter((pd) => !pd.advanced).map((pd) => this.propRow(`fx:${fx.id}.${pd.key}`, pd)).join('')}
+          ${def.params.some((pd) => pd.advanced) ? `<details class="adv"><summary>Avançado</summary>${def.params.filter((pd) => pd.advanced).map((pd) => this.propRow(`fx:${fx.id}.${pd.key}`, pd)).join('')}</details>` : ''}
         </div>
       </div>`;
     });

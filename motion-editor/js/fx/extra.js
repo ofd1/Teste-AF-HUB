@@ -90,30 +90,79 @@ const LGG = colorFrag('uniform vec3 u_lift, u_gamma, u_gain; uniform float u_sat
   r = pow(max(r, 0.0), 1.0 / max(u_gamma, vec3(0.01)));
   r = mix(vec3(luma(r)), r, u_sat);`);
 
-// "Looks": um único efeito com as ferramentas mais usadas do Magic Bullet Looks.
+// "Looks": um único efeito com as ferramentas do Magic Bullet Looks (Colorista, Mojo II, Curves, Haze…).
 const LOOKS = frag(`
-uniform float u_exp, u_sat, u_hue, u_con, u_fade, u_mojo, u_vig, u_vsize, u_strength;
-uniform vec3 u_filter, u_lift, u_gamma, u_gain; uniform float u_fdens;
+uniform float u_exp, u_sat, u_hue, u_con, u_fade, u_mojo, u_cool, u_skin, u_punch, u_bleach, u_vig, u_vsize, u_strength, u_temp, u_tint, u_fdens;
+uniform vec3 u_filter, u_lift, u_gamma, u_gain;
+uniform vec3 u_hsl[8];
+uniform vec2 u_curve[4]; uniform float u_ncurve;
+float hueCenter(int i) {
+  if (i == 0) return 0.0; if (i == 1) return 30.0; if (i == 2) return 60.0; if (i == 3) return 120.0;
+  if (i == 4) return 180.0; if (i == 5) return 240.0; if (i == 6) return 275.0; return 315.0;
+}
+float curveDy(float x) {
+  float px = 0.0, py = 0.0;
+  for (int i = 0; i < 5; i++) {
+    float nx = 1.0, ny = 0.0;
+    if (i < 4 && float(i) < u_ncurve) { nx = u_curve[i].x; ny = u_curve[i].y; }
+    if (x <= nx) { float t = clamp((x - px) / max(nx - px, 1e-4), 0.0, 1.0); t = t * t * (3.0 - 2.0 * t); return mix(py, ny, t); }
+    px = nx; py = ny;
+  }
+  return 0.0;
+}
 void main() {
   vec4 c0 = unpre(texture2D(u_tex, v_uv));
   vec3 r = c0.rgb;
-  r = pow(pow(max(r, 0.0), vec3(2.2)) * pow(2.0, u_exp), vec3(1.0 / 2.2)); // exposição em luz linear
+  // exposição (luz linear) e filtro de cor (Warm/Cool)
+  r = pow(pow(max(r, 0.0), vec3(2.2)) * pow(2.0, u_exp), vec3(1.0 / 2.2));
   vec3 f = r * u_filter; f *= luma(r) / max(luma(f), 0.0001); r = mix(r, f, u_fdens);
+  // temperatura / tint
+  r += vec3(u_temp, u_temp * 0.15, -u_temp) * 0.09 + vec3(u_tint * 0.05, -u_tint * 0.07, u_tint * 0.05);
+  // Colorista 3 vias
   r = u_gain * (r + u_lift * (1.0 - r));
   r = pow(max(r, 0.0), 1.0 / max(u_gamma, vec3(0.01)));
-  vec3 h = rgb2hsv(clamp(r, 0.0, 1.0)); h.x = fract(h.x + u_hue); r = hsv2rgb(h);
+  // HSL por cor (vermelho, laranja, amarelo, verde, ciano, azul, roxo, magenta)
+  vec3 hv = rgb2hsv(clamp(r, 0.0, 1.0));
+  float hdeg = hv.x * 360.0;
+  vec3 adj = vec3(0.0);
+  for (int i = 0; i < 8; i++) {
+    float d = abs(mod(hdeg - hueCenter(i) + 180.0, 360.0) - 180.0);
+    float w = clamp(1.0 - d / 40.0, 0.0, 1.0);
+    adj += u_hsl[i] * w * w * (3.0 - 2.0 * w);
+  }
+  adj *= smoothstep(0.02, 0.15, hv.y);
+  hv.x = fract(hv.x + u_hue + adj.x * 0.3 / 360.0);
+  hv.y = clamp(hv.y * (1.0 + adj.y / 100.0), 0.0, 1.0);
+  hv.z = clamp(hv.z * (1.0 + adj.z / 100.0 * 0.6), 0.0, 1.0);
+  r = hsv2rgb(hv);
+  // Mojo II: sombras/meios-tons para teal, pele para laranja
   float l = luma(r);
-  // Mojo: sombras azuladas, tons de pele/realces alaranjados
-  vec3 teal = vec3(0.0, 0.35, 0.45), orange = vec3(1.0, 0.62, 0.32);
-  r = mix(r, mix(r * mix(vec3(1.0), teal * 2.0, 0.5), r * mix(vec3(1.0), orange * 1.4, 0.5), smoothstep(0.15, 0.75, l)), u_mojo);
+  float skin = smoothstep(22.0, 6.0, abs(mod(hv.x * 360.0 - 28.0 + 180.0, 360.0) - 180.0)) * smoothstep(0.1, 0.35, hv.y);
+  vec3 teal = vec3(l) + (r - vec3(l)) * 0.85 + vec3(-0.07, 0.015, 0.06) * (1.0 - l * 0.7);
+  vec3 warm = r * vec3(1.07, 1.0, 0.88);
+  r = mix(r, teal, u_mojo * u_cool * (1.0 - skin));
+  r = mix(r, warm, u_mojo * u_skin * skin);
+  // Punch (curva S + saturação) e Bleach (bleach bypass)
+  vec3 sc = r * r * (3.0 - 2.0 * r);
+  r = mix(r, sc, u_punch);
+  r = mix(vec3(luma(r)), r, 1.0 + u_punch * 0.25);
+  float bl = luma(r);
+  vec3 ov = mix(2.0 * r * bl, 1.0 - 2.0 * (1.0 - r) * (1.0 - bl), step(0.5, bl));
+  r = mix(r, mix(ov, vec3(bl), 0.4), u_bleach);
+  // contraste, saturação, curva, haze/fade
   r = (r - 0.45) * (1.0 + u_con) + 0.45;
   r = mix(vec3(luma(r)), r, u_sat);
+  r += vec3(curveDy(clamp(r.r, 0.0, 1.0)), curveDy(clamp(r.g, 0.0, 1.0)), curveDy(clamp(r.b, 0.0, 1.0)));
   r = mix(r, vec3(0.08) + r * 0.86, u_fade);
+  // vinheta
   vec2 cu = contentUV(v_uv) - 0.5;
   r *= 1.0 - smoothstep(u_vsize, u_vsize + 0.5, length(cu) * 1.4142) * u_vig;
   r = clamp(r, 0.0, 1.0);
   gl_FragColor = pre(vec4(mix(c0.rgb, r, u_strength), c0.a));
 }`);
+
+export const HSL_COLORS = [['Red', 'vermelho'], ['Orange', 'laranja'], ['Yellow', 'amarelo'], ['Green', 'verde'], ['Aqua', 'ciano'], ['Blue', 'azul'], ['Purple', 'roxo'], ['Magenta', 'magenta']];
+const adv = (p) => ({ ...p, advanced: true });
 
 const THRESH = frag(`
 uniform float u_thr;
@@ -135,28 +184,40 @@ export const WARP_STYLES = ['Arco', 'Arco inferior', 'Arco superior', 'Arqueado'
 export default [
   {
     type: 'looks', label: 'Looks (CC completo)', category: 'Cor', plugin: 'Magic Bullet Looks',
-    description: 'Exposição, filtro, Colorista (lift/gamma/gain), Mojo (teal & orange), contraste, saturação, haze, vinheta, difusão e aberração — tudo em um efeito. Presets com Magic Bullet Looks são convertidos para cá.',
+    description: 'Colorista (3 vias + HSL por cor), Mojo II (teal & orange, Punch, Bleach), curvas, temperatura, haze, vinheta, difusão e aberração. Presets com Magic Bullet Looks são convertidos para cá.',
     params: [
       num('strength', 'Força %', 100, 0, 100), num('exposure', 'Exposição', 0, -3, 3, 0.01),
-      col('filter', 'Filtro de cor', [1, 1, 1, 1]), num('filterDensity', 'Densidade do filtro %', 0, 0, 100),
-      num('liftR', 'Sombras R', 0, -0.5, 0.5, 0.005), num('liftG', 'Sombras G', 0, -0.5, 0.5, 0.005), num('liftB', 'Sombras B', 0, -0.5, 0.5, 0.005),
-      num('gammaR', 'Meios-tons R', 1, 0.3, 3, 0.01), num('gammaG', 'Meios-tons G', 1, 0.3, 3, 0.01), num('gammaB', 'Meios-tons B', 1, 0.3, 3, 0.01),
-      num('gainR', 'Realces R', 1, 0, 3, 0.01), num('gainG', 'Realces G', 1, 0, 3, 0.01), num('gainB', 'Realces B', 1, 0, 3, 0.01),
-      ang('hue', 'Matiz', 0), num('saturation', 'Saturação %', 100, 0, 300), num('contrast', 'Contraste', 0, -100, 100),
-      num('mojo', 'Mojo (teal & orange) %', 0, 0, 100), num('fade', 'Haze / fade %', 0, 0, 100),
+      num('temperature', 'Temperatura', 0, -100, 100), num('tint', 'Tint', 0, -100, 100),
+      num('contrast', 'Contraste', 0, -100, 100), num('saturation', 'Saturação %', 100, 0, 300),
+      num('mojo', 'Mojo (teal & orange) %', 0, 0, 100), num('mojoCool', 'Mojo – esfriar %', 50, 0, 100), num('mojoSkin', 'Mojo – pele quente %', 50, 0, 100),
+      num('punch', 'Punch %', 0, 0, 100), num('bleach', 'Bleach %', 0, 0, 100), num('fade', 'Haze / fade %', 0, 0, 100),
       num('vignette', 'Vinheta %', 0, 0, 100), num('vignetteSize', 'Tamanho da vinheta %', 50, 0, 100),
       num('diffusion', 'Difusão (glow) %', 0, 0, 300), num('diffusionRadius', 'Raio da difusão', 60, 1, 600), num('diffusionThreshold', 'Limiar da difusão %', 60, 0, 100),
       num('chroma', 'Aberração cromática', 0, 0, 50, 0.1),
+      adv(col('filter', 'Filtro de cor', [1, 1, 1, 1])), adv(num('filterDensity', 'Densidade do filtro %', 0, 0, 100)), adv(ang('hue', 'Matiz global', 0)),
+      adv(num('liftR', 'Sombras R', 0, -0.5, 0.5, 0.005)), adv(num('liftG', 'Sombras G', 0, -0.5, 0.5, 0.005)), adv(num('liftB', 'Sombras B', 0, -0.5, 0.5, 0.005)),
+      adv(num('gammaR', 'Meios-tons R', 1, 0.3, 3, 0.01)), adv(num('gammaG', 'Meios-tons G', 1, 0.3, 3, 0.01)), adv(num('gammaB', 'Meios-tons B', 1, 0.3, 3, 0.01)),
+      adv(num('gainR', 'Realces R', 1, 0, 3, 0.01)), adv(num('gainG', 'Realces G', 1, 0, 3, 0.01)), adv(num('gainB', 'Realces B', 1, 0, 3, 0.01)),
+      ...HSL_COLORS.flatMap(([k, n]) => [
+        adv(num(`hsl${k}H`, `HSL ${n} – matiz`, 0, -100, 100)), adv(num(`hsl${k}S`, `HSL ${n} – saturação`, 0, -100, 100)), adv(num(`hsl${k}L`, `HSL ${n} – luminância`, 0, -100, 100)),
+      ]),
+      ...[1, 2, 3, 4].flatMap((i) => [adv(num(`curve${i}x`, `Curva ponto ${i} – entrada`, -1, -1, 1, 0.001)), adv(num(`curve${i}y`, `Curva ponto ${i} – ajuste`, 0, -0.5, 0.5, 0.001))]),
     ],
     pad: (p) => (p.diffusion > 0 ? p.diffusionRadius * 0.5 : 0),
     render: (src, p, env) => {
       const { gl } = env;
       const s = p.strength / 100;
+      const pts = [1, 2, 3, 4].map((i) => [p[`curve${i}x`], p[`curve${i}y`]]).filter(([x]) => x > 0 && x < 1).sort((a, b) => a[0] - b[0]);
+      const curve = [0, 1, 2, 3].flatMap((i) => pts[i] || [1, 0]);
       let out = gl.pass(LOOKS, {
         u_tex: src, u_exp: p.exposure, u_sat: p.saturation / 100, u_hue: p.hue / 360, u_con: p.contrast / 100, u_fade: p.fade / 100,
-        u_mojo: p.mojo / 100, u_vig: p.vignette / 100, u_vsize: p.vignetteSize / 100, u_strength: s,
+        u_mojo: p.mojo / 100, u_cool: (p.mojoCool ?? 50) / 50, u_skin: (p.mojoSkin ?? 50) / 50, u_punch: (p.punch || 0) / 100, u_bleach: (p.bleach || 0) / 100,
+        u_temp: (p.temperature || 0) / 100, u_tint: (p.tint || 0) / 100,
+        u_vig: p.vignette / 100, u_vsize: p.vignetteSize / 100, u_strength: s,
         u_filter: rgb(p.filter), u_fdens: p.filterDensity / 100,
         u_lift: [p.liftR, p.liftG, p.liftB], u_gamma: [p.gammaR, p.gammaG, p.gammaB], u_gain: [p.gainR, p.gainG, p.gainB],
+        u_hsl: { vec3: HSL_COLORS.flatMap(([k]) => [p[`hsl${k}H`] || 0, p[`hsl${k}S`] || 0, p[`hsl${k}L`] || 0]) },
+        u_curve: { vec2: curve }, u_ncurve: pts.length,
       });
       if (p.diffusion * s >= 1) {
         const th = gl.pass(THRESH, { u_tex: out, u_thr: p.diffusionThreshold / 100 });

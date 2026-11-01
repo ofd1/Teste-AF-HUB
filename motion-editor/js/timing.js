@@ -41,12 +41,17 @@ export function integrateSpeed(prop, from, to, step = 1 / 120) {
 
 /** Tempo (s) dentro do arquivo de mídia para o tempo de composição t. */
 export function sourceTime(layer, t) {
+  return Math.max(0, sourceTimeRaw(layer, t));
+}
+
+/** Como sourceTime, sem limitar em 0 (negativo = o reverse pediria vídeo antes do início do arquivo). */
+export function sourceTimeRaw(layer, t) {
   const lt = layerTime(layer, t);
   const start = layer.props.sourceStart || 0;
   const rate = layer.props.speed ?? 1;
   const fx = speedEffect(layer);
   const local = fx ? integrateSpeed(fx.params.speed, layer.inPoint, lt) : lt - layer.inPoint;
-  return Math.max(0, start + local * rate);
+  return start + local * rate;
 }
 
 /** Velocidade instantânea da mídia (1 = normal) — usada como playbackRate na prévia. */

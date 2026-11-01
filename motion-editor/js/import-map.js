@@ -23,9 +23,14 @@ const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
  */
 export function looksFromTools(tools, strength = 100) {
   const p = {
-    strength, exposure: 0, filter: [1, 1, 1, 1], filterDensity: 0, liftR: 0, liftG: 0, liftB: 0, gammaR: 1, gammaG: 1, gammaB: 1, gainR: 1, gainG: 1, gainB: 1,
-    hue: 0, saturation: 100, contrast: 0, mojo: 0, fade: 0, vignette: 0, vignetteSize: 50, diffusion: 0, diffusionRadius: 60, diffusionThreshold: 60, chroma: 0,
+    strength, exposure: 0, temperature: 0, tint: 0, filter: [1, 1, 1, 1], filterDensity: 0,
+    liftR: 0, liftG: 0, liftB: 0, gammaR: 1, gammaG: 1, gammaB: 1, gainR: 1, gainG: 1, gainB: 1,
+    hue: 0, saturation: 100, contrast: 0, mojo: 0, mojoCool: 50, mojoSkin: 50, punch: 0, bleach: 0, fade: 0,
+    vignette: 0, vignetteSize: 50, diffusion: 0, diffusionRadius: 60, diffusionThreshold: 60, chroma: 0,
   };
+  const HSL = ['Red', 'Orange', 'Yellow', 'Green', 'Aqua', 'Blue', 'Purple', 'Magenta'];
+  for (const k of HSL) { p[`hsl${k}H`] = 0; p[`hsl${k}S`] = 0; p[`hsl${k}L`] = 0; }
+  let curve = [];
   const used = [], ignored = [];
   for (const t of tools) {
     const v = t.values;
@@ -35,35 +40,60 @@ export function looksFromTools(tools, strength = 100) {
       case 'fltr':
         if (Math.min(v[0], v[1], v[2]) < 0.995) { p.filter = [v[0], v[1], v[2], 1]; p.filterDensity = 100; } else { ignored.push('fltr (neutro)'); continue; }
         break;
-      case 'vign': p.vignette = Math.max(p.vignette, (v[5] || 0) * 0.7); p.vignetteSize = clampN(60 - ((v[2] || 1) - 1) * 50, 15, 85); break;
-      case 'lenv': p.vignette = Math.max(p.vignette, (v[0] || 0) * 0.5); break;
+      case 'vign': p.vignette = Math.max(p.vignette, (v[5] || 0) * 0.8); p.vignetteSize = clampN(60 - ((v[2] || 1) - 1) * 50, 15, 85); break;
+      case 'lenv': p.vignette = Math.max(p.vignette, (v[0] || 0) * 0.6); break;
       case 'odif': p.diffusion += (v[0] || 0) * 0.6; p.diffusionRadius = Math.max(p.diffusionRadius, (v[1] || 100) * 0.3); break;
       case 'diff':
         if (v[0] <= 1) { p.diffusion += v[0] * 75; p.diffusionRadius = Math.max(p.diffusionRadius, (v[1] || 5) * 12); } else { p.diffusion += (v[3] || 50) * 0.2; p.diffusionRadius = Math.max(p.diffusionRadius, v[0] * 0.4); }
         break;
       case 'chab': p.chroma += Math.abs(v[0] || 0) * 4; break;
       case 'husa': p.hue += v[0] || 0; p.saturation *= (v[1] ?? 100) / 100; break;
-      case 'mjo2': p.mojo += (v[0] || 0) * 0.5; p.contrast += (v[3] || 0) * 0.15; break;
-      case 'haze': p.fade += (v[0] || 0) * 0.3; break;
-      case 'csta':
+      case 'mjo2':
+        // Mojo II: [Mojo, tuning, …, Punch, Bleach, Cool It, Warm Skin, …]
+        p.mojo = Math.max(p.mojo, v[0] || 0);
+        p.punch += (v[3] || 0) * 0.45;
+        p.bleach += (v[4] || 0) * 0.5;
+        if (v[5] > 0) p.mojoCool = clampN(v[5] * 2, 0, 100);
+        if (v[6] > 0) p.mojoSkin = clampN(v[6] * 2, 0, 100);
+        break;
+      case 'haze': p.fade += (v[0] || 0) * 0.35; break;
+      case 'csta': {
+        // Colorista: [?, força, exposição, lift RGB, gamma RGB, gain RGB, ?, HSL de 8 cores (matiz/sat/lum) …, temperatura (216), tint (217)]
         p.liftR += ((v[3] ?? 1) - 1) * 0.6; p.liftG += ((v[4] ?? 1) - 1) * 0.6; p.liftB += ((v[5] ?? 1) - 1) * 0.6;
         p.gammaR *= v[6] ?? 1; p.gammaG *= v[7] ?? 1; p.gammaB *= v[8] ?? 1;
         p.gainR *= v[9] ?? 1; p.gainG *= v[10] ?? 1; p.gainB *= v[11] ?? 1;
         p.exposure += (v[2] || 0) * 0.25;
-        if (v[12] > 0 && v[12] <= 200) p.saturation *= (100 + (v[12] - 100) * 0.4) / 100;
+        HSL.forEach((k, i) => {
+          p[`hsl${k}H`] += v[13 + i * 3] || 0;
+          p[`hsl${k}S`] += v[14 + i * 3] || 0;
+          p[`hsl${k}L`] += v[15 + i * 3] || 0;
+        });
+        p.temperature += v[216] || 0;
+        p.tint += v[217] || 0;
         break;
-      case 'cmix': p.saturation *= 0.7 + 0.3 * ((v[1] ?? 100) / 100); break;
-      case 'duto': p.mojo += (v[3] || 0) * 0.5; break;
-      case '2stp': p.mojo += (v[0] || 0) * 0.3; p.saturation *= 0.9; break;
-      case 'crv2': p.contrast += v[0] < 1 ? (1 - v[0]) * 10 : 0; break;
+      }
+      case 'crv2': {
+        // curva: [força, …, (36) canal, (37) nº de pontos, depois pares (entrada, ajuste)]
+        const n = Math.min(4, Math.round(v[37] || 0));
+        for (let i = 0; i < n; i++) curve.push([v[38 + i * 2], v[39 + i * 2]]);
+        break;
+      }
+      case 'cmix': if ((v[0] ?? 100) > 0) p.saturation *= (v[1] ?? 100) / 100; break;
+      case 'duto': p.mojo = Math.max(p.mojo, (v[3] || 0) * 2); break;
+      case '2stp': p.mojo = Math.max(p.mojo, (v[0] || 0) * 0.6); p.saturation *= 0.9; break;
       case 'logc': p.fade += 8; p.contrast -= 8; break;
       case 'spex': case 'grex': p.exposure += (v[0] || 0) * 0.1; break;
       default: ignored.push(t.id); continue;
     }
     used.push(t.id);
   }
+  curve = curve.filter(([x]) => x > 0 && x < 1).sort((a, b) => a[0] - b[0]).slice(0, 4);
+  curve.forEach(([x, y], i) => { p[`curve${i + 1}x`] = x; p[`curve${i + 1}y`] = clampN(y, -0.5, 0.5); });
+  for (const k of HSL) for (const c of 'HSL') p[`hsl${k}${c}`] = clampN(p[`hsl${k}${c}`], -100, 100);
   p.exposure = clampN(p.exposure, -3, 3); p.saturation = clampN(p.saturation, 0, 300); p.contrast = clampN(p.contrast, -100, 100);
-  p.mojo = clampN(p.mojo, 0, 100); p.fade = clampN(p.fade, 0, 60); p.vignette = clampN(p.vignette, 0, 100); p.diffusion = clampN(p.diffusion, 0, 150);
+  p.temperature = clampN(p.temperature, -100, 100); p.tint = clampN(p.tint, -100, 100);
+  p.mojo = clampN(p.mojo, 0, 100); p.punch = clampN(p.punch, 0, 100); p.bleach = clampN(p.bleach, 0, 100);
+  p.fade = clampN(p.fade, 0, 60); p.vignette = clampN(p.vignette, 0, 100); p.diffusion = clampN(p.diffusion, 0, 150);
   p.diffusionRadius = clampN(p.diffusionRadius, 1, 300); p.chroma = clampN(p.chroma, 0, 20);
   return { params: p, used, ignored };
 }
