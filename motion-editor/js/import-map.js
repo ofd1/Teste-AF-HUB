@@ -189,7 +189,9 @@ export const IMPORT_RULES = [
   { vendor: 'Sapphire', plugin: 'S_FilmDamage / S_FilmEffect', to: 'filmLook', test: /s_film/i,
     expand: (fx, raw) => [{ type: 'filmLook', label: fx.name, params: { grain: Math.min(100, (raw('grain amp') || 0) * 30), scratch: Math.min(100, (raw('dust density') || 0) * 10 + (raw('scratch density') || 0) * 10), vignette: 0, flicker: Math.min(100, (raw('flicker amp') || 0) * 100), warmth: 0, fade: 0 } }] },
   { vendor: 'Sapphire', plugin: 'S_Flicker', to: 'flicker', test: /s_flicker/i,
-    map: { amount: { n: ['amplitude'], conv: (v) => v * 100 }, frequency: { n: ['rand freq'], conv: (v) => Math.min(60, v) }, colorAmount: { n: ['rand color amp'], conv: (v) => v * 100 }, brightness: { n: ['brightness'] } } },
+    map: { amount: { n: ['amplitude'], conv: (v) => v * 100 }, frequency: { n: ['rand freq'], conv: (v) => Math.min(60, v) }, colorAmount: { n: ['rand color amp'], conv: (v) => v * 100 }, brightness: { n: ['brightness'] } },
+    // S_Flicker: a variação de brilho é Amplitude × Rand Luma Amp (Amplitude é o mestre), não só Amplitude
+    post: (p, raw) => { const a = raw('amplitude') ?? 1, l = raw('rand luma amp') ?? 0.5, c = raw('rand color amp') ?? 0; p.amount = a * l * 100; p.colorAmount = l > 0 ? Math.min(100, (c / l) * 100) : 0; } },
   { vendor: 'BCC', plugin: 'BCC Directional Blur', to: 'dirBlur', test: /bcc.*(directional|motion).*blur/i,
     map: { length: { i: 2, n: ['blur amount'], conv: (v) => v * 1.5 }, angle: { i: 3, n: ['angle'] } } },
   { vendor: 'BCC', plugin: 'BCC Unsharp Mask', to: 'sharpen', test: /bcc.*(unsharp|sharpen)/i,

@@ -70,7 +70,8 @@ export default [
   {
     type: 'brightnessContrast', label: 'Brilho e contraste', category: 'Cor',
     params: [num('brightness', 'Brilho', 0, -150, 150), num('contrast', 'Contraste', 0, -100, 100)],
-    render: fx(BC, (p) => ({ u_b: p.brightness / 150, u_c: p.contrast / 100 })),
+    // AE (Brilho e contraste novo): +70 já clareia bastante os meios-tons
+    render: fx(BC, (p) => ({ u_b: p.brightness / 90, u_c: p.contrast / 100 })),
   },
   {
     type: 'hueSat', label: 'Matiz / Saturação', category: 'Cor',

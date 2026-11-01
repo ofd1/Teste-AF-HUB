@@ -25,7 +25,7 @@ const FULL = new Set(['video', 'adjustment', 'image', 'solid']);
 const isFull = (layer) => !layer || FULL.has(layer.type);
 
 const BMC = frag(`
-uniform vec2 u_c; uniform float u_s0, u_s1, u_r0, u_r1; uniform vec2 u_sh0, u_sh1; uniform float u_n; uniform vec2 u_wrap;
+uniform vec2 u_c; uniform float u_s0, u_s1, u_r0, u_r1; uniform vec2 u_sh0, u_sh1; uniform float u_n, u_jit; uniform vec2 u_wrap;
 float wrap1(float v, float mode) {
   if (mode > 2.5) { float m = mod(v, 2.0); return m > 1.0 ? 2.0 - m : m; } // espelhar
   if (mode > 1.5) return fract(v);                                        // repetir
@@ -44,9 +44,12 @@ vec4 sampleAt(float s, float r, vec2 sh) {
 void main() {
   vec4 acc = vec4(0.0);
   float n = max(1.0, u_n);
+  // amostras com deslocamento aleatório por pixel (jitter): quando o movimento é enorme o rastro vira um
+  // borrão contínuo em vez de várias cópias nítidas ("quadros de baixa qualidade")
+  float j = u_jit * (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5);
   for (int i = 0; i < 64; i++) {
     if (float(i) >= n) break;
-    float f = n > 1.0 ? float(i) / (n - 1.0) : 1.0;
+    float f = n > 1.0 ? clamp((float(i) + j) / (n - 1.0), 0.0, 1.0) : 1.0;
     acc += sampleAt(mix(u_s0, u_s1, f), mix(u_r0, u_r1, f), mix(u_sh0, u_sh1, f));
   }
   gl_FragColor = acc / n;
@@ -60,10 +63,17 @@ function blurSamples(env, q, c, min = 8) {
   const w = env.w * env.scale, h = env.h * env.scale, R = Math.hypot(w, h) / 2;
   const move = Math.hypot((c.dx - q.dx) * env.scale, (c.dy - q.dy) * env.scale)
     + Math.abs(c.s - q.s) * R + Math.abs(rad(c.rot - q.rot)) * R;
-  // prévia: no máximo 24 amostras (o iPhone derruba a GPU com laços longos em tela cheia); exportação: até 48
-  const cap = env.final ? 64 : 24;
+  // prévia: no máximo 32 amostras (o iPhone derruba a GPU com laços longos em tela cheia); exportação: até 48
+  const cap = env.final ? 64 : 32;
   const n = Math.max(Math.min(min, cap), Math.min(cap, Math.ceil(move / 2.5)));
   return Number.isFinite(n) ? n : min;
+}
+/** Jitter das amostras: só quando os passos entre amostras ficam grandes (senão a imagem fica idêntica). */
+function jitterFor(env, q, c, n) {
+  if (n <= 1) return 0;
+  const R = (Math.hypot(env.w, env.h) / 2) * env.scale;
+  const move = Math.hypot((c.dx - q.dx) * env.scale, (c.dy - q.dy) * env.scale) + Math.abs(c.s - q.s) * R + Math.abs(rad((c.rot || 0) - (q.rot || 0))) * R;
+  return Math.max(0, Math.min(1, (move / n - 1.5) / 3));
 }
 
 // preenche o espaço entre as amostras do motion blur (sem "fantasmas"/cópias quando o tremor é muito grande)
@@ -128,7 +138,8 @@ export default [
     render: (src, p, env) => {
       const fps = env.fps || 30;
       const oct = Math.max(1, Math.round(p.complexity ?? 1));
-      const wig = (f, seed) => { let v = 0, a = 1, n = 0; for (let o = 0; o < oct; o++) { v += noiseG(f * 2 ** o + o * 0.37, seed + o * 7.7) * a; n += a; a *= 0.5; } return Math.max(-1, Math.min(1, v / n)); };
+      // ruído normalizado como o random do S_Shake (desvio ~0,55, picos ~±1,4): o noiseG cru tem desvio 0,3 e deixava o tremor fraco
+      const wig = (f, seed) => { let v = 0, a = 1, n = 0; for (let o = 0; o < oct; o++) { v += noiseG(f * 2 ** o + o * 0.37, seed + o * 7.7) * a; n += a * a; a *= 0.5; } const x = (v / Math.sqrt(n)) * 1.8; return x / (1 + Math.abs(x) * 0.25); };
       // Impacto: começa forte e decai (curva exponencial), como um tranco de câmera em batida
       const env0 = (t) => {
         if (p.mode !== 2) return 1;
@@ -139,8 +150,12 @@ export default [
       // Stillness / Twitch Frequency (S_Shake): o tremor vem em rajadas, com pausas — o visual agressivo de edit
       const burst = (t) => {
         if (!(p.stillness > 0)) return 1;
-        const g = (noiseG(t * (p.twitchFreq || 2), p.seed + 91) + 1) / 2;
-        return Math.max(0, Math.min(1, (g - p.stillness) / 0.12));
+        // Stillness = fração do tempo parada (0,7 → 70% parado / 30% em rajada). O ruído é convertido em
+        // distribuição uniforme para a fração bater; nas pausas fica um tremor leve, como no S_Shake.
+        const z = noiseG(t * (p.twitchFreq || 2), p.seed + 91) / 0.304;
+        const u = 0.5 * (1 + Math.tanh(z * 0.7978845 * (1 + 0.044715 * z * z)));
+        const on = Math.max(0, Math.min(1, (u - p.stillness) / 0.06));
+        return 0.22 + 0.78 * on;
       };
       const at = (t) => {
         const f = t * p.frequency, k = env0(t) * burst(t);
@@ -156,7 +171,7 @@ export default [
       const n = moving ? blurSamples(env, q, c, Math.round(p.samples ?? 12)) : 1;
       let out = env.gl.pass(BMC, {
         u_tex: src, u_c: cuv(env, [0.5, 0.5]), u_s0: q.s, u_s1: c.s, u_r0: rad(q.rot), u_r1: rad(c.rot),
-        u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: n, u_wrap: isFull(env.layer) ? [p.wrap ?? 3, p.wrap ?? 3] : [1, 1],
+        u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: n, u_jit: jitterFor(env, q, c, n), u_wrap: isFull(env.layer) ? [p.wrap ?? 3, p.wrap ?? 3] : [1, 1],
       });
       if (moving) out = smoothMotion(env, out, q, c, n);
       if (p.rgbShake > 0) {
@@ -182,11 +197,12 @@ export default [
       const px = (v, size) => (Math.abs(v) <= 2 && v !== 0 && !Number.isInteger(v) ? v * size : v);
       const sx0 = px(q.shiftX, env.w), sy0 = px(q.shiftY, env.h), sx1 = px(p.shiftX, env.w), sy1 = px(p.shiftY, env.h);
       const moving = Math.abs(q.zDist - p.zDist) > 1e-4 || Math.abs(q.rotate - p.rotate) > 1e-3 || Math.abs(sx0 - sx1) > 0.05 || Math.abs(sy0 - sy1) > 0.05;
+      const a0 = { dx: sx0, dy: sy0, s: 1 / Math.max(0.01, q.zDist), rot: q.rotate }, a1 = { dx: sx1, dy: sy1, s: 1 / Math.max(0.01, p.zDist), rot: p.rotate };
+      const n = moving && p.shutter > 0 ? blurSamples(env, a0, a1, Math.round(p.samples)) : 1;
       return env.gl.pass(BMC, {
-        u_tex: src, u_c: cuv(env, p.center), u_s0: 1 / Math.max(0.01, q.zDist), u_s1: 1 / Math.max(0.01, p.zDist),
+        u_tex: src, u_c: cuv(env, p.center), u_s0: a0.s, u_s1: a1.s,
         u_r0: rad(q.rotate), u_r1: rad(p.rotate), u_sh0: [sx0 / env.w, sy0 / env.h], u_sh1: [sx1 / env.w, sy1 / env.h],
-        u_n: moving && p.shutter > 0 ? blurSamples(env, { dx: sx0, dy: sy0, s: 1 / Math.max(0.01, q.zDist), rot: q.rotate }, { dx: sx1, dy: sy1, s: 1 / Math.max(0.01, p.zDist), rot: p.rotate }, Math.round(p.samples)) : 1,
-        u_wrap: [p.wrap ?? 3, p.wrapY ?? 3],
+        u_n: n, u_jit: jitterFor(env, a0, a1, n), u_wrap: [p.wrap ?? 3, p.wrapY ?? 3],
       });
     },
   },
@@ -232,12 +248,12 @@ export default [
         const n = moving && (p.slideBlur ?? 100) > 0 ? blurSamples(env, q, c, 12) : 1;
         out = gl.pass(BMC, {
           u_tex: src, u_c: cuv(env, [0.5, 0.5]), u_s0: q.s, u_s1: c.s, u_r0: 0, u_r1: 0,
-          u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: n, u_wrap: isFull(env.layer) ? [3, 3] : [1, 1],
+          u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: n, u_jit: jitterFor(env, q, c, n), u_wrap: isFull(env.layer) ? [3, 3] : [1, 1],
         });
         if (n > 1) out = smoothMotion(env, out, q, c, n);
       }
       const eb = p.blur ? twitchEnv(env.t, p, 1) : 0;
-      if (eb > 0.01) out = gl.blur(out, eb * ((p.blurAmt || 0) / 100) * 30 * env.scale * (L / 1920));
+      if (eb > 0.01) out = gl.blur(out, eb * ((p.blurAmt || 0) / 100) * 55 * env.scale * (L / 1920)); // blur do Twitch é bem forte no plugin
       const ec = p.color ? twitchEnv(env.t, p, 2) : 0;
       const el = p.light ? twitchEnv(env.t, p, 3) : 0;
       const rgbK = c.el * ((p.slideRgb || 0) / 10);
