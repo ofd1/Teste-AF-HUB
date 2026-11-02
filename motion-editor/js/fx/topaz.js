@@ -3,6 +3,8 @@
 //   Revert Compression, Recover Details, Sharpen, Reduce Noise, Dehalo, Anti-alias/Deblur, Recover Original Detail, Add Noise.
 // - "Estabilizar" (correção de câmera calculada pela análise do vídeo, modo Auto-crop ou Full frame).
 import { frag, num, sel, rad, cuv } from './common.js';
+import IRIS_NET from './iris-weights.js';
+import { runNet } from './irisnet.js';
 
 // redução de ruído / compressão: bilateral (preserva bordas) — o raio acompanha o tamanho do pixel original do vídeo
 const BILAT = frag(`
@@ -186,7 +188,7 @@ export const TOPAZ_MODELS = [
   ['Proteus (manual)', null],
   ['Artemis – ruído e compressão', { upscale: 2,  revertCompression: 60, recoverDetails: 45, sharpen: 40, reduceNoise: 40, dehalo: 35, antialiasDeblur: 35, aiSmooth: 0, recoverOriginal: 0, addNoise: 0 }],
   // Iris calibrado com um print real do Topaz 7 (Fix compression 100, Improve detail 100, Sharpen 20, Reduce noise 10, Dehalo 6, Anti-alias −40, Recover detail 20)
-  ['Iris – rostos e pele', { upscale: 2, revertCompression: 100, recoverDetails: 100, sharpen: 20, reduceNoise: 10, dehalo: 6, antialiasDeblur: -40, aiSmooth: 0, recoverOriginal: 20, addNoise: 0 }],
+  ['Iris – rostos e pele (rede treinada com o Topaz real)', { upscale: 2, revertCompression: 100, recoverDetails: 100, sharpen: 20, reduceNoise: 10, dehalo: 6, antialiasDeblur: -40, aiSmooth: 0, recoverOriginal: 20, addNoise: 0 }],
   ['Gaia – fonte boa / alta qualidade', { upscale: 2,  revertCompression: 25, recoverDetails: 60, sharpen: 40, reduceNoise: 15, dehalo: 40, antialiasDeblur: 35, aiSmooth: 0, recoverOriginal: 0, addNoise: 0 }],
   ['Nyx – só remover ruído', { revertCompression: 30, recoverDetails: 15, sharpen: 10, reduceNoise: 75, dehalo: 20, antialiasDeblur: 5, aiSmooth: 0, recoverOriginal: 0, addNoise: 0 }],
   ['Rhea – detalhe máximo (4×)', { upscale: 3,  revertCompression: 50, recoverDetails: 80, sharpen: 55, reduceNoise: 30, dehalo: 55, antialiasDeblur: 55, aiSmooth: 0, recoverOriginal: 0, addNoise: 2 }],
@@ -224,6 +226,18 @@ export default [
         const tw = Math.min(nw * up, src.w * 2), th = Math.min(nh * up, src.h * 2);
         const big = gl.pass(UPSCALE, { u_tex: nat, u_nat: [nw, nh], u_edge: (p.edgeAware ?? 80) / 100 }, tw, th);
         out = tw === src.w && th === src.h ? big : gl.copy(big, src.w, src.h);
+      }
+      // Iris (aprendido): rede treinada com pares reais original → Topaz Iris; roda na escala do treino (1 px do vídeo = 1,6 px)
+      if ((p.model | 0) === 3) {
+        const k = IRIS_NET.scale / pxs;
+        const cw = Math.max(8, Math.min(4096, Math.round(src.w * k))), ch = Math.max(8, Math.min(4096, Math.round(src.h * k)));
+        const same = Math.abs(cw - src.w) < 2 && Math.abs(ch - src.h) < 2;
+        let x = same ? out : gl.copy(out, cw, ch);
+        x = runNet(gl, IRIS_NET, x, Math.max(0, v('recoverDetails')));
+        out = same ? x : gl.copy(x, src.w, src.h);
+        const gr0 = v('addNoise');
+        if (gr0 > 0.001) out = gl.pass(GRAIN, { u_tex: out, u_orig: src, u_orig_mix: 0, u_amt: gr0 * 0.18, u_gsize: (p.grainSize || 1.5) * env.scale, u_seed: Math.floor(env.t * 30) % 97 });
+        return out;
       }
       const rc = v('revertCompression'), rn = v('reduceNoise');
       // Fix compression: guided filter leve (tira blocos sem apagar a trama do tecido)

@@ -122,7 +122,7 @@ export class GLEngine {
     gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
     // com texturas de 16 bits o resultado de cada passada não é mais cortado em 0..1 automaticamente:
     // o main() original vira mf_main() e o novo main() corta no fim (mesmo visual do 8 bits, sem perder precisão)
-    const src = this.htype && /void\s+main\s*\(\s*\)/.test(frag)
+    const src = this.htype && !frag.startsWith('// @noclamp') && /void\s+main\s*\(\s*\)/.test(frag)
       ? `${frag.replace(/void\s+main\s*\(\s*\)/, 'void mf_main()')}\nvoid main() { mf_main(); gl_FragColor = clamp(gl_FragColor, 0.0, 1.0); }`
       : frag;
     gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, src));
