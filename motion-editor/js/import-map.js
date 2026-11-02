@@ -162,15 +162,24 @@ export function looksFromTools(tools, strength = 100) {
       // Lens Vignette (Looks3.aex): [Vignette (tamanho), Amount, Highlights, Center X, Center Y, Aspect, Anamorphic]
       case 'lenv': p.vignette = Math.max(p.vignette, (v[1] ?? 50) * 0.35); p.vignetteSize = clampN(75 - (v[0] ?? 50) * 0.5, 15, 85); break;
       // Optical Diffusion (manual do Looks): Density, Size, Falloff, Glow, Highlights Only, Luster, Color…
-      case 'odif': p.optDensity = clampN(Math.max(p.optDensity, v[0] || 0), 0, 100); p.optSize = clampN(v[1] ?? 50, 1, 500); p.optGlow += v[3] || 0; p.optHighlights = clampN(v[4] ?? 50, 0, 100); break;
+      // Optical Diffusion: [Density/Amount, Size, …, R, G, B (6-8)] — no Looks vira brilho nos realces (medido em renders
+      // do AE: raio ≈ Size/2, intensidade ≈ Amount × 1,5 %, limiar ≈ 30 %) além de um leve amaciamento
+      case 'odif': {
+        p.optDensity = clampN(Math.max(p.optDensity, (v[0] || 0) * 0.5), 0, 100); p.optSize = clampN(v[1] ?? 50, 1, 500); p.optHighlights = clampN(v[4] ?? 50, 0, 100);
+        const tint = [v[6] ?? 1, v[7] ?? 1, v[8] ?? 1], mx = Math.max(...tint, 1e-6);
+        if ((v[0] || 0) > 0) extra.push({ type: 'glow', label: 'Looks · Optical Diffusion', params: { threshold: 40, radius: clampN((v[1] ?? 50) / 2, 1, 300), intensity: clampN((v[0] || 0) * 1.5 / 100 * 0.45, 0, 8) /* glow somado ≈ modo tela do Looks */, color: [...tint.map((c) => c / mx), 1], useColor: tint.some((c) => Math.abs(c - 1) > 0.02) } });
+        break;
+      }
       case 'diff':
         // Diffusion (Looks3.aex): [Size, Grade, Glow, Highlights Only, Highlight Bias, Exposure Comp., R, G, B]
-        if (v[0] > 1 && v.length >= 9) {
-          p.diffusion += (v[1] || 1) * 14 * ((v[2] ?? 100) / 100);
-          p.diffusionRadius = Math.max(p.diffusionRadius, v[0] * 0.4);
-          p.diffusionThreshold = clampN((v[3] ?? 50) * 0.6, 0, 100);
+        // escala medida em renders do AE: raio ≈ 2,29 × Size px, intensidade ≈ 22,75 × Grade × Glow/100 %,
+        // limiar ≈ 78,75 + 0,625 × (Highlights Only − 75) − 8,1 × Bias. Size < 2 só levanta os realces (compensação).
+        if (v[0] >= 2 && v.length >= 9) {
+          p.diffusion = Math.max(p.diffusion, 22.75 * (v[1] ?? 1) * ((v[2] ?? 100) / 100));
+          p.diffusionRadius = Math.max(p.diffusionRadius, 2.29 * v[0]);
+          p.diffusionThreshold = clampN(78.75 + 0.625 * ((v[3] ?? 75) - 75) - 8.1 * (v[4] || 0), 0, 100);
           p.exposure += v[5] || 0;
-        } else if (v[0] <= 1) { p.diffusion += v[0] * 75; p.diffusionRadius = Math.max(p.diffusionRadius, (v[1] || 5) * 12); } else { p.diffusion += (v[3] || 50) * 0.2; p.diffusionRadius = Math.max(p.diffusionRadius, v[0] * 0.4); }
+        } else if (v[0] < 2) { p.exposure += (v[5] || 0) * 0.5; p.diffusion = Math.max(p.diffusion, (v[0] || 0) * 40); p.diffusionRadius = Math.max(p.diffusionRadius, 30); }
         break;
       // Chromatic Aberration: [Red/Cyan, Green/Magenta, Blue/Yellow]
       case 'chab': p.chroma += (Math.abs(v[0] || 0) + Math.abs(v[1] || 0) * 0.7 + Math.abs(v[2] || 0) * 0.7) * 4; break;
@@ -338,7 +347,7 @@ export function looksFromTools(tools, strength = 100) {
   p.temperature = clampN(p.temperature, -100, 100); p.tint = clampN(p.tint, -100, 100);
   p.mojo = clampN(p.mojo, 0, 100); p.punch = clampN(p.punch, 0, 100); p.bleach = clampN(p.bleach, 0, 100);
   p.fade = clampN(p.fade, 0, 60); p.vignette = clampN(p.vignette, 0, 100); p.diffusion = clampN(p.diffusion, 0, 150);
-  p.diffusionRadius = clampN(p.diffusionRadius, 1, 300); p.chroma = clampN(p.chroma, 0, 20); p.optGlow = clampN(p.optGlow, 0, 200);
+  p.diffusionRadius = clampN(p.diffusionRadius, 1, 600); p.chroma = clampN(p.chroma, 0, 20); p.optGlow = clampN(p.optGlow, 0, 200);
   p.spotExposure = clampN(p.spotExposure, -4, 4); p.gradExposure = clampN(p.gradExposure, -4, 4); p.edgeBlur = clampN(p.edgeBlur, 0, 100);
   return { params: p, used, ignored, extra };
 }

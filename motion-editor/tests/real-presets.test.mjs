@@ -21,10 +21,10 @@ const EXPECTED = {
   'Velocity & Reverse/Sonhei Reverse.ffx': ['twixtor', 'blurMoCurves'],
   'CC (Color Correction)/Sonhei CC.ffx': ['looks', 'looks', 'sharpen', 'fourColor', 'exposure', 'filmLook', 'sharpen', 'looks', 'exposure'],
   'CC (Color Correction)/Sonhei New CC.ffx': ['looks', 'looks', 'sharpen'],
-  'CC (Color Correction)/Galego CC.ffx': ['looks', 'sharpen', 'flicker', 'exposure', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
-  'CC (Color Correction)/FTB Main CC.ffx': ['looks', 'sharpen', 'sharpen', 'hueSat', 'sharpen', 'looks', 'looks', 'looks'],
-  'CC (Color Correction)/FTB AEP CC.ffx': ['looks', 'fourColor', 'looks', 'hueSat', 'looks', 'looks', 'brightnessContrast'],
-  'CC (Color Correction)/ZAZ Reverse Dark CC.ffx': ['looks', 'sharpen', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
+  'CC (Color Correction)/Galego CC.ffx': ['looks', 'glow', 'sharpen', 'flicker', 'exposure', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
+  'CC (Color Correction)/FTB Main CC.ffx': ['looks', 'sharpen', 'sharpen', 'hueSat', 'sharpen', 'looks', 'glow', 'looks', 'looks'], // Optical Diffusion → glow
+  'CC (Color Correction)/FTB AEP CC.ffx': ['looks', 'glow', 'fourColor', 'looks', 'hueSat', 'looks', 'looks', 'brightnessContrast'],
+  'CC (Color Correction)/ZAZ Reverse Dark CC.ffx': ['looks', 'glow', 'sharpen', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
   'Warp/ZAZ Warp.ffx': ['motionTile', 'warp'],
 };
 
