@@ -97,8 +97,9 @@ export function looksFromTools(tools, strength = 100) {
       }
       case 'crv2': {
         // curva: [força, …, (36) canal, (37) nº de pontos, depois pares (entrada, ajuste)]
-        const n = Math.min(4, Math.round(v[37] || 0));
-        for (let i = 0; i < n; i++) curve.push([v[38 + i * 2], v[39 + i * 2]]);
+        // v[0] = força da curva (0..1): os ajustes dos pontos são escalados por ela
+        const n = Math.min(4, Math.round(v[37] || 0)), k = v[0] > 0 && v[0] <= 1 ? v[0] : 1;
+        for (let i = 0; i < n; i++) curve.push([v[38 + i * 2], (v[39 + i * 2] || 0) * k]);
         break;
       }
       case 'cmix': if ((v[0] ?? 100) > 0) p.saturation *= (v[1] ?? 100) / 100; break;
