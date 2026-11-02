@@ -82,7 +82,7 @@ test('CC: Looks decodificado e Gradiente de 4 cores', () => {
   const dark = load('CC (Color Correction)/ZAZ Reverse Dark CC.ffx').preset.effects[0].params;
   assert.equal(dark.saturation, 65);
   assert.equal(dark.mojo, 100); // Mojo II = 100 no Looks original
-  assert.equal(dark.bleach, 40); // Bleach It 50 × 0,8 (Reverse Dark: escuro e dessaturado)
+  assert.equal(dark.bleach, 45); // Bleach It 50 × 0,9 (Reverse Dark: escuro e dessaturado)
 
   const de = load('CC (Color Correction)/FTB Main CC.ffx'); // salvo num After Effects em alemão
   const um = de.preset.effects.find((e) => e.matchName === 'ADBE Unsharp Mask2');
@@ -112,11 +112,12 @@ test('instâncias de efeito criadas a partir dos presets reais são válidas', (
 
 test('Looks: Colorista HSL por cor, temperatura e curvas vêm do arquivo', () => {
   const sn = load('CC (Color Correction)/Sonhei New CC.ffx').preset.effects.filter((e) => e.type === 'looks').map((e) => e.params);
-  assert.equal(sn[0].hslAquaS, -50);
-  assert.equal(sn[0].hslYellowH, 50);
+  // ordem do Looks3.aex: matizes R..M (13-20), saturações (21-28), luminâncias (29-36)
+  assert.equal(sn[0].hslBlueS, -50);
+  assert.equal(sn[0].hslPurpleH, 50);
   assert.equal(sn[0].temperature, -15);
-  assert.equal(sn[1].saturation, 70);
+  assert.equal(Math.round(sn[1].saturation), 28); // Colorista Saturation 40% × Channel Mix 70%
   const ftb = load('CC (Color Correction)/FTB AEP CC.ffx').preset.effects.filter((e) => e.type === 'looks').map((e) => e.params);
   assert.deepEqual([ftb[1].curve1x, ftb[1].curve1y].map((v) => +v.toFixed(3)), [0.292, 0.06]); // ajuste do ponto × força da curva (0.92)
-  assert.ok(ftb[0].mojo > 30 && ftb[0].bleach > 60) // Mojo 36 + Bleach It 85;
+  assert.ok(ftb[0].mojo > 30 && ftb[0].bleach > 70) // Mojo 36 + Bleach It 85;
 });

@@ -49,26 +49,38 @@ export function looksFromTools(tools, strength = 100) {
         if (Math.min(v[0], v[1], v[2]) < 0.995) { p.filter = [v[0], v[1], v[2], 1]; p.filterDensity = 100; } else { ignored.push('fltr (neutro)'); continue; }
         break;
       case 'vign': p.vignette = Math.max(p.vignette, (v[5] || 0) * 0.8); p.vignetteSize = clampN(60 - ((v[2] || 1) - 1) * 50, 15, 85); break;
-      case 'lenv': p.vignette = Math.max(p.vignette, (v[0] || 0) * 0.35); break; // Lens Vignette do Looks é sutil (Vampy 50 quase não aparece)
+      // Lens Vignette (Looks3.aex): [Vignette (tamanho), Amount, Highlights, Center X, Center Y, Aspect, Anamorphic]
+      case 'lenv': p.vignette = Math.max(p.vignette, (v[1] ?? 50) * 0.35); p.vignetteSize = clampN(75 - (v[0] ?? 50) * 0.5, 15, 85); break;
       // Optical Diffusion (manual do Looks): Density, Size, Falloff, Glow, Highlights Only, Luster, Color…
       case 'odif': p.optDensity = clampN(Math.max(p.optDensity, v[0] || 0), 0, 100); p.optSize = clampN(v[1] ?? 50, 1, 500); p.optGlow += v[3] || 0; p.optHighlights = clampN(v[4] ?? 50, 0, 100); break;
       case 'diff':
-        if (v[0] <= 1) { p.diffusion += v[0] * 75; p.diffusionRadius = Math.max(p.diffusionRadius, (v[1] || 5) * 12); } else { p.diffusion += (v[3] || 50) * 0.2; p.diffusionRadius = Math.max(p.diffusionRadius, v[0] * 0.4); }
+        // Diffusion (Looks3.aex): [Size, Grade, Glow, Highlights Only, Highlight Bias, Exposure Comp., R, G, B]
+        if (v[0] > 1 && v.length >= 9) {
+          p.diffusion += (v[1] || 1) * 14 * ((v[2] ?? 100) / 100);
+          p.diffusionRadius = Math.max(p.diffusionRadius, v[0] * 0.4);
+          p.diffusionThreshold = clampN((v[3] ?? 50) * 0.6, 0, 100);
+          p.exposure += v[5] || 0;
+        } else if (v[0] <= 1) { p.diffusion += v[0] * 75; p.diffusionRadius = Math.max(p.diffusionRadius, (v[1] || 5) * 12); } else { p.diffusion += (v[3] || 50) * 0.2; p.diffusionRadius = Math.max(p.diffusionRadius, v[0] * 0.4); }
         break;
-      case 'chab': p.chroma += Math.abs(v[0] || 0) * 4; break;
+      // Chromatic Aberration: [Red/Cyan, Green/Magenta, Blue/Yellow]
+      case 'chab': p.chroma += (Math.abs(v[0] || 0) + Math.abs(v[1] || 0) * 0.7 + Math.abs(v[2] || 0) * 0.7) * 4; break;
       case 'husa': p.hue += v[0] || 0; p.saturation *= (v[1] ?? 100) / 100; break;
       case 'mjo2':
-        // Mojo II: [Mojo, Mojo Tuning, Punch It, Bleach It, Fade It, Cool It, Warm Skin, (ajustes de pele 7-10), Strength]
-        // Bleach It (v3) deixa escuro, dessaturado e contrastado (bleach bypass) — ex.: Vampy CC 85, Reverse Dark 50.
-        // Mojo esquenta realces e esfria sombras; Punch dá contraste + saturação; Fade lava os pretos.
+        // Mojo II (ordem real, tirada do Looks3.aex): [Mojo, Tint, Punch, Bleach, Fade, Blue Squeeze, Skin Squeeze,
+        // Exposure, Cool/Warm, Green/Magenta, Skin Yellow/Pink, Strength]
+        // ex.: Vampy CC = Bleach 85 + Cool/Warm −40 (fria) + Exposure +0,3 → cor apagada e azulada
         {
           const k = (v[11] ?? 100) / 100;
           p.mojo = Math.max(p.mojo, (v[0] || 0) * k);
           p.punch += (v[2] || 0) * 0.45 * k;
-          p.bleach += (v[3] || 0) * 0.8 * k;
+          p.bleach += (v[3] || 0) * 0.9 * k;
           p.fade += (v[4] || 0) * 0.3 * k;
-          if (v[5] > 0) p.mojoCool = clampN(v[5] * 2, 0, 100);
-          if (v[6] > 0) p.mojoSkin = clampN(v[6] * 2, 0, 100);
+          if (v[5] > 0) p.mojoCool = clampN(50 + v[5], 0, 100);
+          if (v[6] > 0) p.mojoSkin = clampN(50 + v[6], 0, 100);
+          p.exposure += (v[7] || 0) * k;
+          p.temperature += (v[8] || 0) * 0.8 * k;
+          p.tint += (v[9] || 0) * 0.5 * k;
+          p.mojoTint = (v[1] || 0) * k;
         }
         break;
       // Haze/Flare (manual: Spillage, Softness, …, Exposure, …, cor): luz que vaza dentro da lente + leve névoa
@@ -78,7 +90,8 @@ export function looksFromTools(tools, strength = 100) {
         p.fade += (v[2] || 0) * 0.08;
         break;
       // Anamorphic Flare (manual: Size, Boost, Threshold, …, cor)
-      case 'anam': p.anamSize = clampN(v[0] || 0, 0, 1000); p.anamBoost = clampN(v[1] ?? 1, 0, 5); p.anamThreshold = clampN((v[2] ?? 0.7) * 100, 0, 100); break;
+      // Anamorphic Flare (Looks3.aex): [Size, Threshold, Threshold Softness, Boost, Reflection, Reflection Boost, …]
+      case 'anam': p.anamSize = clampN(v[0] || 0, 0, 1000); p.anamThreshold = clampN(((v[1] ?? 0.7) - (v[2] || 0) * 0.5) * 100, 0, 100); p.anamBoost = clampN(v[3] ?? 1, 0, 5); break;
       // Lens Distortion (manual: Distortion, Flatten)
       case 'lnsd': p.lensDistort = clampN(v[0] || 0, -100, 100); p.lensFlatten = clampN(v[1] || 0, 0, 100); break;
       case 'csta': {
@@ -87,13 +100,17 @@ export function looksFromTools(tools, strength = 100) {
         p.gammaR *= v[6] ?? 1; p.gammaG *= v[7] ?? 1; p.gammaB *= v[8] ?? 1;
         p.gainR *= v[9] ?? 1; p.gainG *= v[10] ?? 1; p.gainB *= v[11] ?? 1;
         p.exposure += (v[2] || 0) * 0.25;
+        // Colorista (Looks3.aex): …, Saturation (12), Hue R..M (13-20), Sat R..M (21-28), Lum R..M (29-36), …,
+        // Temperature (216), Tint (217), Contrast (218)
+        if (v[12] !== undefined) p.saturation *= clampN(v[12], 0, 300) / 100;
         HSL.forEach((k, i) => {
-          p[`hsl${k}H`] += v[13 + i * 3] || 0;
-          p[`hsl${k}S`] += v[14 + i * 3] || 0;
-          p[`hsl${k}L`] += v[15 + i * 3] || 0;
+          p[`hsl${k}H`] += v[13 + i] || 0;
+          p[`hsl${k}S`] += v[21 + i] || 0;
+          p[`hsl${k}L`] += v[29 + i] || 0;
         });
         p.temperature += v[216] || 0;
         p.tint += v[217] || 0;
+        p.contrast += (v[218] || 0) * 30;
         break;
       }
       case 'crv2': {
@@ -110,15 +127,13 @@ export function looksFromTools(tools, strength = 100) {
       case '2stp': p.mojo = Math.max(p.mojo, (v[0] || 0) * 0.6); p.mojoSkin = Math.max(p.mojoSkin, 70); p.saturation *= 1 + (v[0] || 0) / 500; break;
       case 'logc': p.fade += 8; p.contrast -= 8; break;
       case 'spex':
-        // Spot Exposure: [exposição, deslocamento x %, deslocamento y %, ?, ?, ?, tamanho %, filtro de cor RGB (7-9), suavidade (10)]
-        // a cor age como filtro da luz (ex.: +1.3 stops com cinza 0.465 ≈ leve clareada no centro)
-        // manual do Looks: Stops, Centro X/Y (% a partir do centro), Proporção, Raio, Spread, Falloff, Color Balance, …, Inverter
-        p.spotExposure += v[0] || 0;
+        // Spot Exposure (Looks3.aex): [Stops, Center X, Center Y, Radius, Spread, Falloff, Strength, R, G, B, Aspect, Invert]
+        p.spotExposure += (v[0] || 0) * ((v[6] ?? 100) / 100);
         p.spotCenter = [clampN(0.5 + (v[1] || 0) / 100, 0, 1), clampN(0.5 - (v[2] || 0) / 100, 0, 1)];
-        p.spotAspect = clampN(v[3] ?? 1, 0.1, 4);
-        p.spotSize = clampN((v[4] ?? 0.5) * 100, 0, 400);
-        p.spotSoft = clampN((v[5] ?? 0.5) * 100, 1, 400);
+        p.spotSize = clampN((v[3] ?? 1) * 100, 0, 400);
+        p.spotSoft = clampN(Math.max(0.05, v[4] ?? 0.5) * 100, 1, 400);
         p.spotColor = [v[7] ?? 1, v[8] ?? 1, v[9] ?? 1, 1];
+        p.spotAspect = clampN(v[10] ?? 1, 0.1, 4);
         p.spotInvert = !!v[11];
         break;
       case 'grex':
