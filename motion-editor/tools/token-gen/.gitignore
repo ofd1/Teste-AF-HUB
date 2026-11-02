@@ -1,0 +1,4 @@
+*.exe
+tokengen-linux
+priv.b64
+tokens-gerados.txt

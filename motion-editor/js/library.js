@@ -174,6 +174,15 @@ export class Library {
 
   apply(p) {
     if (!p) return;
+    // várias camadas selecionadas: aplica o preset em cada uma
+    const many = this.store.selectedLayers?.() || [];
+    if (many.length > 1) {
+      for (const l of many) applyPreset(l, p, this.store.time, { fit: this.fit && l.type !== 'adjustment' && (p.duration || 0) > 0.01 });
+      this.store.commit('structure');
+      toast(`“${p.name}” aplicado em ${many.length} camadas.`, 'ok');
+      this.hooks.onApplied?.(many[0], p);
+      return;
+    }
     let layer = this.store.layer();
     const hasSpeed = (p.effects || []).some((e) => e.type === 'twixtor');
     const needsVideo = hasSpeed || (p.effects || []).some((e) => e.type === 'timeSlice');

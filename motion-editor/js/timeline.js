@@ -163,7 +163,7 @@ export class Timeline {
 
   layerRows(layer, num, trackW) {
     const { store } = this;
-    const sel = layer.id === store.selectedLayerId;
+    const sel = store.isSelected(layer.id);
     const props = this.propsOf(layer);
     const open = this.expanded.has(layer.id);
     const left = this.tToX(layer.inPoint);
@@ -355,8 +355,13 @@ export class Timeline {
         } else if (act === 'eye') {
           layer.visible = !layer.visible;
           store.commit();
-        } else if (layer.id !== store.selectedLayerId) store.select(layer.id);
+        } else if (additive || longPress) store.select(layer.id, true);
+        else if (layer.id !== store.selectedLayerId || store.multi?.size) store.select(layer.id);
       };
+      // toque longo no nome = seleção múltipla (celular)
+      let longPress = false;
+      const lp = setTimeout(() => { longPress = true; navigator.vibrate?.(15); }, 450);
+      row.addEventListener('pointerup', () => clearTimeout(lp), { once: true });
       row.addEventListener('pointerup', up);
       return;
     }

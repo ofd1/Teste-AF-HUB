@@ -456,3 +456,28 @@ input[type="number"], input[type="text"], input[type="search"], select, textarea
 .op-styles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
 .op-styles button { padding: 8px 4px; font-size: 12px; border-radius: 8px; background: var(--panel-2, #2a2a2e); border: 1px solid var(--line, #3a3a40); color: inherit; }
 .op-styles button:active { background: var(--accent, #2d8cff); }
+
+/* campos numéricos arrastáveis e link de escala */
+.prop-row input[type=number], .row input[type=number] { cursor: ew-resize; touch-action: pan-y; }
+.prop-row input[type=number]:focus, .row input[type=number]:focus { cursor: text; }
+body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: none !important; }
+.linkbtn { padding: 0 4px; min-width: 0; background: transparent; border: none; opacity: 0.4; font-size: 13px; }
+.linkbtn.on { opacity: 1; }
+
+/* preview ampliado */
+.stage { position: relative; }
+.max-ctl { position: absolute; right: 8px; top: 8px; z-index: 5; display: flex; gap: 6px; }
+.max-ctl button { background: rgba(0,0,0,0.55); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; min-width: 34px; height: 30px; padding: 0 8px; font-size: 15px; }
+.max-ctl .max-only { display: none; }
+body.preview-max .stage { position: fixed; inset: 0; z-index: 900; background: #000; margin: 0; }
+body.preview-max .max-ctl .max-only { display: inline-block; }
+body.preview-max .max-ctl { top: max(8px, env(safe-area-inset-top)); }
+
+/* tela de acesso por token */
+.access-gate { position: fixed; inset: 0; z-index: 10000; background: var(--bg, #1a1a1a); display: flex; align-items: center; justify-content: center; padding: 16px; overflow: auto; }
+.access-card { width: 100%; max-width: 420px; background: var(--panel, #232323); border: 1px solid #333; border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 10px; color: #eee; }
+.access-card h1 { margin: 0 0 4px; font-size: 26px; } .access-card h1 span { color: var(--accent, #2d8ceb); }
+.access-lbl { font-size: 12px; color: #aaa; margin-top: 4px; }
+.access-code { display: flex; gap: 8px; align-items: center; } .access-code code { flex: 1; font-size: 17px; letter-spacing: 1px; background: #111; padding: 10px; border-radius: 8px; user-select: all; }
+.access-card textarea { width: 100%; background: #111; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 10px; font: 13px monospace; resize: vertical; }
+.access-err { color: #ff6b6b; margin: 0; } .access-go { padding: 12px; font-size: 16px; }

@@ -42,6 +42,13 @@ export function contentSize(layer, proj = project) {
   return { w: p.width || 100, h: p.height || 100 };
 }
 
+/** Desenha a mídia na caixa da camada; fit 'cover' recorta sem distorcer (mídia substituta de outro tamanho). */
+function drawFit(ctx, src, sw, sh, w, h, fit) {
+  if (fit !== 'cover' || !sw || !sh) { ctx.drawImage(src, 0, 0, w, h); return; }
+  const k = Math.max(w / sw, h / sh), cw = w / k, ch = h / k;
+  ctx.drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, w, h);
+}
+
 function drawContent(ctx, layer, w, h, extra) {
   const p = layer.props;
   switch (layer.type) {
@@ -94,12 +101,12 @@ function drawContent(ctx, layer, w, h, extra) {
     }
     case 'image': {
       const img = getImage(p.src);
-      if (img.complete && img.naturalWidth) ctx.drawImage(img, 0, 0, w, h);
+      if (img.complete && img.naturalWidth) drawFit(ctx, img, img.naturalWidth, img.naturalHeight, w, h, p.fit);
       break;
     }
     case 'video': {
       const src = extra?.videoSource;
-      if (src) ctx.drawImage(src, 0, 0, w, h);
+      if (src) drawFit(ctx, src, src.videoWidth || src.width, src.videoHeight || src.height, w, h, p.fit);
       break;
     }
     case 'adjustment':

@@ -30,6 +30,10 @@
         <canvas id="view"></canvas>
         <canvas id="overlay"></canvas>
       </div>
+      <div class="max-ctl">
+        <button id="maxPlay" class="max-only" aria-label="Tocar / pausar">▶</button>
+        <button id="maxBtn" title="Ampliar o preview (tela cheia)" aria-label="Ampliar o preview">⛶</button>
+      </div>
       <div class="quality" title="Qualidade da prévia">
         <select id="quality" aria-label="Qualidade da prévia"><option value="auto" selected>Auto</option><option value="1">Full</option><option value="0.5">½</option><option value="0.33">⅓</option></select>
       </div>
@@ -74,6 +78,6 @@
 
     <div class="drop-overlay" id="dropOverlay"><div>Solte vídeos, áudios, imagens, .ffx ou presets .json</div></div>
   </div>
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/boot.js"></script>
 </body>
 </html>

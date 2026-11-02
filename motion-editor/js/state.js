@@ -142,10 +142,28 @@ export class Store {
 
   layer(id = this.selectedLayerId) { return this.layers.find((l) => l.id === id) || null; }
 
-  select(id) {
+  /** add = Shift/Ctrl/toque longo: liga/desliga a camada na seleção múltipla. */
+  select(id, add = false) {
+    if (!this.multi) this.multi = new Set();
+    if (add) {
+      if (!this.multi.size && this.selectedLayerId && this.selectedLayerId !== id) this.multi.add(this.selectedLayerId);
+      if (this.multi.has(id) && this.multi.size > 1) {
+        this.multi.delete(id);
+        if (this.selectedLayerId === id) id = [...this.multi][this.multi.size - 1];
+      } else this.multi.add(id);
+      if (this.multi.size < 2) this.multi.clear();
+    } else this.multi.clear();
     this.selectedLayerId = id;
     this.emit('selection');
   }
+
+  /** Camadas selecionadas (várias, se houver seleção múltipla) no escopo atual. */
+  selectedLayers() {
+    const ids = this.multi?.size > 1 ? [...this.multi] : [this.selectedLayerId];
+    return this.layers.filter((l) => ids.includes(l.id));
+  }
+
+  isSelected(id) { return id === this.selectedLayerId || !!this.multi?.has(id); }
 
   isKeySelected(key) {
     return this.selectedKeys.some((s) => s.key === key);

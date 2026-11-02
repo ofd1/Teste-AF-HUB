@@ -188,17 +188,15 @@ void main() {
     float dh = mod(target - hd + 540.0, 360.0) - 180.0;
     float k = u_mojo * (warmSide > 0.5 ? 0.45 * u_skin : 0.6 * u_cool) * smoothstep(0.04, 0.2, mh.y);
     mh.x = fract((hd + dh * clamp(k, 0.0, 0.9)) / 360.0);
-    // fundo frio um pouco menos saturado, pele mais rica (como o Mojo)
-    mh.y = clamp(mh.y * (warmSide > 0.5 ? 1.0 + 0.15 * u_mojo : 1.0 - 0.18 * u_mojo * u_cool), 0.0, 1.0);
+    // pele mais rica; o fundo frio vira teal mantendo a cor (antes perdia até 36% e ficava cinza)
+    mh.y = clamp(mh.y * (warmSide > 0.5 ? 1.0 + 0.15 * u_mojo : 1.0 + 0.05 * u_mojo), 0.0, 1.0);
     r = hsv2rgb(mh);
   }
   vec3 cool = r + vec3(-0.055, 0.008, 0.06) * (1.0 - hiW) * (1.0 - skin * 0.8);
   vec3 warmH = r * mix(vec3(1.0), vec3(1.07, 1.01, 0.88), hiW);
   r = mix(r, cool, u_mojo * u_cool);
   r = mix(r, warmH, u_mojo * (0.6 + 0.4 * skin) * u_skin);
-  // Mojo (manual da Maxon): "aumenta o contraste, esquenta realces e esfria sombras preservando a pele";
-  // o fundo frio perde um pouco de cor, a pele não
-  r = mix(vec3(luma(r)), r, 1.0 - u_mojo * 0.35 * (1.0 - skin * 0.7));
+  // Mojo (manual da Maxon): "aumenta o contraste, esquenta realces e esfria sombras preservando a pele"
   r = mix(r, r * r * (3.0 - 2.0 * r), u_mojo * 0.3);
   // Punch It (manual): contraste nas SOMBRAS — empurra as sombras para o preto, preservando a pele
   float shw = (1.0 - smoothstep(0.0, 0.55, luma(r))) * (1.0 - skin * 0.6);

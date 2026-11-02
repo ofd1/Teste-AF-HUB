@@ -66,6 +66,19 @@ function layoutCanvas() {
   dirty = true;
 }
 new ResizeObserver(layoutCanvas).observe(stage);
+// preview ampliado: ocupa a tela toda (no PC também entra em tela cheia do navegador); Esc ou ⛶ volta
+const maxBtn = document.getElementById('maxBtn'), maxPlay = document.getElementById('maxPlay');
+function setMaxPreview(on) {
+  document.body.classList.toggle('preview-max', on);
+  maxBtn.textContent = on ? '✕' : '⛶';
+  if (on && document.documentElement.requestFullscreen && !/iPhone|iPad/.test(navigator.userAgent)) document.documentElement.requestFullscreen().catch(() => {});
+  if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  setTimeout(layoutCanvas, 50);
+}
+maxBtn.addEventListener('click', () => setMaxPreview(!document.body.classList.contains('preview-max')));
+maxPlay.addEventListener('click', () => setPlaying(!store.playing));
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && document.body.classList.contains('preview-max')) setMaxPreview(false); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.body.classList.contains('preview-max')) setMaxPreview(false); });
 qualitySel.addEventListener('change', () => { quality = curQuality(); layoutCanvas(); });
 
 function drawOverlay() {
@@ -135,6 +148,7 @@ store.on((kind) => {
 
 const playBtn = document.querySelector('[data-cmd="play"]');
 function setPlaying(p) {
+  const mp = document.getElementById('maxPlay'); if (mp) mp.textContent = p ? '❚❚' : '▶';
   if (p === store.playing) return;
   store.playing = p;
   playBtn.textContent = p ? '❚❚' : '▶';
@@ -270,6 +284,7 @@ new Inspector(document.getElementById('propsPanel'), store, 'props', {
   beats: (layer) => addBeatMarkers(layer),
   track: (layer) => startTrack(layer),
   faceTrack: (layer) => startFaceTrack(layer),
+  replace: (layer) => replaceLayerMedia(layer),
 });
 const library = new Library(document.getElementById('library'), store, {
   onApplied: () => { if (!desktop.matches) closeSheet(); },
@@ -347,6 +362,39 @@ async function startTrack(layer) {
   } finally {
     wrap.remove();
   }
+}
+
+/**
+ * Substitui a mídia de uma camada (vídeo, foto ou áudio) mantendo tudo o resto: posição, escala, rotação, keyframes,
+ * efeitos, máscaras, tempo e modo de mesclagem. A nova mídia preenche a mesma caixa sem distorcer.
+ */
+async function replaceLayerMedia(layer) {
+  const [f] = await pickFiles(layer.type === 'audio' ? 'audio/*,.mp3,.wav,.m4a' : 'video/*,image/*', false);
+  if (!f) return;
+  const isVideo = f.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|mkv)$/i.test(f.name);
+  const isAudio = f.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(f.name);
+  const mediaId = uid('m');
+  putMedia(mediaId, f);
+  const src = URL.createObjectURL(f);
+  const old = layer.props || {};
+  const box = { width: old.width || old.aeMedia?.width || store.project.width, height: old.height || old.aeMedia?.height || store.project.height };
+  if (isAudio) layer.props = { ...old, src, mediaId, sourceStart: 0, aeMedia: undefined };
+  else {
+    const keep = { ...old };
+    delete keep.aeMedia; delete keep.replacedFrom;
+    layer.props = { ...keep, src, mediaId, width: box.width, height: box.height, fit: 'cover', sourceStart: 0, ...(isVideo ? { speed: old.speed || 1, volume: old.volume ?? 100 } : {}) };
+    if (!isVideo) { delete layer.props.sourceFps; delete layer.props.hasAudio; }
+  }
+  layer.type = isAudio ? 'audio' : isVideo ? 'video' : 'image';
+  layer.name = f.name.replace(/\.[^.]+$/, '');
+  if (isVideo) {
+    detectFps(src).then((fps) => { if (fps) { layer.props.sourceFps = fps; store.commit(); } });
+    loadAudio(src).then(() => { layer.props.hasAudio = true; store.emit('change'); }).catch(() => { layer.props.hasAudio = false; });
+  }
+  if (isAudio) await loadAudio(src).catch(() => {});
+  store.commit('structure');
+  ensureCaches?.(store.project);
+  toast(`Mídia substituída — efeitos, keyframes e ajustes mantidos ✓`, 'ok', 3000);
 }
 
 async function startFaceTrack(layer) {
@@ -454,7 +502,14 @@ toolbar.before(hintBar);
 function renderToolbar() {
   const layer = store.layer();
   const t = layer?.type;
-  const items = layer
+  const many = store.selectedLayers().length;
+  const items = many > 1
+    ? [
+      ['deselect', '✕', 'Limpar seleção'], ['sep'],
+      ['group', '⊞', `Pré-compor (${many})`, true], ['props', '☰', `Ajustar ${many} juntas`, true], ['presets', '★', 'Preset em todas'], ['effects', '✦', 'Efeitos'],
+      ['dup', '⧉', 'Duplicar'], ['del', '🗑', `Excluir ${many}`],
+    ]
+    : layer
     ? [
       ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
       ['deselect', '✕', 'Fechar'], ['sep'],
@@ -480,6 +535,7 @@ function renderToolbar() {
   hintBar.hidden = !getSettings().showTips;
   if (!store.project.layers.length) hintBar.innerHTML = '👋 Comece tocando em <b>Vídeo / Foto</b> para importar seu clipe.';
   else if (!layer) hintBar.innerHTML = 'Toque numa camada (na timeline ou na prévia) para editar. Arraste a régua azul para mudar o tempo.';
+  else if (many > 1) hintBar.innerHTML = `<b>${many} camadas selecionadas</b> — mudanças em Propriedades valem para todas · Pré-compor junta em um grupo · Shift/Ctrl+clique (ou toque longo) adiciona/remove`;
   else hintBar.innerHTML = `<b>${escapeHtml(layer.name)}</b> · ${TYPE_LABEL[t] || t}${layer.effects.length ? ` · ${layer.effects.length} efeito(s)` : ''} — ${t === 'video' ? 'use <b>Presets</b> para CC/shake/reverse ou <b>Velocidade</b> para câmera lenta' : t === 'group' ? 'efeitos e presets valem para o grupo inteiro' : 'use <b>Efeitos</b> ou <b>Presets</b>'}`;
 }
 
@@ -653,9 +709,21 @@ function updateTitle() {
   document.getElementById('projTitle').textContent = g.length ? `${store.project.name || 'Meu edit'} › ${g.map((x) => x.name).join(' › ')}` : store.project.name || 'Meu edit';
 }
 
+async function showAccount() {
+  const { formatCode, logout } = await import('./access.js');
+  const a = window.__mfAccess || {};
+  const r = await modal('Conta e acesso', `
+    <p>${a.name ? `Acesso de <b>${escapeHtml(a.name)}</b>` : 'Acesso liberado'} neste aparelho${a.exp ? ` · válido até ${new Date(a.exp * 1000).toLocaleDateString('pt-BR')}` : ' · sem data de validade'}.</p>
+    <p class="muted small">Código do aparelho: <code>${a.code ? formatCode(a.code) : '—'}</code></p>
+    <p class="muted small">Cada token funciona só neste aparelho. Ao sair, será preciso colar o token de novo.</p>`,
+  [{ label: 'Fechar', value: null }, { label: 'Sair deste aparelho', danger: true, value: 'out' }]);
+  if (r === 'out') { logout(); location.reload(); }
+}
+
 async function showMenu() {
   const res = await modal('Menu', `<div class="menu-list">
     <button data-m="home">⌂ Meus projetos</button>
+    <button data-m="account">🔑 Conta e acesso</button>
     <button data-m="help">❓ Como usar (passo a passo)</button>
     <button data-m="new">✚ Nova composição (projeto)</button>
     <button data-m="open">📂 Abrir projeto (.json)</button>
@@ -663,7 +731,7 @@ async function showMenu() {
     <button data-m="comp">⚙ Configurações da composição</button>
     <button data-m="ffx">⤒ Importar preset .ffx do After Effects</button>
     <button data-m="aep">Ae Abrir projeto .aep do After Effects</button>
-    ${flatLayers(store.project.layers).some((l) => l.props?.aeMedia) ? '<button data-m="relink">🔗 Conectar vídeos/fotos do projeto do AE</button>' : ''}
+    ${flatLayers(store.project.layers).some((l) => l.props?.aeMedia) ? '<button data-m="relink">🔗 Conectar vídeos/fotos do projeto do AE</button><button data-m="relinksub">🔁 Usar outros vídeos/fotos no lugar dos que faltam</button>' : ''}
     <button data-m="about">ⓘ Sobre os efeitos e plugins</button>
   </div>`, [{ label: 'Fechar', value: null }], {
     onMount: (w, close) => w.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => close(b.dataset.m))),
@@ -676,7 +744,9 @@ async function showMenu() {
   if (res === 'comp') compSettings();
   if (res === 'ffx') commands['import-ffx']();
   if (res === 'aep') openAEPFlow();
+  if (res === 'account') showAccount();
   if (res === 'relink') relinkAEMedia();
+  if (res === 'relinksub') relinkAEMedia({ substitute: true });
   if (res === 'about') {
     modal('Sobre', `<p>O MotionFrame recria efeitos famosos do After Effects e de plugins populares em edits (Twixtor, Deep Glow, Twitch, Sapphire, BCC, RSMB, Optical Flares…). São <b>recriações próprias</b> com a mesma função e parâmetros parecidos — não são os plugins originais.</p>
       <p>Ao importar um <b>.ffx</b>, o app identifica efeitos nativos do AE e plugins de terceiros e converte para o efeito equivalente, mantendo valores e keyframes sempre que possível.</p>
@@ -711,8 +781,18 @@ function addTransformKey() {
 
 // ---- grupos (como a pré-composição do AE): várias camadas viram uma só, com transformação e efeitos próprios
 async function groupLayers() {
-  const p = store.project;
+  const p = { layers: store.layers };
   const sel = store.selectedLayerId;
+  const chosen = store.selectedLayers();
+  // várias camadas já selecionadas na timeline: pré-compõe direto
+  if (chosen.length >= 2) {
+    const name = await modal('Pré-compor', `<p class="muted small">${chosen.length} camadas selecionadas viram uma pré-composição (grupo): dá para mover, animar e pôr efeitos/presets nela inteira. Toque duas vezes no grupo para abrir.</p>
+      <label class="row"><span>Nome</span><input type="text" data-f="name" value="Pré-comp ${p.layers.filter((l) => l.type === 'group').length + 1}"></label>`,
+    [{ label: 'Cancelar', value: null }, { label: 'Pré-compor', primary: true, value: (w) => w.querySelector('[data-f="name"]').value.trim() || 'Pré-comp' }]);
+    if (name == null) return;
+    makeGroup(chosen.map((l) => l.id), name);
+    return;
+  }
   const candidates = p.layers.filter((l) => l.type !== 'audio');
   if (candidates.length < 2) { toast('Você precisa de pelo menos 2 camadas para agrupar.', 'warn'); return; }
   const ids = await modal('Agrupar camadas', `
@@ -722,14 +802,22 @@ async function groupLayers() {
   [{ label: 'Cancelar', value: null }, { label: 'Agrupar', primary: true, value: (w) => ({ ids: [...w.querySelectorAll('.group-item input:checked')].map((i) => i.value), name: w.querySelector('[data-f="name"]').value.trim() }) }]);
   if (!ids) return;
   if (ids.ids.length < 2) { toast('Marque pelo menos 2 camadas.', 'warn'); return; }
+  makeGroup(ids.ids, ids.name);
+}
+
+function makeGroup(idList, name) {
+  const p = { layers: store.layers };
+  const ids = { ids: idList, name };
   const kids = p.layers.filter((l) => ids.ids.includes(l.id));
   const at = p.layers.indexOf(kids[0]);
-  const g = LAYER_FACTORIES.group(p, kids);
+  const g = LAYER_FACTORIES.group(store.project, kids);
   g.name = ids.name || 'Grupo';
   g.inPoint = Math.min(...kids.map((l) => l.inPoint));
   g.outPoint = Math.max(...kids.map((l) => l.outPoint));
-  p.layers = p.layers.filter((l) => !ids.ids.includes(l.id));
-  p.layers.splice(Math.min(at, p.layers.length), 0, g);
+  const rest = p.layers.filter((l) => !ids.ids.includes(l.id));
+  rest.splice(Math.min(at, rest.length), 0, g);
+  store.layers = rest;
+  store.multi?.clear();
   store.selectedLayerId = g.id;
   store.commit('structure');
   toast(`${kids.length} camadas agrupadas em “${g.name}”.`, 'ok');
@@ -755,8 +843,9 @@ function deleteSelection() {
     store.commit();
     return;
   }
-  const layer = store.layer();
-  if (layer) { forgetLayer(layer.id); store.removeLayer(layer.id); }
+  const list = store.selectedLayers();
+  for (const layer of list) { forgetLayer(layer.id); store.removeLayer(layer.id); }
+  store.multi?.clear();
 }
 
 const frame = () => 1 / store.project.fps;
@@ -803,7 +892,7 @@ const commands = {
   keys: () => openSheet('keys'),
   speed: () => { ensureSpeedEffect(store.layer()); openSheet('effects'); },
   split: () => { if (!store.layer() || !store.splitLayer(store.selectedLayerId, store.time)) toast('Posicione o playhead dentro da camada para dividir.', 'warn'); },
-  dup: () => store.selectedLayerId && store.duplicateLayer(store.selectedLayerId),
+  dup: () => { const list = store.selectedLayers(); store.multi?.clear(); for (const l of list) store.duplicateLayer(l.id); },
   up: () => store.selectedLayerId && store.moveLayer(store.selectedLayerId, -1),
   down: () => store.selectedLayerId && store.moveLayer(store.selectedLayerId, 1),
   'toggle-visible': () => { const l = store.layer(); if (l) { l.visible = !l.visible; store.commit(); } },
@@ -1009,16 +1098,21 @@ async function openAEPFlow(file) {
     const go = await modal('Conectar vídeos e fotos', `<p>O projeto usa <b>${res.media.length}</b> arquivo(s) que ficam no computador e não vêm dentro do .aep:</p>
       <ul class="small">${res.media.slice(0, 20).map((m) => `<li>${escapeHtml(m)}</li>`).join('')}${res.media.length > 20 ? '<li>…</li>' : ''}</ul>
       <p class="muted small">Escolha esses arquivos no aparelho (pode selecionar vários). Eles entram no lugar certo, com o mesmo tempo, posição, keyframes e efeitos. Dá para fazer depois em ☰ Menu › Conectar vídeos/fotos.</p>
-      ${extra.length ? `<p class="muted small">${extra.map(escapeHtml).join('<br>')}</p>` : ''}`,
-      [{ label: 'Depois', value: false }, { label: 'Escolher arquivos', primary: true, value: true }]);
-    if (go) await relinkAEMedia();
+      ${extra.length ? `<p class="muted small">${extra.map(escapeHtml).join('<br>')}</p>` : ''}
+      <p class="muted small"><b>Não tem esses arquivos?</b> Toque em “Usar outros vídeos/fotos”: os que você escolher entram no lugar dos que faltam, em ordem, preenchendo o quadro sem distorcer.</p>`,
+      [{ label: 'Depois', value: false }, { label: 'Usar outros vídeos/fotos', value: 'sub' }, { label: 'Escolher arquivos', primary: true, value: true }]);
+    if (go === 'sub') await relinkAEMedia({ substitute: true });
+    else if (go) await relinkAEMedia();
   } else toast(`Projeto “${base}” aberto ✓${extra.length ? ' — ' + extra[0] : ''}`, 'ok', 5000);
 }
 
 /** Troca os espaços reservados das mídias do .aep pelos arquivos escolhidos (casando pelo nome do arquivo). */
-async function relinkAEMedia() {
+const AUD_RE = /\.(mp3|wav|aiff?|m4a|aac|ogg|flac)$/i;
+async function relinkAEMedia({ substitute = false } = {}) {
   const files = await pickFiles('video/*,image/*,audio/*');
   if (!files.length) return;
+  const used = new Set();
+  const saved = new Map();
   const norm = (n) => n.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/g, '');
   const byName = new Map();
   for (const f of files) { byName.set(f.name.toLowerCase(), f); if (!byName.has(norm(f.name))) byName.set(norm(f.name), f); }
@@ -1026,18 +1120,26 @@ async function relinkAEMedia() {
   const holders = flatLayers(store.project.layers).filter((l) => l.props?.aeMedia);
   for (const l of holders) {
     const ae = l.props.aeMedia;
-    const f = byName.get(ae.file.toLowerCase()) || byName.get(norm(ae.file)) || (holders.length === 1 && files.length === 1 ? files[0] : null);
+    let f = byName.get(ae.file.toLowerCase()) || byName.get(norm(ae.file)) || (holders.length === 1 && files.length === 1 ? files[0] : null);
+    // substituir: os que não casaram pelo nome recebem os outros arquivos escolhidos, em ordem (sem repetir enquanto der)
+    let swapped = false;
+    if (!f && substitute && ae.kind !== 'audio' && !AUD_RE.test(ae.file)) {
+      const pool = files.filter((x) => !x.type.startsWith('audio/'));
+      f = pool.find((x) => !used.has(x)) || pool[done % Math.max(1, pool.length)] || null;
+      swapped = !!f;
+    }
     if (!f) continue;
-    const mediaId = uid('m');
-    putMedia(mediaId, f);
-    const src = URL.createObjectURL(f);
+    used.add(f);
+    // uma cópia por arquivo (antes cada camada guardava outra cópia e o navegador ficava sem memória)
+    if (!saved.has(f)) { const id = uid('m'); putMedia(id, f); saved.set(f, { mediaId: id, src: URL.createObjectURL(f) }); }
+    const { mediaId, src } = saved.get(f);
     const isVideo = f.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|mkv)$/i.test(f.name);
     const isAudio = f.type.startsWith('audio/');
     l.type = isAudio ? 'audio' : isVideo ? 'video' : 'image';
     l.name = l.name.replace(/^⚠ /, '');
     const keep = { width: ae.width, height: ae.height };
     l.props = isAudio ? { src, mediaId, volume: 100, sourceStart: ae.sourceStart || 0, muted: false }
-      : { src, mediaId, width: keep.width, height: keep.height, ...(isVideo ? { sourceStart: ae.sourceStart || 0, speed: ae.speed || 1, volume: 100 } : {}) };
+      : { src, mediaId, width: keep.width, height: keep.height, ...(swapped ? { fit: 'cover', replacedFrom: ae.file } : {}), ...(isVideo ? { sourceStart: swapped ? 0 : ae.sourceStart || 0, speed: ae.speed || 1, volume: 100 } : {}) };
     if (isVideo) {
       detectFps(src).then((fps) => { if (fps) { l.props.sourceFps = fps; store.commit(); } });
       loadAudio(src).then(() => { l.props.hasAudio = true; store.emit('change'); }).catch(() => { l.props.hasAudio = false; });

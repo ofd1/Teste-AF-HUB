@@ -258,7 +258,9 @@ export function looksFromTools(tools, strength = 100) {
       // Channel Mixer: [Normalize, Strength, Monochrome, —, RGB R/G/B (pesos do mono), Red R/G/B, Green R/G/B, Blue R/G/B]
       case 'cmix': {
         const norm = (v[0] ?? 100) / 100;
-        const row = (a, b, c, def) => { let r = [v[a] ?? def[0], v[b] ?? def[1], v[c] ?? def[2]]; const s = r[0] + r[1] + r[2]; if (Math.abs(s) > 0.1) r = r.map((x) => x * (1 - norm) + (x / s) * norm); return r; };
+        // Normalize: cada linha passa a somar 1 subtraindo a diferença igualmente dos três canais (não dividindo pela soma —
+        // dividir invertia linhas como [−1, −0,5, 0] e apagava o azul)
+        const row = (a, b, c, def) => { const r = [v[a] ?? def[0], v[b] ?? def[1], v[c] ?? def[2]]; const d = (r[0] + r[1] + r[2] - 1) / 3; return r.map((x) => x - d * norm); };
         if (v[2] >= 0.5) { const w = row(4, 5, 6, [0.213, 0.715, 0.072]); p.mixR = w; p.mixG = w.slice(); p.mixB = w.slice(); }
         else { p.mixR = row(7, 8, 9, [1, 0, 0]); p.mixG = row(10, 11, 12, [0, 1, 0]); p.mixB = row(13, 14, 15, [0, 0, 1]); }
         p.mixAmt = clampN((v[1] ?? 100) / 100, 0, 1);

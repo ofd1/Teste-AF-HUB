@@ -5,9 +5,49 @@ import { getEffectDef } from './effects.js';
 import { escapeHtml, hexToRgba, rgbaToHex, deepClone, uid } from './util.js';
 import { toast } from './ui.js';
 
+/**
+ * Campo numérico arrastável (como no After Effects): segurar e arrastar para os lados muda o valor;
+ * Shift = fino (×0,1), Ctrl/Alt = grosso (×10). Um toque/clique sem arrastar abre o campo para digitar.
+ */
+export function makeScrubbable(input) {
+  if (input.dataset.scrub) return;
+  input.dataset.scrub = '1';
+  input.addEventListener('pointerdown', (e) => {
+    if (document.activeElement === input || e.button > 0) return; // já editando: comportamento normal
+    if (e.pointerType === 'mouse') e.preventDefault(); // sem foco/cursor de texto enquanto decide se é arraste
+    const x0 = e.clientX, y0 = e.clientY, v0 = parseFloat(input.value) || 0;
+    const step = parseFloat(input.step) || 1, min = input.min !== '' ? parseFloat(input.min) : -Infinity, max = input.max !== '' ? parseFloat(input.max) : Infinity;
+    let dragging = false;
+    const move = (ev) => {
+      const dx = ev.clientX - x0;
+      if (!dragging) {
+        if (Math.abs(dx) < 4 || Math.abs(ev.clientY - y0) > Math.abs(dx) * 1.5) return; // vertical = rolar a lista
+        dragging = true; input.setPointerCapture?.(e.pointerId); document.body.classList.add('scrubbing');
+      }
+      ev.preventDefault();
+      const mul = ev.shiftKey ? 0.1 : ev.ctrlKey || ev.altKey || ev.metaKey ? 10 : 1;
+      let v = v0 + Math.round(dx / 2) * step * mul;
+      v = Math.max(min, Math.min(max, v));
+      const dec = Math.max(0, -Math.floor(Math.log10(step * mul)));
+      input.value = +v.toFixed(Math.min(4, dec));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      document.body.classList.remove('scrubbing');
+      if (dragging) { input.dispatchEvent(new Event('change', { bubbles: true })); input.blur(); }
+      else if (e.pointerType === 'mouse') { input.focus(); input.select?.(); }
+    };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  });
+  // durante o arraste o campo não deve abrir o teclado nem selecionar texto
+  input.addEventListener('click', (e) => { if (document.body.classList.contains('scrubbing')) e.preventDefault(); });
+}
+
 const TRANSFORM_DEFS = [
   { key: 'position', label: 'Posição', kind: 'point', step: 1 },
-  { key: 'scale', label: 'Escala %', kind: 'point', step: 1 },
+  { key: 'scale', label: 'Escala %', kind: 'point', step: 1, link: true },
   { key: 'rotation', label: 'Rotação', kind: 'angle' },
   { key: 'opacity', label: 'Opacidade %', kind: 'number', min: 0, max: 100, step: 1 },
   { key: 'anchor', label: 'Ancoragem', kind: 'point', step: 1 },
@@ -106,6 +146,7 @@ export class Inspector {
     const rows = [
       f('Nome', `<input type="text" data-layer="name" data-fid="l-name" value="${escapeHtml(layer.name)}">`),
     ];
+    if (['video', 'image', 'audio'].includes(layer.type) || layer.props?.aeMedia) rows.push('<button class="wide" data-hook="replace">⇄ Substituir mídia (mantém efeitos, keyframes e ajustes)</button>');
     switch (layer.type) {
       case 'text':
         rows.push(`<textarea data-prop="text" data-fid="p-text" rows="2">${escapeHtml(p.text)}</textarea>`);
@@ -204,7 +245,7 @@ export class Inspector {
     const fid = path.replace(/[^a-z0-9]/gi, '_');
     let inputs;
     switch (d.kind) {
-      case 'point': inputs = `<input type="number" inputmode="decimal" data-i="0" data-fid="${fid}_0" step="${d.step || 1}"><input type="number" inputmode="decimal" data-i="1" data-fid="${fid}_1" step="${d.step || 1}">`; break;
+      case 'point': inputs = `<input type="number" inputmode="decimal" data-i="0" data-fid="${fid}_0" step="${d.step || 1}">${d.link ? '<button class="linkbtn" data-pact="link" title="Manter proporção (link)">🔗</button>' : ''}<input type="number" inputmode="decimal" data-i="1" data-fid="${fid}_1" step="${d.step || 1}">`; break;
       case 'point3': inputs = [0, 1, 2].map((i) => `<input type="number" inputmode="decimal" data-i="${i}" data-fid="${fid}_${i}" step="0.01">`).join(''); break;
       case 'pos': inputs = `<input type="number" inputmode="decimal" data-i="0" data-fid="${fid}_0" step="1" title="X %"><input type="number" inputmode="decimal" data-i="1" data-fid="${fid}_1" step="1" title="Y %">`; break;
       case 'color': inputs = '<input type="color" data-i="c">'; break;
@@ -242,14 +283,17 @@ export class Inspector {
         root.querySelectorAll(`[data-prop="${k}"]`).forEach((o) => { if (o !== el && o.type !== 'checkbox') o.value = v; });
         if (k === 'fontWeight') v = +v;
         layer.props[k] = v;
+        for (const o of store.selectedLayers?.() || []) if (o !== layer && o.type === layer.type) o.props[k] = v;
         store.emit('preview');
       };
       el.addEventListener('input', apply);
       el.addEventListener('change', () => { apply(); store.commit(); });
+      if (el.type === 'number') makeScrubbable(el);
     });
     // opacidade direta (keyframe se a opacidade já estiver animada)
     root.querySelectorAll('[data-opacity]').forEach((el) => el.addEventListener('input', () => {
       setValue(layer.transform.opacity, store.time, Math.max(0, Math.min(100, +el.value || 0)));
+      for (const o of store.selectedLayers?.() || []) if (o !== layer) setValue(o.transform.opacity, store.time, Math.max(0, Math.min(100, +el.value || 0)));
       root.querySelectorAll('[data-opacity]').forEach((x) => { if (x !== el) x.value = el.value; });
       store.emit('preview');
     }));
@@ -269,6 +313,7 @@ export class Inspector {
           if (k === 'outPoint' && v <= layer.inPoint) v = layer.inPoint + 1 / store.project.fps;
         }
         layer[k] = v;
+        if (k === 'blend') for (const o of store.selectedLayers?.() || []) o[k] = v;
         store.commit();
       });
     });
@@ -315,7 +360,16 @@ export class Inspector {
     const read = () => {
       const cur = valueAt(prop, store.time);
       if (kind === 'point3') return [0, 1, 2].map((i) => { const v = parseFloat(row.querySelector(`[data-i="${i}"]`).value); return Number.isFinite(v) ? v : cur[i]; });
-      if (kind === 'point') return [0, 1].map((i) => { const v = parseFloat(row.querySelector(`[data-i="${i}"]`).value); return Number.isFinite(v) ? v : cur[i]; });
+      if (kind === 'point') {
+        const out = [0, 1].map((i) => { const v = parseFloat(row.querySelector(`[data-i="${i}"]`).value); return Number.isFinite(v) ? v : cur[i]; });
+        // escala com link: mexer em um eixo muda o outro na mesma proporção
+        if (linked() && lastIdx != null && cur[lastIdx]) {
+          const o = 1 - lastIdx, k = out[lastIdx] / cur[lastIdx];
+          out[o] = Math.round(cur[o] * k * 100) / 100;
+          const el = row.querySelector(`[data-i="${o}"]`); if (el) el.value = out[o];
+        }
+        return out;
+      }
       if (kind === 'pos') return [0, 1].map((i) => { const v = parseFloat(row.querySelector(`[data-i="${i}"]`).value); return Number.isFinite(v) ? v / 100 : cur[i]; });
       if (kind === 'color') return hexToRgba(row.querySelector('[data-i="c"]').value, cur?.[3] ?? 1);
       if (kind === 'bool') return row.querySelector('[data-i="b"]').checked;
@@ -324,8 +378,29 @@ export class Inspector {
       const v = parseFloat(row.querySelector('[data-i="n"]').value);
       return Number.isFinite(v) ? v : cur;
     };
+    let lastIdx = null;
+    const linked = () => row.querySelector('[data-pact="link"]') && layer.scaleLinked !== false;
+    const lb = row.querySelector('[data-pact="link"]');
+    if (lb) {
+      lb.classList.toggle('on', layer.scaleLinked !== false);
+      lb.addEventListener('click', () => { layer.scaleLinked = layer.scaleLinked === false; lb.classList.toggle('on', layer.scaleLinked !== false); store.commit(); });
+    }
     const write = (v, commit) => {
       setValue(prop, store.time, v);
+      // várias camadas selecionadas: a mesma mudança vale para todas (efeitos: o mesmo tipo na mesma posição)
+      const others = (store.selectedLayers?.() || []).filter((l) => l !== layer);
+      for (const o of others) {
+        let path = row.dataset.path;
+        const m = /^fx:([^.]+)\.(.+)$/.exec(path);
+        if (m) {
+          const fx = layer.effects.find((f) => f.id === m[1]);
+          const same = fx && o.effects.filter((f) => f.type === fx.type)[layer.effects.filter((f) => f.type === fx.type).indexOf(fx)];
+          if (!same) continue;
+          path = `fx:${same.id}.${m[2]}`;
+        }
+        const pr = resolveProp(o, path);
+        if (pr) setValue(pr, store.time, Array.isArray(v) ? v.slice() : v);
+      }
       if (commit) store.commit(); else store.emit('preview');
     };
     row.querySelectorAll('[data-i]').forEach((el) => {
@@ -334,11 +409,13 @@ export class Inspector {
         el.addEventListener('change', () => store.commit());
         return;
       }
-      el.addEventListener('input', () => write(read()));
-      el.addEventListener('change', () => write(read(), true));
+      el.addEventListener('input', () => { lastIdx = /^\d$/.test(el.dataset.i) ? +el.dataset.i : null; write(read()); });
+      el.addEventListener('change', () => { lastIdx = /^\d$/.test(el.dataset.i) ? +el.dataset.i : null; write(read(), true); });
+      if (el.type === 'number') makeScrubbable(el);
     });
     row.querySelectorAll('[data-pact]').forEach((el) => {
       const act = el.dataset.pact;
+      if (act === 'link') return;
       if (act === 'scrub') {
         if (!['number', 'angle', 'point'].includes(kind)) return;
         el.addEventListener('pointerdown', (e) => {
