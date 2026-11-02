@@ -266,7 +266,7 @@ export const IMPORT_RULES = [
   { vendor: 'Sapphire', plugin: 'S_MathOps', to: 'exposure', test: /s_mathops/i,
     expand: (fx, raw) => [{ type: 'exposure', label: 'S_MathOps', params: { offset: (raw('a darks') || 0) + (raw('dest darks') || 0), exposure: Math.log2(Math.max(0.01, (raw('a lights') ?? 1) * (raw('dest lights') ?? 1))) } }] },
   { vendor: 'Sapphire', plugin: 'S_FilmDamage / S_FilmEffect', to: 'filmLook', test: /s_film/i,
-    expand: (fx, raw) => [{ type: 'filmLook', label: fx.name, params: { grain: Math.min(100, (raw('grain amp') || 0) * 30), scratch: Math.min(100, (raw('dust density') || 0) * 10 + (raw('scratch density') || 0) * 10), vignette: 0, flicker: Math.min(100, (raw('flicker amp') || 0) * 100), warmth: 0, fade: 0 } }] },
+    expand: (fx, raw) => [{ type: 'filmLook', label: fx.name, params: { grain: Math.min(100, (raw('grain amp') || 0) * 30), scratch: Math.min(100, (raw('dust density') || 0) * 10 + (raw('scratch density') || 0) * 10), vignette: Math.min(100, (raw('vignette darkness') || 0) * 100), flicker: Math.min(100, ((raw('flicker amp') ?? raw('flicker')) || 0) * 100), warmth: 0, fade: Math.min(60, Math.max(0, -(raw('offset darks') || 0)) * 20) } }] }, // S_FilmEffect: Vignette Darkness, Offset Darks; S_FilmDamage: Flicker
   { vendor: 'Sapphire', plugin: 'S_Flicker', to: 'flicker', test: /s_flicker/i,
     map: { amount: { n: ['amplitude'], conv: (v) => v * 100 }, frequency: { n: ['rand freq'], conv: (v) => Math.min(60, v) }, colorAmount: { n: ['rand color amp'], conv: (v) => v * 100 }, brightness: { n: ['brightness'] } },
     // S_Flicker: a variação de brilho é Amplitude × Rand Luma Amp (Amplitude é o mestre), não só Amplitude
@@ -311,7 +311,8 @@ export const IMPORT_RULES = [
   { vendor: 'Sapphire', plugin: 'S_Streaks', to: 'streaks', test: /s_streaks/i, map: { length: { n: ['streak length', 'length'], conv: (v) => (v <= 2 ? v * 200 : v) }, amount: { n: ['brightness'] }, angle: { n: ['angle', 'streak angle'] } } },
   { vendor: 'Sapphire', plugin: 'S_Feedback', to: 'feedback', test: /s_feedback/i, map: { zoom: { n: ['zoom', 'scale'] }, rotate: { n: ['rotate'] }, count: { n: ['iterations', 'repeats'] } } },
   { vendor: 'Sapphire', plugin: 'S_Glow', to: 'deepGlow', test: /s_glow/i,
-    map: { radius: { n: ['width'], conv: (v) => (v < 5 ? v * 500 : v) }, exposure: { n: ['brightness'] }, threshold: { n: ['threshold'], conv: pct }, tint: { n: ['color'] } }, set: { useTint: false } },
+    // S_Glow (sapphire_ae.dll): Brightness 2 = padrão, Width 0,4 (¼ da largura do quadro), Threshold 0,5, Combine Screen
+    map: { radius: { n: ['width'], conv: (v) => (v < 5 ? v * 500 : v) }, exposure: { n: ['brightness'], conv: (v) => v * 0.6 }, threshold: { n: ['threshold'], conv: pct }, tint: { n: ['color'] } }, set: { useTint: false } },
   { vendor: 'Sapphire', plugin: 'S_ZoomBlur', to: 'radialBlur', test: /s_zoomblur|s_blurzoom|s_radialblur/i, set: { mode: 1 },
     map: { amount: { n: ['zoom amount', 'blur amount', 'amount', 'length'], conv: (v) => (v <= 2 ? v * 100 : v) }, center: { n: ['center', 'center xy'] } } },
   { vendor: 'Sapphire', plugin: 'S_Blur', to: 'blur', test: /s_blur/i, map: { radius: { n: ['width', 'blur amount'], conv: (v) => (v < 5 ? v * 100 : v) } } },
@@ -319,11 +320,13 @@ export const IMPORT_RULES = [
   { vendor: 'Sapphire', plugin: 'S_LensFlare', to: 'lensFlare', test: /s_lensflare|s_flare/i,
     map: { position: { n: ['flare pos', 'flare position', 'position', 'center'] }, brightness: { n: ['brightness'], conv: (v) => (v <= 5 ? v * 100 : v) }, size: { n: ['scale', 'flare scale', 'size'], conv: (v) => (v <= 5 ? v * 220 : v) }, color: { n: ['color', 'flare color'] } } },
   { vendor: 'Sapphire', plugin: 'S_Rays', to: 'lightRays', test: /s_rays/i,
-    map: { center: { n: ['center', 'center xy', 'rays center'] }, length: { n: ['ray length', 'rays length', 'length'], conv: (v) => (v <= 2 ? v * 60 : v) }, intensity: { n: ['brightness', 'rays bright'], conv: (v) => v * 2 }, threshold: { n: ['threshold'], conv: (v) => (v <= 1 ? v * 100 : v) }, color: { n: ['rays color', 'color'] } } },
+    map: { center: { n: ['center', 'center xy', 'rays center'] }, length: { n: ['ray length', 'rays length', 'length'], conv: (v) => (v <= 2 ? v * 60 : v) }, intensity: { n: ['rays brightness', 'brightness', 'rays bright'], conv: (v) => Math.min(10, v * 0.35) /* Rays Brightness 8 = padrão do Sapphire */ }, threshold: { n: ['threshold'], conv: (v) => (v <= 1 ? v * 100 : v) }, color: { n: ['rays color', 'color'] } } },
   { vendor: 'Sapphire', plugin: 'S_DigitalDamage', to: 'glitch', test: /s_digitaldamage|s_glitch|s_damage/i,
-    map: { amount: { n: ['amount', 'damage amount', 'block amount'], conv: (v) => (v <= 1 ? v * 100 : v) }, block: { n: ['block size', 'blocks size'], conv: (v) => (v <= 1 ? v * 60 : v) }, speed: { n: ['frequency', 'speed'] }, seed: { n: ['seed'] } } },
+    // S_DigitalDamage (sapphire_ae.dll): Intensity (1 = padrão), Damage Size, Shift Amount, *Blink Freq, Seed
+    map: { amount: { n: ['intensity', 'amount', 'damage amount', 'block amount'], conv: (v) => Math.min(100, v * 40) }, block: { n: ['damage size', 'block size', 'blocks size'], conv: (v) => (v <= 5 ? v * 24 : v) }, shift: { n: ['shift amount'], conv: (v) => (v <= 1 ? v * 80 : v) }, speed: { n: ['shift blink freq', 'frequency', 'speed'] }, seed: { n: ['seed'] } } },
   { vendor: 'Sapphire', plugin: 'S_TVDamage', to: 'vhs', test: /s_tv|s_retro/i, map: { amount: { n: ['amount', 'mix'], conv: (v) => (v <= 1 ? v * 100 : v) }, noise: { n: ['noise amp', 'noise'], conv: (v) => (v <= 1 ? v * 60 : v) } } },
-  { vendor: 'Sapphire', plugin: 'S_Vignette', to: 'vignette', test: /s_vignette/i, map: { amount: { n: ['amount', 'vignette amount', 'darken'], conv: (v) => (v <= 1 ? v * 100 : v) }, size: { n: ['radius', 'size'], conv: (v) => (v <= 2 ? v * 60 : v) }, feather: { n: ['softness', 'feather'], conv: (v) => (v <= 1 ? v * 100 : v) } } },
+  // S_Vignette (sapphire_ae.dll): Opacity (força), Radius 0,9, Edge Softness 1, Rel Height 0,75 (elipse do quadro), Color
+  { vendor: 'Sapphire', plugin: 'S_Vignette', to: 'vignette', test: /s_vignette/i, map: { amount: { n: ['opacity', 'amount', 'vignette amount', 'darken'], conv: (v) => (v <= 1 ? v * 100 : v) }, size: { n: ['radius', 'size'], conv: (v) => (v <= 2 ? v * 60 : v) }, feather: { n: ['edge softness', 'softness', 'feather'], conv: (v) => (v <= 1 ? v * 100 : v) }, color: { n: ['color'] } }, set: { round: false } },
   { vendor: 'Sapphire', plugin: 'S_Kaleido', to: 'kaleida', test: /s_kaleid/i },
   { vendor: 'Sapphire', plugin: 'S_Distort', to: 'turbulentDisplace', test: /s_distort|s_warp/i },
   { vendor: 'Sapphire', plugin: 'S_Mosaic', to: 'mosaic', test: /s_mosaic/i },
