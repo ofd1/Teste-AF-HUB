@@ -209,6 +209,8 @@ export function parseAEP(buffer) {
       const tree = propTree(r, l._chunks, fps);
       l.shapes = tree.find((n) => n.mn === 'ADBE Root Vectors Group')?.children || null;
       l.masks = (tree.find((n) => n.mn === 'ADBE Mask Parade')?.children || []).filter((n) => n.mn === 'ADBE Mask Atom');
+      l.textAnimators = (tree.find((n) => n.mn === 'ADBE Text Properties')?.children || []).find((n) => n.mn === 'ADBE Text Animators')?.children || [];
+      l.textMore = (tree.find((n) => n.mn === 'ADBE Text Properties')?.children || []).find((n) => n.mn === 'ADBE Text More Options') || null;
       const btdk = findDeep(l._chunks, (c) => c.id === 'LIST' && c.listType === 'btdk');
       if (btdk) { try { l.text = textFromCOS(parseCOS(r.bytes.subarray(btdk.offset + 4, btdk.offset + btdk.size))); } catch { /* texto ilegível */ } }
       delete l._chunks;
@@ -276,6 +278,46 @@ function applyTransform(layer, l, srcW, srcH, comp, t0, cw = srcW, ch = srcH, pi
 
 const BLENDS = { 2: 'source-over', 3: 'lighter', 4: 'multiply', 5: 'screen', 6: 'overlay', 7: 'soft-light', 8: 'hard-light', 9: 'darken', 10: 'lighten', 11: 'difference', 13: 'color-dodge', 14: 'color-burn', 15: 'exclusion', 16: 'hue', 17: 'saturation', 18: 'color', 19: 'luminosity' };
 
+/** Text Animators do AE → { props: {opacity, position, scale, rotation, blur, tracking}, selectors: [...] } com keyframes. */
+function convTextAnimators(list, t0) {
+  const find = (n, mn) => { if (!n) return null; if (n.mn === mn) return n; for (const c of n.children || []) { const f = find(c, mn); if (f) return f; } return null; };
+  const pa = (node, fix, def) => (node?.prop ? toAnim(node.prop, fix, def, t0) : null);
+  const n1 = (v) => v[0];
+  const out = [];
+  for (const an of list) {
+    const P = (an.children || []).find((c) => c.mn === 'ADBE Text Animator Properties');
+    const S = (an.children || []).find((c) => c.mn === 'ADBE Text Selectors');
+    const props = {};
+    const g = (mn) => find(P, mn);
+    if (g('ADBE Text Opacity')) props.opacity = pa(g('ADBE Text Opacity'), n1, 100);
+    if (g('ADBE Text Position 3D')) props.position = pa(g('ADBE Text Position 3D'), (v) => [v[0] || 0, v[1] || 0], [0, 0]);
+    if (g('ADBE Text Scale 3D')) props.scale = pa(g('ADBE Text Scale 3D'), (v) => [v[0] ?? 100, v[1] ?? v[0] ?? 100], [100, 100]);
+    if (g('ADBE Text Rotation')) props.rotation = pa(g('ADBE Text Rotation'), n1, 0);
+    if (g('ADBE Text Blur')) props.blur = pa(g('ADBE Text Blur'), (v) => [v[0] || 0, v[1] ?? v[0] ?? 0], [0, 0]);
+    if (g('ADBE Text Tracking Amount')) props.tracking = pa(g('ADBE Text Tracking Amount'), n1, 0);
+    if (!Object.keys(props).length) continue;
+    const selectors = [];
+    for (const sNode of S?.children || []) {
+      const q = (mn) => find(sNode, mn);
+      const num = (mn, def) => (q(mn)?.prop ? toAnim(q(mn).prop, n1, def, t0) : null);
+      const fixed = (mn, def) => { const pr = q(mn)?.prop; return pr?.value?.length ? pr.value[0] : pr?.keyframes?.[0]?.v?.[0] ?? def; };
+      if (sNode.mn === 'ADBE Text Wiggly Selector') {
+        selectors.push({ type: 'wiggly', mode: fixed('ADBE Text Selector Mode', 3), max: num('ADBE Text Wiggly Max Amount', 100) || num('ADBE Text Selector Max Amount', 100), min: num('ADBE Text Wiggly Min Amount', -100),
+          freq: num('ADBE Text Temporal Freq', 2), correlation: num('ADBE Text Character Correlation', 50), tphase: num('ADBE Text Temporal Phase', 0), sphase: num('ADBE Text Spatial Phase', 0), based: fixed('ADBE Text Range Type2', 1) });
+      } else if (sNode.mn === 'ADBE Text Expressible Selector') {
+        selectors.push({ type: 'expr', based: fixed('ADBE Text Range Type2', 1) });
+      } else {
+        selectors.push({ type: 'range', start: num('ADBE Text Percent Start', 0), end: num('ADBE Text Percent End', 100), offset: num('ADBE Text Percent Offset', 0),
+          amount: num('ADBE Text Selector Max Amount', 100), shape: fixed('ADBE Text Range Shape', 1), smooth: num('ADBE Text Selector Smoothness', 100),
+          based: fixed('ADBE Text Range Type2', 1), mode: fixed('ADBE Text Selector Mode', 1), randomize: !!fixed('ADBE Text Randomize Order', 0), seed: fixed('ADBE Text Random Seed', 0) });
+      }
+    }
+    if (!selectors.length) selectors.push({ type: 'range' });
+    out.push({ name: an.name || 'Animator', props, selectors });
+  }
+  return out;
+}
+
 function buildLayers(parsed, comp, proj, ctx, offset = 0, depth = 0) {
   const out = [];
   for (const l of comp.layers) {
@@ -299,6 +341,8 @@ function buildLayers(parsed, comp, proj, ctx, offset = 0, depth = 0) {
         layer.props.lineHeight = 1.2;
       }
       layer.props.aeBaseline = true; // âncora na linha de base, como no AE
+      const anims = convTextAnimators(l.textAnimators || [], offset + l.startTime);
+      if (anims.length) layer.props.animators = anims;
     } else if (l.layerType === 4) {
       layer = LAYER_FACTORIES.shape(proj, convShapes(l.shapes || [], offset + l.startTime));
       layer.props.width = comp.width; layer.props.height = comp.height;

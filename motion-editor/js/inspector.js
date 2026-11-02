@@ -126,6 +126,7 @@ export class Inspector {
         rows.push(f('FPS do vídeo', num('sourceFps', 0.001, 1, 240)));
         rows.push('<button class="wide" data-hook="speed">⏱ Rampa de velocidade (estilo Twixtor)</button>');
         rows.push('<button class="wide" data-hook="track">◎ Rastrear movimento (tracker)</button>');
+        rows.push('<button class="wide" data-hook="faceTrack">☺ Face tracking (seguir rosto)</button>');
         rows.push(f('Largura', num('width', 1, 1)), f('Altura', num('height', 1, 1)));
         break;
       case 'audio':

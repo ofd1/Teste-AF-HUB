@@ -82,7 +82,8 @@ export function parseFFX(buffer, opts = {}) {
 /** Lê efeitos e propriedades (com keyframes) de um trecho de um .aep (ex.: os filhos de uma camada 'Layr'). */
 export function parseFXChildren(r, children, fps) {
   const result = { effects: [], properties: [], warnings: [], matchNames: [] };
-  const ctx = { r, fps, result, targetPath: [], targets: [], sspcIndex: 0, groupPath: [] };
+  // projeto (.aep): tempos reais dos keyframes (no preset .ffx o primeiro keyframe vira o instante 0)
+  const ctx = { r, fps, result, targetPath: [], targets: [], sspcIndex: 0, groupPath: [], absolute: true };
   walk(children, ctx);
   return result;
 }
@@ -282,7 +283,7 @@ function flattenGroup(tdgp, defs, fx, ctx) {
 
 /** Lê uma propriedade (tdbs) isolada: valor + keyframes (usado pelo importador de .aep). */
 export function parsePropertyChunk(r, tdbs, matchName, fps) {
-  return parseProperty(tdbs, matchName, null, { r, fps, result: { warnings: [] } });
+  return parseProperty(tdbs, matchName, null, { r, fps, result: { warnings: [] }, absolute: true });
 }
 
 export function paramIndex(mn) {
@@ -377,7 +378,7 @@ function parseKeyframes(list, p, ctx) {
   const ok = keys.every((k) => k.v.length && k.v.every((x) => Number.isFinite(x) && Math.abs(x) < 1e7));
   const sorted = keys.every((k, i) => i === 0 || k.raw >= keys[i - 1].raw);
   if (!ok || !sorted) throw new Error('valores implausíveis');
-  const t0 = keys[0].raw;
+  const t0 = ctx.absolute ? 0 : keys[0].raw;
   for (const k of keys) k.t = (k.raw - t0) / ctx.fps;
   return keys;
 }

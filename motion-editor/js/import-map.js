@@ -359,6 +359,15 @@ function looksExpand(fx, raw) {
 }
 
 export const IMPORT_RULES = [
+  // efeitos que apareceram nos projetos do usuário (lumus wm, not sure who i am…)
+  { vendor: 'BCC', plugin: 'BCC Hue-Sat-Lightness', to: 'hueSat', test: /bcc.*hue.?sat/i, map: { hue: { n: ['hue', 'master hue'] }, saturation: { n: ['saturation', 'master saturation'] }, lightness: { n: ['lightness', 'master lightness'] } } },
+  { vendor: 'Omino', plugin: 'Omino Diffusion', to: 'glow', test: /omino_diffusion/i, map: { radius: { n: ['radius', 'blur radius'] } }, set: { threshold: 40, intensity: 0.6 } },
+  { vendor: 'Crossphere', plugin: 'Crossphere Bokeh', to: 'bokeh', test: /crossphere/i },
+  { vendor: 'Sapphire', plugin: 'S_ScanLines', to: 'vhs', test: /s_scanlines/i, set: { amount: 100, lines: 60, noise: 0, chroma: 0, jitter: 0 } },
+  { vendor: 'Adobe', plugin: 'Linear Color Key', to: 'keylight', test: /linear color key/i },
+  { vendor: 'BCC', plugin: 'BCC Grunge', to: 'filmDamage', test: /bcc.*grunge/i, set: { scratches: 20, dust: 40, flicker: 10, jitter: 0, grain: 30, sepia: 0 } },
+  { vendor: 'Red Giant Universe', plugin: 'Electrify', to: 'zap', test: /electrify/i },
+  { vendor: 'BCC', plugin: 'BCC LED', to: 'halftone', test: /bcc\d*led/i },
   // ---------------------------------------------------------------- plugins de terceiros
   // ---- regras ajustadas com presets reais de edit (sonhei, ftb, galego, ZAZ…)
   { vendor: 'RE:Vision', plugin: 'Twixtor', to: 'twixtor', test: /twixtor/i,
@@ -675,7 +684,12 @@ const normalize = (s) => (s || '').toLowerCase().trim();
  * Identifica um efeito do AE. Retorna { rule, def, kind } com kind:
  * 'native' (match name nativo da Adobe/CC), 'plugin' (plugin de terceiro reconhecido) ou 'approx' (palavra-chave).
  */
+// controles de expressão, pseudo-efeitos, áudio e pintura não são efeitos visuais: viram controles genéricos
+// (antes um Slider chamado "Blur" casava pelo nome e virava desfoque)
+const NON_VISUAL = /^(ADBE (Slider|Point3D|Point|Angle|Checkbox|Color|Layer|Dropdown) Control|ADBE Aud BT|ADBE AudSpect|ADBE Paint|Pseudo\/)/i;
+
 export function matchEffect(matchName, displayName = '') {
+  if (NON_VISUAL.test(matchName || '')) return null;
   const mn = normalize(matchName);
   for (const rule of IMPORT_RULES) {
     if (rule.match?.some((m) => normalize(m) === mn)) return { rule, def: EFFECT_MAP[rule.to], kind: 'native' };

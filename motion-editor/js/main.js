@@ -25,6 +25,7 @@ import { putMedia, getMedia, pruneMedia } from './idb.js';
 import { saveFile, registerServiceWorker } from './platform.js';
 import { getGL } from './gl.js';
 import { trackPoint, applyTrack } from './tracker.js';
+import { trackFace, applyFaceFollow, applyFaceCamera, ensureFaceModel } from './facetrack.js';
 import { calibrateFromImage, CALIB_LABEL } from './calibrate.js';
 import { parseAEP, aepToProject, mainComps } from './aep.js';
 
@@ -268,6 +269,7 @@ new Inspector(document.getElementById('propsPanel'), store, 'props', {
   speed: (layer) => { ensureSpeedEffect(layer); openSheet('effects'); },
   beats: (layer) => addBeatMarkers(layer),
   track: (layer) => startTrack(layer),
+  faceTrack: (layer) => startFaceTrack(layer),
 });
 const library = new Library(document.getElementById('library'), store, {
   onApplied: () => { if (!desktop.matches) closeSheet(); },
@@ -345,6 +347,65 @@ async function startTrack(layer) {
   } finally {
     wrap.remove();
   }
+}
+
+async function startFaceTrack(layer) {
+  if (layer.type !== 'video') { toast('O face tracking funciona em camadas de vídeo.', 'warn'); return; }
+  setPlaying(false);
+  ensureFaceModel().catch(() => {});
+  const others = store.layers.filter((l) => l !== layer && l.type !== 'audio');
+  const t0 = Math.max(store.time, layer.inPoint);
+  const res = await modal('Face tracking', `
+    <p class="muted small">Detecta o rosto em cada quadro, do playhead (${t0.toFixed(2)}s) até o fim do clipe (${layer.outPoint.toFixed(2)}s). Tudo no aparelho.</p>
+    <label class="row"><span>Modo</span><select data-f="mode">
+      <option value="camera">Câmera no rosto (o vídeo segue o rosto: zoom e centraliza)</option>
+      <option value="follow">Uma camada segue o rosto</option></select></label>
+    <label class="row"><span>Camada que segue</span><select data-f="target"><option value="__text">Novo texto</option>
+      ${others.map((l) => `<option value="${l.id}">${l.name.replace(/</g, '&lt;')}</option>`).join('')}</select></label>
+    <label class="row"><span>Tamanho do rosto na tela %</span><input type="number" data-f="frac" value="40" min="5" max="100"></label>
+    <label class="row"><span>Intensidade do enquadramento %</span><input type="number" data-f="follow" value="100" min="0" max="100"></label>
+    <label class="row"><span>Seguir escala e rotação</span><label class="switch"><input type="checkbox" data-f="sr" checked><i></i></label></label>
+    <label class="row"><span>Endireitar a cabeça (câmera)</span><label class="switch"><input type="checkbox" data-f="level"><i></i></label></label>
+    <p class="muted small">Com vários rostos, toque em “Escolher rosto” para indicar qual seguir.</p>`,
+  [{ label: 'Cancelar', value: null }, { label: 'Escolher rosto', value: (w) => ({ pick: true, ...read(w) }) }, { label: 'Rastrear', primary: true, value: (w) => read(w) }]);
+  function read(w) { const q = (k) => w.querySelector(`[data-f="${k}"]`); return { mode: q('mode').value, target: q('target').value, frac: +q('frac').value, follow: +q('follow').value, sr: q('sr').checked, level: q('level').checked }; }
+  if (!res) return;
+  let hint = null;
+  if (res.pick) {
+    if (!desktop.matches) closeSheet();
+    toast('Toque no rosto que quer seguir.', 'info', 4000);
+    hint = await new Promise((r) => { trackPick = r; });
+  }
+  let cancelled = false;
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-wrap';
+  wrap.innerHTML = '<div class="modal"><header><h2>Procurando o rosto…</h2></header><div class="modal-body"><div class="progress"><div class="bar"></div></div></div><footer><button class="danger">Cancelar</button></footer></div>';
+  document.body.appendChild(wrap);
+  wrap.querySelector('button').onclick = () => { cancelled = true; };
+  try {
+    const track = await trackFace({ layer, project: store.project, t0, t1: layer.outPoint - 1 / store.project.fps, hintComp: hint,
+      onProgress: (f) => { wrap.querySelector('.bar').style.width = `${Math.round(f * 100)}%`; }, isCancelled: () => cancelled });
+    let n;
+    if (res.mode === 'camera') {
+      n = applyFaceCamera(layer, track, store.project, { faceFrac: Math.max(0.05, res.frac / 100), follow: Math.max(0, Math.min(1, res.follow / 100)), level: res.level });
+      store.selectedLayerId = layer.id;
+    } else {
+      let target = store.layers.find((l) => l.id === res.target);
+      if (!target) {
+        target = LAYER_FACTORIES.text(store.project);
+        target.props.text = 'TEXTO'; target.props.fontSize = 70;
+        target.transform.position.value = [track[0].x, track[0].y - track[0].size * 0.9];
+        target.inPoint = t0; target.outPoint = layer.outPoint;
+        store.layers.unshift(target);
+      }
+      n = applyFaceFollow(target, track, { position: true, scale: res.sr, rotation: res.sr });
+      store.selectedLayerId = target.id;
+    }
+    store.commit('structure');
+    toast(`Rosto seguido em ${n} quadros.`, 'ok', 4000);
+  } catch (e) {
+    toast(`Face tracking: ${e.message}`, 'error', 5000);
+  } finally { wrap.remove(); }
 }
 
 function ensureSpeedEffect(layer) {

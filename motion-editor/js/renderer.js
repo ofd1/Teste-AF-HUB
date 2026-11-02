@@ -1,6 +1,7 @@
 // Composição dos quadros: conteúdo das camadas (Canvas 2D) → efeitos (WebGL) → transformações,
 // motion blur, echo e camadas de ajuste.
 import { valueAt } from './anim.js';
+import { drawAnimatedText, animatorPad } from './textanim.js';
 import { EFFECT_MAP, makeCanvas } from './effects.js';
 import { getGL } from './gl.js';
 import { getImage, videoFrames } from './media.js';
@@ -45,6 +46,7 @@ function drawContent(ctx, layer, w, h, extra) {
   const p = layer.props;
   switch (layer.type) {
     case 'text': {
+      if (p.animators?.length) { drawAnimatedText(ctx, p, w, h, extra?.lt ?? 0, fontOf(p)); break; }
       ctx.font = fontOf(p);
       if ('letterSpacing' in ctx) ctx.letterSpacing = `${p.letterSpacing || 0}px`;
       ctx.textBaseline = 'middle';
@@ -287,7 +289,7 @@ function renderLayerImage(layer, t, scale, extra) {
     const prev = def.usesPrev ? evalParams(fx, lt - (p.shutter ?? 1) / fps) : null;
     return { def, p, prev, fx };
   });
-  let pad = 2;
+  let pad = 2 + (layer.type === 'text' && layer.props.animators?.length ? animatorPad(layer.props) : 0);
   for (const { def, p } of evaluated) pad += def.pad ? Math.max(0, def.pad(p, { w, h, layer })) : 0;
   pad = Number.isFinite(pad) ? Math.ceil(Math.min(pad * scale, 2048)) : 2; // nunca NaN (deixava a camada preta)
 
