@@ -13,7 +13,18 @@ const TRANSFORM_DEFS = [
   { key: 'anchor', label: 'Ancoragem', kind: 'point', step: 1 },
 ];
 
-const BLENDS = { 'source-over': 'Normal', screen: 'Tela (Screen)', lighter: 'Adicionar (Add)', multiply: 'Multiplicar', overlay: 'Sobrepor', 'soft-light': 'Luz suave', 'hard-light': 'Luz direta', 'color-dodge': 'Subexpor cor', difference: 'Diferença', color: 'Cor', luminosity: 'Luminosidade' };
+// modos de mesclagem na ordem do After Effects (os que o navegador desenha de verdade)
+const BLENDS = {
+  'source-over': 'Normal', darken: 'Escurecer (Darken)', multiply: 'Multiplicar', 'color-burn': 'Superexpor cor (Color Burn)',
+  lighten: 'Clarear (Lighten)', screen: 'Tela (Screen)', 'color-dodge': 'Subexpor cor (Color Dodge)', lighter: 'Adicionar (Add)',
+  overlay: 'Sobrepor (Overlay)', 'soft-light': 'Luz suave', 'hard-light': 'Luz direta', difference: 'Diferença', exclusion: 'Exclusão',
+  hue: 'Matiz', saturation: 'Saturação', color: 'Cor', luminosity: 'Luminosidade',
+};
+// estilos de opacidade de um toque (como os do Alight Motion)
+const OP_STYLES = [
+  ['fadeIn', '◐ Fade in'], ['fadeOut', '◑ Fade out'], ['fadeInOut', '◒ Fade in + out'], ['flash', '⚡ Flash'],
+  ['blink', '◌ Piscar'], ['strobe', '▦ Strobe'], ['pulse', '◍ Pulsar'], ['flicker', '✳ Cintilar'], ['clear', '✕ Limpar'],
+];
 const FONTS = ['Inter, system-ui, sans-serif', 'Impact, "Arial Black", sans-serif', '"Arial Black", sans-serif', 'Georgia, serif', '"Courier New", monospace', '"Trebuchet MS", sans-serif', '"Brush Script MT", cursive'];
 const TYPE_NAMES = { text: 'Texto', rect: 'Retângulo', ellipse: 'Elipse', solid: 'Sólido', image: 'Imagem', video: 'Vídeo', audio: 'Áudio', adjustment: 'Camada de ajuste' };
 
@@ -26,6 +37,29 @@ function fxClipboard() {
 function setFxClipboard(list) {
   clipboard = deepClone(list);
   try { localStorage.setItem('motionframe.fxClipboard', JSON.stringify(clipboard)); } catch { /* sem espaço */ }
+}
+
+/** Cria os keyframes de opacidade de um estilo pronto, no início/fim da camada. */
+export function applyOpacityStyle(layer, style, dur, fps = 30) {
+  const op = layer.transform.opacity;
+  const a = layer.inPoint, b = layer.outPoint, d = Math.max(1 / fps, Math.min(dur, (b - a) / 2));
+  const k = (t, v, ease = 'easeInOut') => ({ t: +t.toFixed(4), v, ease });
+  const base = 100;
+  let keys = [];
+  switch (style) {
+    case 'fadeIn': keys = [k(a, 0), k(a + d, base)]; break;
+    case 'fadeOut': keys = [k(b - d, base), k(b - 1 / fps, 0)]; break;
+    case 'fadeInOut': keys = [k(a, 0), k(a + d, base), k(b - d, base), k(b - 1 / fps, 0)]; break;
+    case 'flash': keys = [k(a, base, 'linear'), k(a + 1 / fps, 0, 'easeOut'), k(a + d, base)]; break;
+    case 'blink': for (let t = a, on = true; t < b; t += d, on = !on) keys.push(k(t, on ? base : 0, 'hold')); break;
+    case 'strobe': for (let t = a, on = true; t < b; t += 2 / fps, on = !on) keys.push(k(t, on ? base : 0, 'hold')); break;
+    case 'pulse': for (let t = a, i = 0; t <= b; t += d, i++) keys.push(k(t, i % 2 ? 35 : base)); break;
+    case 'flicker': { let s = 7; const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280); for (let t = a; t < b; t += 1 / fps * (1 + Math.floor(rnd() * 3))) keys.push(k(t, rnd() < 0.3 ? 15 + rnd() * 30 : base, 'hold')); break; }
+    case 'clear': op.keys = []; op.value = base; return;
+    default: return;
+  }
+  op.keys = keys;
+  op.value = keys[0]?.v ?? base;
 }
 
 export class Inspector {
@@ -72,7 +106,6 @@ export class Inspector {
     const rows = [
       f('Nome', `<input type="text" data-layer="name" data-fid="l-name" value="${escapeHtml(layer.name)}">`),
     ];
-    if (layer.type !== 'audio') rows.push(f('Mesclagem', `<select data-layer="blend">${Object.entries(BLENDS).map(([k, l]) => `<option value="${k}" ${layer.blend === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`));
     switch (layer.type) {
       case 'text':
         rows.push(`<textarea data-prop="text" data-fid="p-text" rows="2">${escapeHtml(p.text)}</textarea>`);
@@ -121,7 +154,17 @@ export class Inspector {
       sr.push(f('Fade out (s)', num('fadeOut', 0.05, 0, 30)));
       html += `<div data-section="sound">${this.section('sound', '🔊 Som', sr.join(''))}</div>`;
     }
-    if (layer.type !== 'audio') html += this.section('transform', 'Transformar', TRANSFORM_DEFS.map((d) => this.propRow(`transform.${d.key}`, d)).join(''));
+    if (layer.type !== 'audio') {
+      // Mesclagem e opacidade (Alight Motion): modo, opacidade e estilos prontos
+      const op = Math.round(valueAt(layer.transform.opacity, this.store.time) ?? 100);
+      html += this.section('blendop', '◐ Mesclagem e opacidade', [
+        f('Modo', `<select data-layer="blend">${Object.entries(BLENDS).map(([k, l]) => `<option value="${k}" ${layer.blend === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`),
+        f('Opacidade %', `<input type="range" data-opacity min="0" max="100" step="1" value="${op}"><input type="number" class="num" data-opacity min="0" max="100" step="1" value="${op}">`),
+        f('Duração do estilo (s)', `<input type="number" class="num" data-opdur min="0.05" max="10" step="0.05" value="${this.opDur ?? 0.4}">`),
+        `<div class="op-styles">${OP_STYLES.map(([k, l]) => `<button data-opstyle="${k}">${l}</button>`).join('')}</div>`,
+      ].join(''));
+      html += this.section('transform', 'Transformar', TRANSFORM_DEFS.map((d) => this.propRow(`transform.${d.key}`, d)).join(''));
+    }
     return html;
   }
 
@@ -202,6 +245,18 @@ export class Inspector {
       el.addEventListener('input', apply);
       el.addEventListener('change', () => { apply(); store.commit(); });
     });
+    // opacidade direta (keyframe se a opacidade já estiver animada)
+    root.querySelectorAll('[data-opacity]').forEach((el) => el.addEventListener('input', () => {
+      setValue(layer.transform.opacity, store.time, Math.max(0, Math.min(100, +el.value || 0)));
+      root.querySelectorAll('[data-opacity]').forEach((x) => { if (x !== el) x.value = el.value; });
+      store.emit('preview');
+    }));
+    root.querySelectorAll('[data-opacity]').forEach((el) => el.addEventListener('change', () => store.commit()));
+    root.querySelector('[data-opdur]')?.addEventListener('change', (e) => { this.opDur = Math.max(0.05, +e.target.value || 0.4); });
+    root.querySelectorAll('[data-opstyle]').forEach((b) => b.addEventListener('click', () => {
+      applyOpacityStyle(layer, b.dataset.opstyle, this.opDur ?? 0.4, store.project.fps);
+      store.commit();
+    }));
     root.querySelectorAll('[data-layer]').forEach((el) => {
       const k = el.dataset.layer;
       el.addEventListener('change', () => {

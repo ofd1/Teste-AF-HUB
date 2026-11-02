@@ -1,3 +1,4 @@
+import { flatLayers } from './state.js';
 // Operações em lote sobre keyframes: selecionar todos, esticar/comprimir, inverter, mover, easing.
 // Seleção = array de { layerId, path, key } (key = referência ao objeto keyframe).
 
@@ -71,7 +72,7 @@ export function setEase(sel, ease, influence) {
 export function deleteKeys(project, sel) {
   const byProp = new Map();
   for (const s of sel) {
-    const layer = project.layers.find((l) => l.id === s.layerId);
+    const layer = flatLayers(project.layers).find((l) => l.id === s.layerId);
     const prop = resolveProp(layer, s.path);
     if (!prop) continue;
     if (!byProp.has(prop)) byProp.set(prop, new Set());
@@ -90,7 +91,7 @@ function resort(project, sel) {
     const id = `${s.layerId}|${s.path}`;
     if (seen.has(id)) continue;
     seen.add(id);
-    const layer = project.layers.find((l) => l.id === s.layerId);
+    const layer = flatLayers(project.layers).find((l) => l.id === s.layerId);
     const prop = resolveProp(layer, s.path);
     if (prop) sortKeys(prop);
   }

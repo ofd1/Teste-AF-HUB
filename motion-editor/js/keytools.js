@@ -22,13 +22,13 @@ export class KeyTools {
 
   selectAllLayer() {
     const layer = this.store.layer();
-    const layers = layer ? [layer] : this.store.project.layers;
+    const layers = layer ? [layer] : this.store.layers;
     this.store.setKeySelection(selectAll(layers));
     return this.store.selectedKeys.length;
   }
 
   selectAllProject() {
-    this.store.setKeySelection(selectAll(this.store.project.layers));
+    this.store.setKeySelection(selectAll(this.store.layers));
   }
 
   render() {

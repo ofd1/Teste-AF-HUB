@@ -99,7 +99,7 @@ function loop(now) {
   if ((dirty || store.playing) && !store.exporting) {
     prepare(store.project, store.time, { playing: store.playing });
     if (curQuality() !== quality) { quality = curQuality(); layoutCanvas(); }
-    renderFrame(ctx, store.project, store.time, quality, { hq: !store.playing });
+    renderFrame(ctx, viewProject(), store.time, quality, { hq: !store.playing });
     drawOverlay();
     timecode.textContent = formatTime(store.time, store.project.fps).slice(1);
     dirty = false;
@@ -128,7 +128,7 @@ store.on((kind) => {
   dirty = true;
   if (kind === 'structure' || kind === 'change') scheduleCaches();
   if (kind === 'structure' || kind === 'change') autosave();
-  if (kind === 'selection' || kind === 'structure') { renderToolbar(); onSelectionChanged(); }
+  if (kind === 'selection' || kind === 'structure') { renderToolbar(); onSelectionChanged(); updateTitle(); }
   else if (kind === 'change') renderToolbar();
 });
 
@@ -156,7 +156,7 @@ overlay.addEventListener('pointerdown', (e) => {
   if (pointers.size === 1) {
     const [x, y] = toComp(e);
     let layer = store.layer();
-    const hit = hitTest(store.project, store.time, x, y);
+    const hit = hitTest(viewProject(), store.time, x, y);
     if (hit && (!layer || hit.id !== layer.id)) { store.select(hit.id); layer = hit; }
     if (!layer || layer.type === 'audio' || layer.type === 'adjustment') { gesture = null; return; }
     gesture = { layer, toComp, start: [x, y], pos: valueAt(layer.transform.position, store.time), moved: false };
@@ -278,7 +278,7 @@ new FxBrowser(document.getElementById('fxBrowser'), (type) => {
   if (!layer) {
     layer = LAYER_FACTORIES.adjustment(store.project);
     layer.name = `Ajuste · ${getEffectDef(type).label}`;
-    store.project.layers.unshift(layer);
+    store.layers.unshift(layer);
     store.selectedLayerId = layer.id;
   }
   if ((getEffectDef(type).sourceSpeed || getEffectDef(type).sourceRemap) && layer.type !== 'video') toast('Velocidade (estilo Twixtor) só altera camadas de vídeo.', 'warn', 4000);
@@ -308,7 +308,7 @@ async function startTrack(layer) {
   toast('Toque no ponto que quer seguir. Escolha algo com detalhe (número da camisa, rosto, canto) — áreas lisas ou listradas escorregam.', 'info', 6000);
   const point = await new Promise((res) => { trackPick = res; });
   drawTrackMarker(point);
-  const others = store.project.layers.filter((l) => l !== layer && l.type !== 'audio');
+  const others = store.layers.filter((l) => l !== layer && l.type !== 'audio');
   const t0 = Math.max(store.time, layer.inPoint);
   const res = await modal('Rastrear movimento', `
     <p class="muted small">Do playhead (${t0.toFixed(2)}s) até o fim do clipe (${layer.outPoint.toFixed(2)}s).</p>
@@ -319,13 +319,13 @@ async function startTrack(layer) {
   [{ label: 'Cancelar', value: null }, { label: 'Rastrear', primary: true, value: (w) => w.querySelector('[data-f="target"]').value }]);
   dirty = true;
   if (!res) return;
-  let target = store.project.layers.find((l) => l.id === res);
+  let target = store.layers.find((l) => l.id === res);
   if (!target) {
     target = LAYER_FACTORIES.text(store.project);
     target.props.text = 'TEXTO'; target.props.fontSize = 70;
     target.transform.position.value = [point[0], point[1] - 160];
     target.inPoint = t0; target.outPoint = layer.outPoint;
-    store.project.layers.unshift(target);
+    store.layers.unshift(target);
   }
   let cancelled = false;
   const wrap = document.createElement('div');
@@ -395,7 +395,9 @@ function renderToolbar() {
   const t = layer?.type;
   const items = layer
     ? [
+      ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
       ['deselect', '✕', 'Fechar'], ['sep'],
+      ...(t === 'group' ? [['open-group', '📂', 'Abrir grupo', true]] : []),
       ['effects', '✦', 'Efeitos', true], ['presets', '★', 'Presets'],
       ...(t === 'video' ? [['speed', '⏱', 'Velocidade', true], ['topaz', '✨', 'Topaz', true]] : []),
       ...(t === 'video' || t === 'audio' ? [['sound', '🔊', 'Som']] : []),
@@ -407,6 +409,7 @@ function renderToolbar() {
       ['toggle-visible', layer.visible ? '👁' : '◌', layer.visible ? 'Ocultar' : 'Mostrar'], ['del', '🗑', 'Excluir'],
     ]
     : [
+      ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
       ['add-media', '🎞', 'Vídeo / Foto', true], ['add-audio', '♪', 'Música'], ['add-text', 'T', 'Texto'], ['add', '＋', 'Mais camadas'],
       ['presets', '★', 'Presets'], ['add-adjustment', '◐', 'Ajuste (CC)'], ['group', '⊞', 'Agrupar'], ['import-ffx', '⤒', 'Importar .ffx'], ['comp', '⚙', 'Composição'],
     ];
@@ -581,8 +584,12 @@ async function newComposition() {
   toast(`Composição “${res.name}” criada: ${res.width}×${res.height}, ${res.fps} fps, ${res.duration.toFixed(2)}s.`, 'ok');
 }
 
+/** Com uma pré-comp/grupo aberto, a prévia mostra só o conteúdo dele (como no AE). */
+function viewProject() { return store.scope?.length ? { ...store.project, layers: store.layers } : store.project; }
+
 function updateTitle() {
-  document.getElementById('projTitle').textContent = store.project.name || 'Meu edit';
+  const g = store.scopeGroups || [];
+  document.getElementById('projTitle').textContent = g.length ? `${store.project.name || 'Meu edit'} › ${g.map((x) => x.name).join(' › ')}` : store.project.name || 'Meu edit';
 }
 
 async function showMenu() {
@@ -743,6 +750,8 @@ const commands = {
   group: groupLayers,
   ungroup: ungroupLayer,
   home: () => goHome(),
+  'open-group': () => { const l = store.layer(); if (l?.type === 'group' && store.openGroup(l.id)) { updateTitle(); toast(`Dentro de “${l.name}”. Toque em ◀ Sair do grupo para voltar.`, 'info', 3000); } },
+  'close-group': () => { store.closeGroup(); updateTitle(); },
   topaz: () => openSheet('topaz'),
   'bg-remove': async () => {
     const l = store.layer();

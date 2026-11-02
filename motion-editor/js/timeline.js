@@ -35,6 +35,7 @@ export class Timeline {
         <div class="tl-zoom"><button data-z="-" aria-label="Afastar">−</button><button data-z="+" aria-label="Aproximar">＋</button></div>
       </div>`;
     this.scroll = root.querySelector('.tl-scroll');
+    this.firmScroll();
     this.inner = root.querySelector('.tl-inner');
     this.rows = root.querySelector('.tl-rows');
     this.ruler = root.querySelector('.tl-ruler');
@@ -42,6 +43,12 @@ export class Timeline {
     this.cti = root.querySelector('.tl-cti');
     this.tc = root.querySelector('.tl-tc');
     root.querySelectorAll('[data-z]').forEach((b) => b.addEventListener('click', () => this.setZoom(this.pps * (b.dataset.z === '+' ? 1.5 : 1 / 1.5))));
+    // dois toques num grupo/pré-comp = abrir (como no AE)
+    root.addEventListener('dblclick', (e) => {
+      const row = e.target.closest?.('.tl-row.layer');
+      const l = row && this.store.layer(row.dataset.layer);
+      if (l?.type === 'group') { this.store.openGroup(l.id); }
+    });
 
     store.on((kind) => {
       if (kind === 'time') this.updateCTI(true);
@@ -112,12 +119,46 @@ export class Timeline {
     this.inner.style.width = `${N + trackW}px`;
     const html = [];
     html.push(`<div class="tl-markers">${(project.markers || []).map((m) => `<i style="left:${N + this.tToX(m)}px"></i>`).join('')}</div>`);
-    if (!project.layers.length) html.push('<div class="tl-empty">Toque em <b>＋ Camada</b> para adicionar vídeo, áudio, texto ou formas.</div>');
-    project.layers.forEach((layer, i) => html.push(this.layerRows(layer, i + 1, trackW)));
+    const layers = this.store.layers;
+    if (!layers.length) html.push('<div class="tl-empty">Toque em <b>＋ Camada</b> para adicionar vídeo, áudio, texto ou formas.</div>');
+    layers.forEach((layer, i) => html.push(this.layerRows(layer, i + 1, trackW)));
     this.rows.innerHTML = html.join('');
     this.bindRows();
     this.updateCTI(false);
     this.drawWaveforms();
+  }
+
+  /**
+   * Rolagem "firme" da timeline: 1:1 com o dedo, sem inércia nem elástico, travando no eixo do primeiro movimento
+   * (horizontal = tempo, vertical = camadas). Clipes, alças, keyframes e régua continuam com o próprio arrasto.
+   */
+  firmScroll() {
+    const sc = this.scroll;
+    sc.style.touchAction = 'none';
+    let pan = null;
+    const interactive = (el) => el.closest('.handle, .kf, .tl-cti, .tl-ruler-wrap, button, input, select, textarea, .tl-row.sel .clip, .plabel');
+    sc.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' || interactive(e.target)) return;
+      pan = { id: e.pointerId, x: e.clientX, y: e.clientY, sl: sc.scrollLeft, st: sc.scrollTop, axis: null };
+    });
+    sc.addEventListener('pointermove', (e) => {
+      if (!pan || e.pointerId !== pan.id) return;
+      const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
+      if (!pan.axis) {
+        if (Math.hypot(dx, dy) < 6) return;
+        pan.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+        try { sc.setPointerCapture(e.pointerId); } catch { /* ok */ }
+      }
+      if (pan.axis === 'x') sc.scrollLeft = pan.sl - dx; else sc.scrollTop = pan.st - dy;
+      pan.moved = true;
+    });
+    const end = (e) => {
+      if (!pan || e.pointerId !== pan.id) return;
+      if (pan.moved) { const stop = (ev) => { ev.stopPropagation(); ev.preventDefault(); }; sc.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => sc.removeEventListener('click', stop, { capture: true }), 50); }
+      pan = null;
+    };
+    sc.addEventListener('pointerup', end);
+    sc.addEventListener('pointercancel', end);
   }
 
   layerRows(layer, num, trackW) {
@@ -281,7 +322,7 @@ export class Timeline {
   snapTimes(exceptLayer) {
     const { project } = this.store;
     const out = [this.store.time, 0, project.duration, ...(project.markers || [])];
-    for (const l of project.layers) if (l !== exceptLayer) out.push(l.inPoint, l.outPoint);
+    for (const l of this.store.layers) if (l !== exceptLayer) out.push(l.inPoint, l.outPoint);
     return out;
   }
 

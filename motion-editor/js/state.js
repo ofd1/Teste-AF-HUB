@@ -107,13 +107,40 @@ export class Store {
     this.undoStack = []; this.redoStack = [];
     this.lastSnapshot = this.snapshot();
     project.markers ||= [];
+    this.scope = [];
     this.selectedLayerId = null;
     this.selectedKeys = [];
     this.setTime(0);
     this.emit('structure');
   }
 
-  layer(id = this.selectedLayerId) { return this.project.layers.find((l) => l.id === id) || null; }
+  /** Pré-composição/grupo aberto (como dar dois cliques numa pré-comp no AE): pilha de ids. */
+  get scopeGroups() {
+    const out = [];
+    let list = this.project.layers;
+    for (const id of this.scope || []) { const g = list.find((l) => l.id === id && l.type === 'group'); if (!g) break; out.push(g); list = g.props.layers || (g.props.layers = []); }
+    return out;
+  }
+  /** Lista de camadas que está sendo editada (a do grupo aberto ou a do projeto). */
+  get layers() { const g = this.scopeGroups; return g.length ? g[g.length - 1].props.layers : this.project.layers; }
+  set layers(v) { const g = this.scopeGroups; if (g.length) g[g.length - 1].props.layers = v; else this.project.layers = v; }
+  openGroup(id) {
+    const g = this.layers.find((l) => l.id === id && l.type === 'group');
+    if (!g) return false;
+    this.scope = [...(this.scope || []), id];
+    this.selectedLayerId = g.props.layers?.[0]?.id || null; this.selectedKeys = [];
+    this.emit('structure');
+    return true;
+  }
+  closeGroup(all = false) {
+    if (!this.scope?.length) return;
+    const last = this.scope[this.scope.length - 1];
+    this.scope = all ? [] : this.scope.slice(0, -1);
+    this.selectedLayerId = all ? null : last; this.selectedKeys = [];
+    this.emit('structure');
+  }
+
+  layer(id = this.selectedLayerId) { return this.layers.find((l) => l.id === id) || null; }
 
   select(id) {
     this.selectedLayerId = id;
@@ -149,8 +176,8 @@ export class Store {
     if (l.type === 'audio') copy.props.sourceStart = (l.props.sourceStart || 0) + (t - l.inPoint);
     copy.inPoint = t;
     l.outPoint = t;
-    const i = this.project.layers.indexOf(l);
-    this.project.layers.splice(i, 0, copy);
+    const i = this.layers.indexOf(l);
+    this.layers.splice(i, 0, copy);
     this.selectedLayerId = copy.id;
     this.commit('structure');
     return true;
@@ -170,15 +197,15 @@ export class Store {
   }
 
   addLayer(layer) {
-    this.project.layers.unshift(layer);
+    this.layers.unshift(layer);
     this.selectedLayerId = layer.id;
     this.commit('structure');
   }
 
   removeLayer(id) {
-    this.project.layers = this.project.layers.filter((l) => l.id !== id);
+    this.layers = this.layers.filter((l) => l.id !== id);
     this.selectedKeys = this.selectedKeys.filter((s) => s.layerId !== id);
-    if (this.selectedLayerId === id) this.selectedLayerId = this.project.layers[0]?.id || null;
+    if (this.selectedLayerId === id) this.selectedLayerId = this.layers[0]?.id || null;
     this.commit('structure');
   }
 
@@ -189,14 +216,14 @@ export class Store {
     copy.id = uid('ly');
     copy.name = `${l.name} cópia`;
     copy.effects.forEach((fx) => { fx.id = uid('fx'); });
-    const i = this.project.layers.indexOf(l);
-    this.project.layers.splice(i, 0, copy);
+    const i = this.layers.indexOf(l);
+    this.layers.splice(i, 0, copy);
     this.selectedLayerId = copy.id;
     this.commit('structure');
   }
 
   moveLayer(id, dir) {
-    const arr = this.project.layers;
+    const arr = this.layers;
     const i = arr.findIndex((l) => l.id === id);
     const j = i + dir;
     if (i < 0 || j < 0 || j >= arr.length) return;

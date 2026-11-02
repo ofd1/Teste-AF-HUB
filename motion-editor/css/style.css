@@ -1,18 +1,19 @@
 :root {
-  --bg: #0b0b12;
-  --panel: #14141e;
-  --panel-2: #1b1b28;
-  --panel-3: #232334;
-  --line: #2a2a3c;
-  --text: #ececf4;
-  --muted: #8d8da6;
-  --accent: #7c5cff;
-  --accent-2: #00d9a3;
-  --hot: #ff3d71;
-  --ok: #2fd48b;
-  --warn: #ffb547;
-  --err: #ff5c6c;
-  --key: #ffd166;
+  /* tema After Effects (cinzas neutros + azul do AE) com a estrutura do Alight Motion */
+  --bg: #1a1a1a;
+  --panel: #232323;
+  --panel-2: #2b2b2b;
+  --panel-3: #343434;
+  --line: #3b3b3b;
+  --text: #e6e6e6;
+  --muted: #9a9a9a;
+  --accent: #2d8ceb;
+  --accent-2: #3fc1ff;
+  --hot: #2d8ceb;
+  --ok: #4fb36b;
+  --warn: #e8b33a;
+  --err: #e5534b;
+  --key: #f2c94c;
   --radius: 12px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
@@ -161,7 +162,7 @@ h4 { margin: 16px 0 8px; font-size: 12px; text-transform: uppercase; letter-spac
 .badge.warn { background: #3a1a20; color: #ff8a96; }
 .switch { position: relative; display: inline-block; width: 40px; height: 24px; flex: none; }
 .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
-.switch i { position: absolute; inset: 0; background: #33334a; border-radius: 99px; transition: background .15s; }
+.switch i { position: absolute; inset: 0; background: #444; border-radius: 99px; transition: background .15s; }
 .switch i::after { content: ''; position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; }
 .switch input:checked + i { background: var(--accent); }
 .switch input:checked + i::after { transform: translateX(16px); }
@@ -250,10 +251,10 @@ details { margin-top: 8px; } summary { cursor: pointer; color: var(--muted); }
 .progress { height: 8px; background: #0a0a10; border-radius: 99px; overflow: hidden; }
 .progress .bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--hot)); transition: width .1s; }
 .toasts { position: fixed; left: 50%; top: calc(56px + var(--safe-t)); transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; z-index: 70; pointer-events: none; width: max-content; max-width: calc(100vw - 32px); }
-.toast { background: #22223a; border: 1px solid var(--line); padding: 9px 14px; border-radius: 12px; box-shadow: 0 8px 24px #0008; white-space: pre-line; transition: opacity .3s, transform .3s; font-size: 13px; }
+.toast { background: #2b2b2b; border: 1px solid var(--line); padding: 9px 14px; border-radius: 12px; box-shadow: 0 8px 24px #0008; white-space: pre-line; transition: opacity .3s, transform .3s; font-size: 13px; }
 .toast.ok { border-color: var(--ok); } .toast.warn { border-color: var(--warn); } .toast.error { border-color: var(--err); }
 .toast.out { opacity: 0; transform: translateY(-8px); }
-.drop-overlay { position: fixed; inset: 0; background: #7c5cff33; border: 3px dashed var(--accent); display: none; place-items: center; z-index: 50; font-size: 18px; font-weight: 700; pointer-events: none; }
+.drop-overlay { position: fixed; inset: 0; background: #2d8ceb33; border: 3px dashed var(--accent); display: none; place-items: center; z-index: 50; font-size: 18px; font-weight: 700; pointer-events: none; }
 .drop-overlay.show { display: grid; }
 
 .cache-pill { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 5px 12px; border-radius: 99px; background: #000c; color: var(--key); font-size: 12px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .2s; }
@@ -295,7 +296,7 @@ input[type="number"], input[type="text"], input[type="search"], select, textarea
 
 /* =================== timeline estilo After Effects (em pé) =================== */
 .timeline, .tl { height: 100%; position: relative; background: #232323; }
-.tl-scroll { height: 100%; overflow: auto; scrollbar-width: thin; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.tl-scroll { height: 100%; overflow: auto; scrollbar-width: thin; overscroll-behavior: none; -webkit-overflow-scrolling: auto; touch-action: none; }
 .tl-inner { position: relative; min-height: 100%; --names: 116px; }
 .tl-head { position: sticky; top: 0; z-index: 6; display: flex; height: 24px; background: #2b2b2b; border-bottom: 1px solid #111; }
 .tl-corner { position: sticky; left: 0; z-index: 7; flex: 0 0 var(--names); width: var(--names); display: flex; align-items: center; padding: 0 6px; background: #2b2b2b; border-right: 1px solid #111; }
@@ -316,7 +317,7 @@ input[type="number"], input[type="text"], input[type="search"], select, textarea
 .tl-name button { background: none; border: 0; padding: 0; width: 16px; height: 22px; font-size: 11px; color: #9a9a9a; border-radius: 0; }
 .tl-name .sw-on { color: #2d8ceb; font-size: 10px; }
 .tl-track { position: relative; flex: 0 0 auto; height: 100%; }
-.clip { position: absolute; top: 4px; bottom: 4px; border-radius: 2px; overflow: hidden; touch-action: pan-x pan-y;
+.clip { position: absolute; top: 4px; bottom: 4px; border-radius: 2px; overflow: hidden; touch-action: none;
   background-color: color-mix(in srgb, var(--c) 55%, #222); background-size: auto 100%; background-repeat: repeat-x;
   border: 1px solid color-mix(in srgb, var(--c) 80%, #000); }
 .tl-row.sel .clip { border-color: #fff; touch-action: none; }
@@ -449,3 +450,8 @@ input[type="number"], input[type="text"], input[type="search"], select, textarea
 .proj-more { position: absolute; right: 2px; bottom: 6px; width: 32px; height: 32px; font-size: 18px; }
 .home-empty { padding: 30px 10px; text-align: center; color: var(--muted); border: 1px dashed #333; border-radius: 10px; }
 .lib-empty { line-height: 1.5; }
+
+/* Mesclagem e opacidade: estilos de um toque */
+.op-styles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
+.op-styles button { padding: 8px 4px; font-size: 12px; border-radius: 8px; background: var(--panel-2, #2a2a2e); border: 1px solid var(--line, #3a3a40); color: inherit; }
+.op-styles button:active { background: var(--accent, #2d8cff); }
