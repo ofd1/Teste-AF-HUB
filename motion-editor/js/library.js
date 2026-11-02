@@ -6,6 +6,7 @@ import { sourceTimeRaw } from './timing.js';
 import { modal, toast, pickFiles, storage } from './ui.js';
 import { escapeHtml } from './util.js';
 import { saveFile } from './platform.js';
+import { putMedia, getMedia } from './idb.js';
 
 const STORE_KEY = 'motionframe.presets.v1';
 const CAT_ORDER = ['Importado (FFX)', 'Meus presets', 'Shakes', 'Transições', 'Velocity', 'Glows', 'CC / Cor', 'Looks', 'Entradas', 'Saídas'];
@@ -22,6 +23,7 @@ export class Library {
     this.store = store;
     this.hooks = hooks;
     this.user = storage.get(STORE_KEY, []);
+    this.loadStored();
     this.fit = storage.get('motionframe.presetFit', false);
     this.free = [];
     this.filter = '';
@@ -42,8 +44,26 @@ export class Library {
     } catch { /* sem pacote free */ }
   }
 
-  save() {
-    if (!storage.set(STORE_KEY, this.user)) toast('Não foi possível salvar a biblioteca neste aparelho (armazenamento cheio).', 'warn');
+  /** A biblioteca fica no IndexedDB (centenas de MB), não no localStorage (~5 MB, enchia com presets grandes). */
+  async loadStored() {
+    try {
+      const raw = await getMedia('__library__');
+      const fromDb = raw ? JSON.parse(typeof raw === 'string' ? raw : await raw.text()) : null;
+      if (Array.isArray(fromDb)) {
+        const ids = new Set(fromDb.map((p) => p.id));
+        this.user = [...fromDb, ...this.user.filter((p) => !ids.has(p.id))];
+      }
+      if (this.user.length) await this.save(true);
+      try { localStorage.removeItem(STORE_KEY); } catch { /* ok */ } // libera o espaço antigo para os projetos
+      this.render();
+    } catch { /* sem IndexedDB: fica no localStorage */ }
+  }
+
+  async save(quiet = false) {
+    // relatório enxuto (sem a lista de parâmetros brutos de cada efeito) para ocupar pouco espaço
+    const slim = this.user.map((p) => (p.report ? { ...p, report: { ...p.report, effects: (p.report.effects || []).map(({ params, ...e }) => e), matchNames: undefined } } : p));
+    const ok = await putMedia('__library__', JSON.stringify(slim));
+    if (!ok && !storage.set(STORE_KEY, slim) && !quiet) toast('Não foi possível salvar a biblioteca neste aparelho (armazenamento cheio).', 'warn');
   }
 
   all() { return [...this.user, ...this.free]; } // só os seus presets (importados/salvos) — sem presets prontos
@@ -99,7 +119,7 @@ export class Library {
   bind() {
     const r = this.root;
     r.querySelector('[data-act="import"]').addEventListener('click', async () => {
-      const files = await pickFiles('.ffx,.json,application/json,application/octet-stream');
+      const files = await pickFiles('.ffx,.aep,.json,application/json,application/octet-stream');
       if (files.length) this.importFiles(files);
     });
     r.querySelector('[data-act="save-layer"]').addEventListener('click', () => this.saveLayer());
@@ -223,6 +243,8 @@ export class Library {
     const errors = [];
     for (const f of files) {
       try {
+        // projeto do After Effects: abre como projeto (não vira um preset gigante)
+        if (/\.aepx?$/i.test(f.name)) { if (this.hooks.openAEP) { await this.hooks.openAEP(f); continue; } }
         if (/\.json$/i.test(f.name)) imported.push(...parsePresetJSON(await f.text()));
         else if (/\.ffx$/i.test(f.name)) {
           const parsed = parseFFX(await f.arrayBuffer(), { fps: this.store.project.fps, fileName: f.name });

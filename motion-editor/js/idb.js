@@ -38,6 +38,6 @@ export async function pruneMedia(keepIds) {
     const t = d.transaction('media', 'readwrite');
     const s = t.objectStore('media');
     const req = s.getAllKeys();
-    req.onsuccess = () => { for (const k of req.result) if (!keepIds.has(k)) s.delete(k); };
+    req.onsuccess = () => { for (const k of req.result) if (!keepIds.has(k) && !String(k).startsWith('__')) s.delete(k); }; // '__…' = dados do app (biblioteca)
   } catch { /* ignorado */ }
 }

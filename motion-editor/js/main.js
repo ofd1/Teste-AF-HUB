@@ -1,6 +1,6 @@
 import { Store, LAYER_FACTORIES, RESOLUTIONS, createProject, flatLayers } from './state.js';
 import { compDialog, COMP_PRESETS } from './comp-dialog.js';
-import { HomeScreen, saveProjectData, loadProjectData, listProjects, allMediaIds, getSettings, settingsDialog } from './projects.js';
+import { HomeScreen, saveProjectData, loadProjectData, loadProjectDataAsync, listProjects, allMediaIds, getSettings, settingsDialog } from './projects.js';
 import { parseFFX } from './ffx.js';
 import { ffxToPreset } from './presets.js';
 import { TopazPanel } from './topaz-panel.js';
@@ -271,6 +271,7 @@ new Inspector(document.getElementById('propsPanel'), store, 'props', {
 });
 const library = new Library(document.getElementById('library'), store, {
   onApplied: () => { if (!desktop.matches) closeSheet(); },
+  openAEP: (f) => { closeSheet(); return openAEPFlow(f); }, // .aep escolhido em Presets abre como projeto
 });
 new FxBrowser(document.getElementById('fxBrowser'), (type) => {
   let layer = store.layer();
@@ -861,7 +862,7 @@ function demoProject() {
 
 // ------------------------------------------------------------------ projetos e tela inicial (estilo Alight Motion)
 async function openProjectById(id) {
-  const data = loadProjectData(id);
+  const data = await loadProjectDataAsync(id);
   if (!data) { toast('Projeto não encontrado.', 'error'); home.render(); return; }
   data.id = id;
   await relinkMedia(data);

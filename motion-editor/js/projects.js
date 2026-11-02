@@ -3,6 +3,7 @@
 import { storage, modal, toast } from './ui.js';
 import { escapeHtml, uid } from './util.js';
 import { flatLayers } from './state.js';
+import { putMedia, getMedia } from './idb.js';
 
 const INDEX = 'motionframe.projects.v1';
 const KEY = (id) => `motionframe.project.${id}`;
@@ -23,7 +24,12 @@ function serializable(p) {
 
 export function saveProjectData(p, thumb) {
   if (!p.id) p.id = uid('prj');
-  if (!storage.set(KEY(p.id), serializable(p))) { toast('Pouco espaço no aparelho para salvar o projeto.', 'warn'); return false; }
+  const data = serializable(p);
+  if (!storage.set(KEY(p.id), data)) {
+    // projeto grande (ex.: .aep com muitos keyframes): vai para o IndexedDB, que tem muito mais espaço
+    putMedia(`__prj_${p.id}`, JSON.stringify(data)).then((ok) => { if (!ok) toast('Pouco espaço no aparelho para salvar o projeto.', 'warn'); });
+    storage.set(KEY(p.id), { idb: true, id: p.id, name: p.name, width: p.width, height: p.height, fps: p.fps, duration: p.duration, layers: [] });
+  }
   const list = storage.get(INDEX, []);
   const i = list.findIndex((x) => x.id === p.id);
   const entry = { id: p.id, name: p.name || 'Sem nome', updated: Date.now(), w: p.width, h: p.height, fps: p.fps, dur: p.duration, layers: flatLayers(p.layers).length, thumb: thumb ?? list[i]?.thumb ?? null };
@@ -33,6 +39,12 @@ export function saveProjectData(p, thumb) {
 }
 
 export function loadProjectData(id) { return storage.get(KEY(id), null); }
+/** Igual ao loadProjectData, mas busca no IndexedDB quando o projeto é grande demais para o localStorage. */
+export async function loadProjectDataAsync(id) {
+  const d = loadProjectData(id);
+  if (d?.idb) { try { const raw = await getMedia(`__prj_${id}`); if (raw) return JSON.parse(typeof raw === 'string' ? raw : await raw.text()); } catch { /* ok */ } }
+  return d;
+}
 
 export function deleteProject(id) {
   try { localStorage.removeItem(KEY(id)); } catch { /* ok */ }
