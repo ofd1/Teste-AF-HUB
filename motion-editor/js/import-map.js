@@ -21,9 +21,6 @@ const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
  * Converte as ferramentas do Magic Bullet Looks (decodificadas do .ffx) para o efeito "Looks" do app.
  * Os valores vêm do arquivo; a correspondência ferramenta → parâmetro é uma aproximação.
  */
-/** "Color Balance" das ferramentas do Looks é um equilíbrio de matiz: normaliza pelo maior canal; quase preto = neutro. */
-const balanceColor = (r = 1, g = 1, b = 1) => { const m = Math.max(r, g, b); return m < 0.05 ? [1, 1, 1] : [r / m, g / m, b / m]; };
-
 export function looksFromTools(tools, strength = 100) {
   const p = {
     strength, exposure: 0, temperature: 0, tint: 0, filter: [1, 1, 1, 1], filterDensity: 0,
@@ -312,7 +309,7 @@ export function looksFromTools(tools, strength = 100) {
         p.spotCenter = [clampN(0.5 + (v[1] || 0) / 100, 0, 1), clampN(0.5 - (v[2] || 0) / 100, 0, 1)];
         p.spotSize = clampN((v[3] ?? 1) * 100, 0, 400);
         p.spotSoft = clampN(Math.max(0.05, v[4] ?? 0.5) * 100, 1, 400);
-        p.spotColor = [...balanceColor(v[7] ?? 1, v[8] ?? 1, v[9] ?? 1), 1];
+        p.spotColor = [v[7] ?? 1, v[8] ?? 1, v[9] ?? 1, 1];
         p.spotAspect = clampN(v[10] ?? 1, 0.1, 4);
         p.spotInvert = !!v[11];
         break;
@@ -320,7 +317,7 @@ export function looksFromTools(tools, strength = 100) {
         // Grad Exposure (painel do Looks): [Stops, X1 %, Y1 %, X2 %, Y2 %, Falloff, Strength, Color Balance RGB (7-9)]
         // Pontos em % a partir do centro (Y para cima). Stops 0 com cor preta = escurece em degradê (filtro ND).
         {
-          const col = balanceColor(v[7] ?? 1, v[8] ?? 1, v[9] ?? 1);
+          const col = [v[7] ?? 1, v[8] ?? 1, v[9] ?? 1]; // cor preta = filtro ND em degradê (escurece o topo, como no AE)
           if (!v[0] && col.every((c) => Math.abs(c - 1) < 0.005)) { ignored.push('grex (neutro)'); continue; }
           p.gradTwoPoint = true;
           p.gradExposure = clampN((p.gradTwoPoint && p.gradExposure ? p.gradExposure : 0) + (v[0] || 0), -4, 4);
