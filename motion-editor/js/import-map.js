@@ -284,7 +284,27 @@ export const IMPORT_RULES = [
   { vendor: 'Video Copilot', plugin: 'Saber', to: 'deepGlow', test: /\bsaber\b/i, map: { exposure: { n: ['glow intensity'] }, radius: { n: ['glow spread', 'glow size'], conv: (v) => v * 100 }, tint: { n: ['glow color'] } }, set: { useTint: true } },
   { vendor: 'Video Copilot', plugin: 'Heat Distortion', to: 'turbulentDisplace', test: /heat ?distort/i },
   { vendor: 'Red Giant', plugin: 'Shine', to: 'lightRays', test: /\bshine\b/i, map: { length: { n: ['ray length'], conv: (v) => Math.min(100, v * 10) }, intensity: { n: ['boost light'] } } },
-  { vendor: 'aescripts', plugin: 'Tracery', to: 'tracery', test: /tracery/i },
+  // DRAGOY Tracery: todos os controles do plugin (Key Color, Threshold, caixas, texto, marcadores, linhas, setas)
+  { vendor: 'DRAGOY / aescripts', plugin: 'Tracery', to: 'tracery', test: /tracery/i,
+    map: {
+      trackColor: { n: ['key color'] }, threshold: { n: ['threshold'] }, blurStrength: { n: ['blur strength'] }, quality: { n: ['detection quality'] },
+      showMask: { n: ['show mask'] }, alphaOnly: { n: ['alpha layer'] },
+      boxes: { n: ['enable bounding boxes'] }, boxColor: { n: ['border color'] }, lineWidth: { n: ['border thickness'] }, boxFill: { n: ['fill color'] },
+      boxFillOpacity: { n: ['fill opacity'], conv: (v) => (v <= 1 ? v * 100 : v) }, gaps: { n: ['enable gaps'] }, gapSize: { n: ['gap size'] },
+      labels: { n: ['enable text'] }, textColor: { n: ['text color'] }, fontScale: { n: ['font scale'] }, textOffset: { n: ['text vertical offset'] },
+      crosshair: { n: ['enable markers'] }, markerType: { n: ['marker type'] }, markerColor: { n: ['marker color'] }, markerSize: { n: ['marker size'] },
+      connect: { n: ['enable connection lines'] }, connType: { n: ['connection type'] }, color: { n: ['line color'] },
+      lineOpacity: { n: ['line opacity'], conv: (v) => (v <= 1 ? v * 100 : v) }, curvature: { n: ['curvature'] },
+      dashed: { n: ['enable dashed lines'] }, dashLen: { n: ['dash length'] }, gapLen: { n: ['gap length'] },
+      arrows: { n: ['enable arrows'] }, arrowSize: { n: ['arrow size'] }, arrowAngle: { n: ['arrow angle'] }, arrowPos: { n: ['arrow position'] }, arrowFilled: { n: ['filled arrows'] },
+    },
+    // há dois "Line Thickness" (marcador e linha): o 1º é do marcador, o 2º da linha de conexão
+    post: (p, raw, fx) => {
+      const lt = (fx?.params || []).filter((q) => /^line thickness$/i.test((q.name || '').trim())).map((q) => q.value?.[0]);
+      if (lt[0] != null) p.markerThickness = lt[0];
+      if (lt[1] != null) p.connWidth = Math.max(0.25, lt[1] * 2);
+      p.track = 3; if (p.fill === undefined) p.fill = 1;
+    } },
   { vendor: 'Cinema Spice', plugin: 'Glitchify', to: 'glitchify', test: /glitchify/i, map: { amount: { n: ['amount', 'glitch amount'] }, speed: { n: ['speed', 'frequency'] } } },
   { vendor: 'aescripts', plugin: 'Datamosh 2', to: 'datamosh', test: /datamosh|pixel ?encoder/i },
   { vendor: 'Video Copilot', plugin: 'VC Reflect', to: 'reflect', test: /vc ?reflect|^reflect$/i, map: { opacity: { n: ['opacity', 'reflection opacity'] } } },
@@ -332,7 +352,8 @@ export const IMPORT_RULES = [
   { vendor: 'Sapphire', plugin: 'S_Mosaic', to: 'mosaic', test: /s_mosaic/i },
 
   // BCC (Boris Continuum)
-  { vendor: 'BCC', plugin: 'BCC Glow / Film Glow', to: 'deepGlow', test: /bcc.*glow/i, map: { radius: { n: ['glow radius', 'radius'] }, exposure: { n: ['glow intensity', 'intensity'], conv: (v) => (v > 10 ? v / 100 : v) } } },
+  { vendor: 'BCC', plugin: 'BCC Glow / Film Glow', to: 'deepGlow', test: /bcc.*glow/i, map: { radius: { n: ['glow radius', 'radius'] }, exposure: { n: ['glow intensity', 'intensity'], conv: (v) => (v > 10 ? v / 40 : v) }, threshold: { n: ['glow threshold', 'threshold'] }, tint: { n: ['glow color'] } },
+    post: (p, raw) => { p.useTint = (raw('glow desaturation') ?? 100) < 60; } }, // BCC Film Glow: Intensity 15 ≈ brilho suave; Desaturation 100 = glow branco
   { vendor: 'BCC', plugin: 'BCC Lens Flare', to: 'lensFlare', test: /bcc.*flare/i },
   { vendor: 'BCC', plugin: 'BCC Light Leaks', to: 'lightLeak', test: /bcc.*leak/i },
   { vendor: 'BCC', plugin: 'BCC Prism', to: 'prism', test: /bcc.*prism/i, map: { amount: { n: ['prism amount', 'amount'] } } },
@@ -375,7 +396,8 @@ export const IMPORT_RULES = [
   { vendor: ADOBE, plugin: 'Polar Coordinates', to: 'polar', match: ['ADBE Polar Coordinates'], map: { amount: { i: 1, n: ['interpolation'] }, mode: { i: 2, n: ['type of conversion'] } } },
   { vendor: ADOBE, plugin: 'Offset', to: 'offset', match: ['ADBE Offset'], map: { blend: { n: ['blend with original'] } } },
   { vendor: ADOBE, plugin: 'Fractal Noise', to: 'fractalNoise', match: ['ADBE Fractal Noise'], map: { contrast: { n: ['contrast'], conv: (v) => v / 100 }, brightness: { n: ['brightness'], conv: (v) => v / 100 }, complexity: { n: ['complexity'] }, evolution: { n: ['evolution'], conv: (v) => v / 90 }, scale: { n: ['scale'] }, opacity: { n: ['opacity'] } } },
-  { vendor: ADOBE, plugin: 'Curves', to: 'curves', match: ['ADBE CurvesCustom', 'ADBE Curves'] },
+  { vendor: ADOBE, plugin: 'Curves', to: 'curves', match: ['ADBE CurvesCustom', 'ADBE Curves'],
+    expand: (fx) => [{ type: 'curves', label: fx.name && !/^-_0_/.test(fx.name) ? fx.name : 'Curves', params: fx.curveLUT ? { lut: fx.curveLUT } : {}, note: fx.curveLUT ? 'curva exata (RGB + canais)' : 'curva não encontrada' }] },
   { vendor: ADOBE, plugin: 'Tritone', to: 'tritone', match: ['ADBE Tritone'], map: { highlights: { n: ['highlights'] }, midtones: { n: ['midtones'] }, shadows: { n: ['shadows'] }, mix: { n: ['blend with original'], conv: (v) => 100 - v } } },
   { vendor: ADOBE, plugin: 'CC Toner', to: 'tritone', match: ['CC Toner'], map: { highlights: { n: ['highlights'] }, midtones: { n: ['midtones'] }, shadows: { n: ['shadows'] }, mix: { n: ['blend w. original'], conv: (v) => 100 - v } } },
   { vendor: ADOBE, plugin: 'CC Light Sweep', to: 'lightSweep', match: ['CC Light Sweep'], map: { center: { n: ['center'] }, direction: { n: ['direction'] }, shape: { n: ['shape'] }, width: { n: ['width'] }, intensity: { n: ['sweep intensity'], conv: (v) => v / 50 }, color: { n: ['light color'] } } },

@@ -235,6 +235,19 @@ function parseEffect(sspc, matchName, ctx) {
     }
   }
 
+  // Curves do AE: a curva fica num bloco 'aRbp' com tabelas de 256 valores (RGB, R, G, B, Alfa) depois de 4 bytes
+  if (/^ADBE Curves/i.test(matchName)) {
+    // o 1º 'aRbp' (em parT) é a curva padrão; a curva real fica no último (dentro de tdgp/aRbs)
+    let blob = null;
+    const find = (cs) => { for (const c of cs || []) { if (c.id === 'aRbp') blob = c; find(c.children); } };
+    find(sspc.children);
+    if (blob && blob.size >= 4 + 256 * 4) {
+      const lut = [];
+      for (let t = 0; t < 4; t++) for (let k = 0; k <= 16; k++) lut.push(r.u8(blob.offset + 4 + t * 256 + Math.min(255, Math.round((k * 255) / 16))) / 255);
+      fx.curveLUT = lut;
+    }
+  }
+
   // Magic Bullet Looks: o "Look" é um blob proprietário com uma lista de ferramentas (tool + id + valores)
   if (/^MB LookSuite/i.test(matchName)) fx.looksTools = decodeLooksTools(r, sspc.offset, sspc.offset + sspc.size);
 

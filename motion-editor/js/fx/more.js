@@ -88,6 +88,25 @@ void main() {
   gl_FragColor = acc / ws;
 }`);
 
+// Curves do AE importado: tabelas (RGB, R, G, B) com 17 pontos cada, interpoladas suavemente
+const CURVES_LUT = frag(`
+uniform float u_m[17], u_r[17], u_g[17], u_b[17];
+float lut(float x, int ch) {
+  float f = clamp(x, 0.0, 1.0) * 16.0; int i = int(floor(f)); float t = f - float(i);
+  float a = 0.0, b = 0.0;
+  for (int k = 0; k < 17; k++) {
+    float v = ch == 0 ? u_m[k] : ch == 1 ? u_r[k] : ch == 2 ? u_g[k] : u_b[k];
+    if (k == i) a = v; if (k == i + 1) b = v;
+  }
+  if (i >= 16) return a;
+  return mix(a, b, t);
+}
+void main() {
+  vec4 c = unpre(texture2D(u_tex, v_uv)); vec3 r = c.rgb;
+  r = vec3(lut(r.r, 0), lut(r.g, 0), lut(r.b, 0));
+  r = vec3(lut(r.r, 1), lut(r.g, 2), lut(r.b, 3));
+  gl_FragColor = vec4(r * c.a, c.a);
+}`);
 const CURVES = frag(`
 uniform vec2 u_p[3]; uniform float u_ch;
 float curve(float x) {
@@ -228,8 +247,16 @@ export default [
   {
     type: 'curves', label: 'Curves (curvas)', category: 'Cor', plugin: 'Curves (After Effects)',
     description: 'Curva de tons com 3 pontos (sombras, meios-tons, realces) em RGB ou num canal.',
-    params: [sel('channel', 'Canal', ['RGB', 'Vermelho', 'Verde', 'Azul'], 1), num('shadows', 'Sombras (25%)', 25, 0, 100), num('mids', 'Meios-tons (50%)', 50, 0, 100), num('highs', 'Realces (75%)', 75, 0, 100)],
-    render: (src, p, env) => env.gl.pass(CURVES, { u_tex: src, u_ch: p.channel, u_p: { vec2: [0.25, p.shadows / 100, 0.5, p.mids / 100, 0.75, p.highs / 100] } }),
+    params: [sel('channel', 'Canal', ['RGB', 'Vermelho', 'Verde', 'Azul'], 1), num('shadows', 'Sombras (25%)', 25, 0, 100), num('mids', 'Meios-tons (50%)', 50, 0, 100), num('highs', 'Realces (75%)', 75, 0, 100),
+      { key: 'lut', label: 'Curva do AE', kind: 'hidden', default: null }],
+    render: (src, p, env) => {
+      // curva exata importada do Curves do After Effects (tabelas de 256 valores reduzidas a 17 pontos por canal)
+      if (Array.isArray(p.lut) && p.lut.length === 68) {
+        const t = (i) => ({ f1: p.lut.slice(i * 17, i * 17 + 17) });
+        return env.gl.pass(CURVES_LUT, { u_tex: src, u_m: t(0), u_r: t(1), u_g: t(2), u_b: t(3) });
+      }
+      return env.gl.pass(CURVES, { u_tex: src, u_ch: p.channel, u_p: { vec2: [0.25, p.shadows / 100, 0.5, p.mids / 100, 0.75, p.highs / 100] } });
+    },
   },
   {
     type: 'tritone', label: 'Tritone / CC Toner', category: 'Cor', plugin: 'Tritone / CC Toner',

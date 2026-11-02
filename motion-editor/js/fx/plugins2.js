@@ -5,7 +5,7 @@ import { frag, num, ang, bool, sel, col, rgb, rad, hash1 } from './common.js';
 
 // ---------------------------------------------------------------- Tracery: caixas e linhas em pontos rastreados
 const TRACERY_MIX = frag(`
-uniform sampler2D u_ov, u_mask; uniform float u_mode; uniform vec3 u_tint;
+uniform sampler2D u_ov, u_mask; uniform float u_mode, u_alpha; uniform vec3 u_tint;
 void main() {
   vec4 c = texture2D(u_tex, v_uv);
   float m = texture2D(u_mask, v_uv).a;
@@ -14,18 +14,20 @@ void main() {
   else if (u_mode > 2.5 && u_mode < 3.5) r = mix(r, vec3(luma(r)), m);             // preto e branco
   else if (u_mode > 3.5) r = mix(r, u_tint * luma(r) * 1.6 * c.a, m * 0.85);       // tingir
   vec4 o = texture2D(u_ov, v_uv);
-  gl_FragColor = vec4(o.rgb + vec3(r) * (1.0 - o.a), max(c.a, o.a));
+  gl_FragColor = u_alpha > 0.5 ? o : vec4(o.rgb + vec3(r) * (1.0 - o.a), max(c.a, o.a)); // Alpha Layer: só os gráficos
 }`);
 
 const trCanvas = typeof document !== 'undefined' ? { a: document.createElement('canvas'), ov: document.createElement('canvas'), mk: document.createElement('canvas') } : null;
 
 /** Acha manchas (claras, escuras ou de uma cor) numa grade pequena e devolve caixas em uv. */
 function findBlobs(src, p) {
-  const gw = 96, gh = Math.max(8, Math.round((gw * src.height) / src.width));
+  const gw = [192, 144, 96, 72, 48, 32][(p.quality || 3) - 1] || 96, gh = Math.max(8, Math.round((gw * src.height) / src.width));
   const c = trCanvas.a; c.width = gw; c.height = gh;
   const x = c.getContext('2d', { willReadFrequently: true });
   x.clearRect(0, 0, gw, gh);
+  if (p.blurStrength > 0) x.filter = `blur(${(p.blurStrength * gw) / 400}px)`;
   x.drawImage(src, 0, 0, gw, gh);
+  x.filter = 'none';
   const d = x.getImageData(0, 0, gw, gh).data;
   const on = new Uint8Array(gw * gh);
   const th = p.threshold / 100, key = p.trackColor;
@@ -35,7 +37,7 @@ function findBlobs(src, p) {
     const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     if (p.track === 1) on[i] = l > th ? 1 : 0;
     else if (p.track === 2) on[i] = l < 1 - th ? 1 : 0;
-    else on[i] = Math.hypot(r - key[0], g - key[1], b - key[2]) < (1 - th) * 0.9 ? 1 : 0;
+    else on[i] = Math.hypot(r - key[0], g - key[1], b - key[2]) < th * 1.2 ? 1 : 0; // Key Color: Threshold = tolerância (0 = nada)
   }
   // componentes conectados (4 vizinhos)
   const seen = new Uint8Array(gw * gh), boxes = [];
@@ -187,51 +189,107 @@ void main() {
 
 export default [
   {
-    type: 'tracery', label: 'Tracery (blob tracking)', category: 'Estilizar', plugin: 'Tracery (aescripts)',
-    description: 'O efeito viral de “blob tracking”: acha manchas claras/escuras/de uma cor no vídeo a cada quadro, desenha caixas, mira, rótulos e linhas ligando os pontos. Escolha o que rastrear e o estilo.',
+    type: 'tracery', label: 'Tracery (blob tracking)', category: 'Estilizar', plugin: 'Tracery (DRAGOY / aescripts)',
+    description: 'O efeito viral de “blob tracking” (recriação do DRAGOY Tracery): acha manchas de uma cor (Key Color) ou claras/escuras a cada quadro e desenha caixas, texto, marcadores, setas e linhas ligando os pontos (Sequencial, Estrela, Todos ou Árvore mínima), retas ou curvas, contínuas ou tracejadas.',
     params: [
-      sel('track', 'Rastrear', ['Partes claras', 'Partes escuras', 'Uma cor'], 1), col('trackColor', 'Cor rastreada', [1, 0.85, 0.1, 1]),
-      num('threshold', 'Limiar %', 70, 0, 100), num('maxBlobs', 'Máximo de pontos', 10, 1, 40, 1), num('minSize', 'Tamanho mínimo', 4, 1, 400, 1),
-      col('color', 'Cor das linhas', [1, 1, 1, 1]), num('lineWidth', 'Espessura', 2, 0.5, 12, 0.5),
-      bool('boxes', 'Caixas', true), bool('crosshair', 'Mira no centro', true), bool('connect', 'Linhas ligando os pontos', true), bool('labels', 'Rótulos (ID e coordenadas)', true),
-      sel('fill', 'Dentro da caixa', ['Nada', 'Inverter', 'Preto e branco', 'Tingir'], 2), col('tint', 'Cor do tingimento', [0.2, 0.9, 1, 1]),
+      sel('track', 'Rastrear', ['Partes claras', 'Partes escuras', 'Key Color (uma cor)'], 1), col('trackColor', 'Key Color', [1, 0.85, 0.1, 1]),
+      num('threshold', 'Threshold %', 70, 0, 100), num('blurStrength', 'Blur Strength', 0, 0, 20, 0.5), sel('quality', 'Detection Quality', ['Extreme', 'High', 'Standard', 'Medium', 'Low', 'Draft'], 3),
+      num('maxBlobs', 'Máximo de pontos', 10, 1, 40, 1), num('minSize', 'Tamanho mínimo', 4, 1, 400, 1), bool('showMask', 'Show Mask', false), bool('alphaOnly', 'Só os gráficos (fundo transparente)', false),
+      // Bounding boxes
+      bool('boxes', 'Bounding Boxes', true), col('boxColor', 'Border Color', [1, 1, 1, 1]), num('lineWidth', 'Border Thickness', 2, 0.25, 12, 0.25),
+      col('boxFill', 'Fill Color', [1, 1, 1, 1]), num('boxFillOpacity', 'Fill Opacity %', 0, 0, 100), bool('gaps', 'Enable Gaps (cantos)', false), num('gapSize', 'Gap Size', 0.3, 0, 0.95, 0.01),
+      sel('fill', 'Dentro da caixa', ['Nada', 'Inverter', 'Preto e branco', 'Tingir'], 1), col('tint', 'Cor do tingimento', [0.2, 0.9, 1, 1]),
+      // Texto
+      bool('labels', 'Text', true), col('textColor', 'Text Color', [1, 1, 1, 1]), num('fontScale', 'Font Scale', 1, 0.2, 8, 0.05), num('textOffset', 'Text Vertical Offset', 0, -2, 2, 0.01),
+      // Marcadores
+      bool('crosshair', 'Center Markers', true), sel('markerType', 'Marker Type', ['Dot', 'Plus', 'Cross'], 2), col('markerColor', 'Marker Color', [1, 1, 1, 1]), num('markerSize', 'Marker Size', 6, 0.5, 60, 0.5), num('markerThickness', 'Marker Line Thickness', 1.5, 0.25, 8, 0.25),
+      // Linhas de conexão
+      bool('connect', 'Connection Lines', true), sel('connType', 'Connection Type', ['Sequential', 'Star', 'Full', 'MST'], 1), col('color', 'Line Color', [1, 1, 1, 1]),
+      num('lineOpacity', 'Line Opacity %', 100, 0, 100), num('connWidth', 'Line Thickness', 2, 0.1, 12, 0.05), num('curvature', 'Curvature', 0, -1, 1, 0.01),
+      bool('dashed', 'Dashed Lines', false), num('dashLen', 'Dash Length', 12, 0.5, 200, 0.5), num('gapLen', 'Gap Length', 8, 0.5, 200, 0.5),
+      // Setas
+      bool('arrows', 'Arrows', false), num('arrowSize', 'Arrow Size', 15, 1, 80, 0.5), num('arrowAngle', 'Arrow Angle', 0.5, 0.05, 1.5, 0.01), num('arrowPos', 'Arrow Position', 0.5, 0, 1, 0.01), bool('arrowFilled', 'Filled Arrows', false),
     ],
     render: (src, p, env) => {
       if (!env.srcCanvas || !trCanvas) return src;
       const { gl } = env;
-      const W = src.w, H = src.h;
+      const W = src.w, H = src.h, k = Math.max(0.35, env.scale) * (Math.max(W, H) / Math.max(1, env.scale) / 1080);
       const blobs = findBlobs(env.srcCanvas, p);
       const ov = trCanvas.ov, mk = trCanvas.mk;
       ov.width = W; ov.height = H; mk.width = W; mk.height = H;
       const o = ov.getContext('2d'), m = mk.getContext('2d');
-      const lw = p.lineWidth * Math.max(0.5, env.scale);
-      const colr = `rgb(${p.color.slice(0, 3).map((v) => Math.round(v * 255)).join(',')})`;
-      o.strokeStyle = colr; o.fillStyle = colr; o.lineWidth = lw;
-      o.font = `${Math.max(9, Math.round(13 * env.scale * 1.4))}px ui-monospace, Menlo, monospace`;
+      const css = (c, a = 1) => `rgba(${c.slice(0, 3).map((v) => Math.round(v * 255)).join(',')},${a})`;
       m.fillStyle = '#fff';
       const pts = blobs.map((bx) => ({ ...bx, cx: (bx.x + bx.w / 2) * W, cy: (bx.y + bx.h / 2) * H }));
+      // ---- linhas
       if (p.connect && pts.length > 1) {
-        o.beginPath();
-        // liga cada ponto ao vizinho mais próximo ainda não ligado (rede de linhas como no Tracery)
-        const used = new Set([0]);
-        let cur = 0;
-        while (used.size < pts.length) {
-          let best = -1, bd = Infinity;
-          pts.forEach((q, j) => { if (!used.has(j)) { const dd = Math.hypot(q.cx - pts[cur].cx, q.cy - pts[cur].cy); if (dd < bd) { bd = dd; best = j; } } });
-          o.moveTo(pts[cur].cx, pts[cur].cy); o.lineTo(pts[best].cx, pts[best].cy);
-          used.add(best); cur = best;
+        const pairs = [];
+        const t = p.connType || 1;
+        if (t === 1) for (let i = 1; i < pts.length; i++) pairs.push([i - 1, i]);
+        else if (t === 2) for (let i = 1; i < pts.length; i++) pairs.push([0, i]);
+        else if (t === 3) for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) pairs.push([i, j]);
+        else { // árvore geradora mínima (Prim)
+          const inT = new Set([0]);
+          while (inT.size < pts.length) {
+            let best = null, bd = Infinity;
+            for (const i of inT) pts.forEach((q, j) => { if (!inT.has(j)) { const d = Math.hypot(q.cx - pts[i].cx, q.cy - pts[i].cy); if (d < bd) { bd = d; best = [i, j]; } } });
+            pairs.push(best); inT.add(best[1]);
+          }
         }
-        o.stroke();
+        o.strokeStyle = css(p.color, (p.lineOpacity ?? 100) / 100); o.fillStyle = o.strokeStyle;
+        o.lineWidth = Math.max(0.5, (p.connWidth ?? p.lineWidth) * k);
+        o.setLineDash(p.dashed ? [Math.max(1, p.dashLen * k), Math.max(1, p.gapLen * k)] : []);
+        for (const [a, b] of pairs) {
+          const A = pts[a], B = pts[b], dx = B.cx - A.cx, dy = B.cy - A.cy, d = Math.hypot(dx, dy) || 1;
+          const mx = (A.cx + B.cx) / 2 - (dy / d) * d * 0.5 * (p.curvature || 0), my = (A.cy + B.cy) / 2 + (dx / d) * d * 0.5 * (p.curvature || 0);
+          o.beginPath(); o.moveTo(A.cx, A.cy); o.quadraticCurveTo(mx, my, B.cx, B.cy); o.stroke();
+          if (p.arrows) {
+            const u = p.arrowPos ?? 0.5, iu = 1 - u;
+            const px = iu * iu * A.cx + 2 * iu * u * mx + u * u * B.cx, py = iu * iu * A.cy + 2 * iu * u * my + u * u * B.cy;
+            const tx = 2 * iu * (mx - A.cx) + 2 * u * (B.cx - mx), ty = 2 * iu * (my - A.cy) + 2 * u * (B.cy - my), ang = Math.atan2(ty, tx);
+            const s = p.arrowSize * k, sp = p.arrowAngle ?? 0.5;
+            o.setLineDash([]); o.beginPath();
+            o.moveTo(px - Math.cos(ang - sp) * s, py - Math.sin(ang - sp) * s); o.lineTo(px, py); o.lineTo(px - Math.cos(ang + sp) * s, py - Math.sin(ang + sp) * s);
+            if (p.arrowFilled) { o.closePath(); o.fill(); } else o.stroke();
+            o.setLineDash(p.dashed ? [Math.max(1, p.dashLen * k), Math.max(1, p.gapLen * k)] : []);
+          }
+        }
+        o.setLineDash([]);
       }
       pts.forEach((b, i) => {
         const x = b.x * W, y = b.y * H, w = Math.max(6, b.w * W), h = Math.max(6, b.h * H);
-        if (p.boxes) o.strokeRect(x, y, w, h);
+        // ---- caixas (com cantos abertos = Gaps)
+        if (p.boxes) {
+          if ((p.boxFillOpacity || 0) > 0) { o.fillStyle = css(p.boxFill || [1, 1, 1, 1], p.boxFillOpacity / 100); o.fillRect(x, y, w, h); }
+          o.strokeStyle = css(p.boxColor || p.color); o.lineWidth = Math.max(0.5, p.lineWidth * k);
+          if (p.gaps) {
+            const gx = (w * (1 - p.gapSize)) / 2, gy = (h * (1 - p.gapSize)) / 2;
+            o.beginPath();
+            for (const [cx, cy, sx, sy] of [[x, y, 1, 1], [x + w, y, -1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]]) { o.moveTo(cx + sx * gx, cy); o.lineTo(cx, cy); o.lineTo(cx, cy + sy * gy); }
+            o.stroke();
+          } else o.strokeRect(x, y, w, h);
+        }
         if (p.fill !== 1) m.fillRect(x, y, w, h);
-        if (p.crosshair) { const s = Math.min(w, h) * 0.25 + 4; o.beginPath(); o.moveTo(b.cx - s, b.cy); o.lineTo(b.cx + s, b.cy); o.moveTo(b.cx, b.cy - s); o.lineTo(b.cx, b.cy + s); o.stroke(); }
-        if (p.labels) o.fillText(`ID ${String(i + 1).padStart(2, '0')}  ${(b.cx / W).toFixed(3)} ${(b.cy / H).toFixed(3)}`, x, Math.max(10, y - 4));
+        // ---- marcadores no centro
+        if (p.crosshair) {
+          const s = (p.markerSize ?? 6) * k; o.strokeStyle = css(p.markerColor || p.color); o.fillStyle = o.strokeStyle; o.lineWidth = Math.max(0.5, (p.markerThickness ?? 1.5) * k);
+          o.beginPath();
+          if ((p.markerType || 2) === 1) { o.arc(b.cx, b.cy, s / 2, 0, Math.PI * 2); o.fill(); }
+          else if (p.markerType === 3) { o.moveTo(b.cx - s, b.cy - s); o.lineTo(b.cx + s, b.cy + s); o.moveTo(b.cx + s, b.cy - s); o.lineTo(b.cx - s, b.cy + s); o.stroke(); }
+          else { o.moveTo(b.cx - s, b.cy); o.lineTo(b.cx + s, b.cy); o.moveTo(b.cx, b.cy - s); o.lineTo(b.cx, b.cy + s); o.stroke(); }
+        }
+        // ---- texto
+        if (p.labels) {
+          o.fillStyle = css(p.textColor || p.color);
+          o.font = `${Math.max(7, Math.round(11 * k * (p.fontScale ?? 1)))}px ui-monospace, Menlo, monospace`;
+          o.fillText(`ID ${String(i + 1).padStart(2, '0')}  ${(b.cx / W).toFixed(3)} ${(b.cy / H).toFixed(3)}`, x, Math.max(10, y - 4 + (p.textOffset || 0) * h));
+        }
       });
+      if (p.showMask) { // mostra o que está sendo rastreado (como o "Show Mask" do plugin)
+        o.globalCompositeOperation = 'destination-over'; o.fillStyle = 'rgba(0,0,0,0.6)'; o.fillRect(0, 0, W, H); o.globalCompositeOperation = 'source-over';
+      }
       const tov = gl.upload(ov), tmk = gl.upload(mk);
-      return gl.pass(TRACERY_MIX, { u_tex: src, u_ov: tov, u_mask: tmk, u_mode: p.fill, u_tint: rgb(p.tint) });
+      return gl.pass(TRACERY_MIX, { u_tex: src, u_ov: tov, u_mask: tmk, u_mode: p.fill, u_tint: rgb(p.tint), u_alpha: p.alphaOnly ? 1 : 0 });
     },
   },
   {

@@ -202,7 +202,7 @@ export function ffxToPreset(parsed) {
         rep.mapped.push(`${src.name || src.matchName} → ${pd.label}${src.keyframes.length ? ` (${src.keyframes.length} keyframes)` : ''}`);
       }
       Object.assign(inst.params, rule.set || {});
-      if (rule.post) rule.post(inst.params, raw);
+      if (rule.post) rule.post(inst.params, raw, fx);
       if (def.type === 'glow' && inst.params.color !== undefined) inst.params.useColor = true;
       if (def.type === 'deepGlow' && inst.params.tint !== undefined && inst.params.useTint === undefined) inst.params.useTint = true;
       rep.status = m.kind;
