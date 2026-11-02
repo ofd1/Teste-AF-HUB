@@ -79,6 +79,14 @@ export function parseFFX(buffer, opts = {}) {
   return result;
 }
 
+/** Lê efeitos e propriedades (com keyframes) de um trecho de um .aep (ex.: os filhos de uma camada 'Layr'). */
+export function parseFXChildren(r, children, fps) {
+  const result = { effects: [], properties: [], warnings: [], matchNames: [] };
+  const ctx = { r, fps, result, targetPath: [], targets: [], sspcIndex: 0, groupPath: [] };
+  walk(children, ctx);
+  return result;
+}
+
 function walk(children, ctx, group = null) {
   const { r } = ctx;
   let pending = null;
@@ -271,7 +279,7 @@ function parseProperty(tdbs, matchName, def, ctx) {
   let list = null;
   for (const c of tdbs.children) {
     if (c.id === 'tdsn' || (c.id === 'LIST' && c.listType === 'tdsn')) p.name = readName(r, c);
-    else if (c.id === 'tdb4' && c.size >= 4) p.dims = r.u16(c.offset + 2);
+    else if (c.id === 'tdb4' && c.size >= 4) { p.dims = r.u16(c.offset + 2); if (c.size >= 6) p.spatial = !!(r.u8(c.offset + 5) & 0x08); }
     else if (c.id === 'cdat') cdat = c;
     else if (c.id === 'LIST' && c.listType === 'list') list = c;
     else if (c.id === 'Utf8') {
@@ -318,7 +326,9 @@ function parseKeyframes(list, p, ctx) {
   const dims = p.dims || (p.type === 'color' ? 4 : 1);
 
   let layout;
-  if (p.type === 'color' || dims === 4) layout = { valueOff: 8 + 8 + 32, n: 4, inf: [8 + 8 + 8, 8 + 8 + 24] };
+  // .aep: posição espacial = cabeçalho(8) + 8 + 8 + velocidade/influência de entrada e saída + valor (@56) + tangentes
+  if (p.spatial && item === 56 + 24 * dims) layout = { valueOff: 56, n: dims, inf: [32, 48], spd: [24, 40], spdScalar: true };
+  else if (p.type === 'color' || dims === 4) layout = { valueOff: 8 + 8 + 32, n: 4, inf: [8 + 8 + 8, 8 + 8 + 24] };
   else if (item === 8 + 40 * dims) layout = { valueOff: 8, n: dims, inf: [8 + 16 * dims, 8 + 32 * dims], spd: [8 + 8 * dims, 8 + 24 * dims] };
   else if (item === 8 + 8 + 32 + 24 * dims) layout = { valueOff: 48, n: dims, inf: [24, 40] }; // posição espacial
   else if ((item - 8) % 40 === 0) { const d = (item - 8) / 40; layout = { valueOff: 8, n: d, inf: [8 + 16 * d, 8 + 32 * d], spd: [8 + 8 * d, 8 + 24 * d] }; }

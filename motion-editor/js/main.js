@@ -26,6 +26,7 @@ import { saveFile, registerServiceWorker } from './platform.js';
 import { getGL } from './gl.js';
 import { trackPoint, applyTrack } from './tracker.js';
 import { calibrateFromImage, CALIB_LABEL } from './calibrate.js';
+import { parseAEP, aepToProject, mainComps } from './aep.js';
 
 const store = new Store();
 const AUTOSAVE_KEY = 'motionframe.autosave.v2';
@@ -592,6 +593,8 @@ async function showMenu() {
     <button data-m="save">💾 Salvar projeto (.json)</button>
     <button data-m="comp">⚙ Configurações da composição</button>
     <button data-m="ffx">⤒ Importar preset .ffx do After Effects</button>
+    <button data-m="aep">Ae Abrir projeto .aep do After Effects</button>
+    ${flatLayers(store.project.layers).some((l) => l.props?.aeMedia) ? '<button data-m="relink">🔗 Conectar vídeos/fotos do projeto do AE</button>' : ''}
     <button data-m="about">ⓘ Sobre os efeitos e plugins</button>
   </div>`, [{ label: 'Fechar', value: null }], {
     onMount: (w, close) => w.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => close(b.dataset.m))),
@@ -603,6 +606,8 @@ async function showMenu() {
   if (res === 'save') saveProject();
   if (res === 'comp') compSettings();
   if (res === 'ffx') commands['import-ffx']();
+  if (res === 'aep') openAEPFlow();
+  if (res === 'relink') relinkAEMedia();
   if (res === 'about') {
     modal('Sobre', `<p>O MotionFrame recria efeitos famosos do After Effects e de plugins populares em edits (Twixtor, Deep Glow, Twitch, Sapphire, BCC, RSMB, Optical Flares…). São <b>recriações próprias</b> com a mesma função e parâmetros parecidos — não são os plugins originais.</p>
       <p>Ao importar um <b>.ffx</b>, o app identifica efeitos nativos do AE e plugins de terceiros e converte para o efeito equivalente, mantendo valores e keyframes sempre que possível.</p>
@@ -905,19 +910,75 @@ async function importAEFiles() {
   const aep = files.filter((f) => /\.aepx?$/i.test(f.name));
   if (home.visible) await ensureSomeProject();
   if (ffx.length) { openSheet('presets'); library.importFiles(ffx); }
-  for (const f of aep) {
-    try {
-      const parsed = parseFFX(await f.arrayBuffer(), { fps: store.project.fps, fileName: f.name.replace(/\.aepx?$/i, '') });
-      const preset = ffxToPreset(parsed);
-      preset.name = `${f.name.replace(/\.aepx?$/i, '')} (AE)`;
-      preset.category = 'Importado do After Effects';
-      if (!preset.effects.length && !Object.keys(preset.transform).length) throw new Error('nenhum efeito ou animação encontrado');
-      library.addToLibrary(preset);
-      library.cat = 'Todos'; library.render(); openSheet('presets');
-      const plugins = [...new Set(preset.report.effects.map((e) => e.plugin).filter(Boolean))];
-      toast(`${f.name}: ${preset.effects.length} efeito(s) importado(s) como preset${plugins.length ? ` (${plugins.slice(0, 4).join(', ')})` : ''}.`, 'ok', 5000);
-    } catch (e) { toast(`${f.name}: ${e.message}`, 'error', 5000); }
+  for (const f of aep) await openAEPFlow(f);
+}
+
+/** Abre um .aep como projeto novo: escolhe a composição, converte camadas/keyframes/efeitos e pede as mídias. */
+async function openAEPFlow(file) {
+  if (!file) { [file] = await pickFiles('.aep,application/octet-stream', false); if (!file) return; }
+  const base = file.name.replace(/\.aepx?$/i, '');
+  let parsed;
+  try { parsed = parseAEP(await file.arrayBuffer()); } catch (e) { toast(`${file.name}: ${e.message}`, 'error', 5000); return; }
+  const comps = mainComps(parsed).filter((c) => c.layers.some((l) => !l.camera));
+  if (!comps.length) { toast(`${file.name}: nenhuma composição com camadas.`, 'error'); return; }
+  let compId = comps[0].id;
+  if (comps.length > 1) {
+    const pick = await modal(`Abrir “${escapeHtml(base)}”`, `<p>Escolha a composição (a principal está primeiro):</p><div class="menu-list">${comps.slice(0, 30).map((c) => `<button data-c="${c.id}">🎬 ${escapeHtml(c.name || 'Comp')} <span class="muted small">${c.width}×${c.height} · ${Math.round(c.fps * 100) / 100}fps · ${c.duration.toFixed(1)}s · ${c.layers.filter((l) => !l.camera).length} camadas${c.usedIn.length ? ' · pré-comp' : ''}</span></button>`).join('')}</div>`,
+      [{ label: 'Cancelar', value: null }], { onMount: (w, close) => w.querySelectorAll('[data-c]').forEach((b) => b.addEventListener('click', () => close(+b.dataset.c))) });
+    if (pick == null) return;
+    compId = pick;
   }
+  const res = aepToProject(parsed, compId, base);
+  const p = res.project;
+  p.id = uid('prj');
+  saveProjectData(p, null);
+  await openProjectById(p.id);
+  const extra = [...res.notes, ...(res.unsupported.length ? [`Efeitos sem equivalente: ${res.unsupported.slice(0, 8).join(', ')}.`] : [])];
+  if (res.media.length) {
+    const go = await modal('Conectar vídeos e fotos', `<p>O projeto usa <b>${res.media.length}</b> arquivo(s) que ficam no computador e não vêm dentro do .aep:</p>
+      <ul class="small">${res.media.slice(0, 20).map((m) => `<li>${escapeHtml(m)}</li>`).join('')}${res.media.length > 20 ? '<li>…</li>' : ''}</ul>
+      <p class="muted small">Escolha esses arquivos no aparelho (pode selecionar vários). Eles entram no lugar certo, com o mesmo tempo, posição, keyframes e efeitos. Dá para fazer depois em ☰ Menu › Conectar vídeos/fotos.</p>
+      ${extra.length ? `<p class="muted small">${extra.map(escapeHtml).join('<br>')}</p>` : ''}`,
+      [{ label: 'Depois', value: false }, { label: 'Escolher arquivos', primary: true, value: true }]);
+    if (go) await relinkAEMedia();
+  } else toast(`Projeto “${base}” aberto ✓${extra.length ? ' — ' + extra[0] : ''}`, 'ok', 5000);
+}
+
+/** Troca os espaços reservados das mídias do .aep pelos arquivos escolhidos (casando pelo nome do arquivo). */
+async function relinkAEMedia() {
+  const files = await pickFiles('video/*,image/*,audio/*');
+  if (!files.length) return;
+  const norm = (n) => n.toLowerCase().replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/g, '');
+  const byName = new Map();
+  for (const f of files) { byName.set(f.name.toLowerCase(), f); if (!byName.has(norm(f.name))) byName.set(norm(f.name), f); }
+  let done = 0;
+  const holders = flatLayers(store.project.layers).filter((l) => l.props?.aeMedia);
+  for (const l of holders) {
+    const ae = l.props.aeMedia;
+    const f = byName.get(ae.file.toLowerCase()) || byName.get(norm(ae.file)) || (holders.length === 1 && files.length === 1 ? files[0] : null);
+    if (!f) continue;
+    const mediaId = uid('m');
+    putMedia(mediaId, f);
+    const src = URL.createObjectURL(f);
+    const isVideo = f.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|mkv)$/i.test(f.name);
+    const isAudio = f.type.startsWith('audio/');
+    l.type = isAudio ? 'audio' : isVideo ? 'video' : 'image';
+    l.name = l.name.replace(/^⚠ /, '');
+    const keep = { width: ae.width, height: ae.height };
+    l.props = isAudio ? { src, mediaId, volume: 100, sourceStart: ae.sourceStart || 0, muted: false }
+      : { src, mediaId, width: keep.width, height: keep.height, ...(isVideo ? { sourceStart: ae.sourceStart || 0, speed: ae.speed || 1, volume: 100 } : {}) };
+    if (isVideo) {
+      detectFps(src).then((fps) => { if (fps) { l.props.sourceFps = fps; store.commit(); } });
+      loadAudio(src).then(() => { l.props.hasAudio = true; store.emit('change'); }).catch(() => { l.props.hasAudio = false; });
+    }
+    if (isAudio) await loadAudio(src).catch(() => {});
+    done++;
+  }
+  store.commit();
+  ensureCaches?.(store.project);
+  timeline.render(); renderToolbar();
+  const left = flatLayers(store.project.layers).filter((l) => l.props?.aeMedia).length;
+  toast(`${done} mídia(s) conectada(s) ✓${left ? ` · faltam ${left} (nomes diferentes? escolha de novo)` : ''}`, left ? 'warn' : 'ok', 5000);
 }
 
 async function ensureSomeProject() {

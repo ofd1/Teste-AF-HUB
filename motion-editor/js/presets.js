@@ -110,7 +110,7 @@ const TRANSFORM_MAP = {
   'ADBE Opacity': { prop: 'opacity', mode: 'abs' },
 };
 
-function ffxEase(kf, next) {
+export function ffxEase(kf, next) {
   if (kf.interp === 3) return { ease: 'hold' };
   if (kf.interp === 2) {
     const e = { ease: 'bezier', outInf: kf.outInf, inInf: kf.inInf };
