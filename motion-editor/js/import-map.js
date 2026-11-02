@@ -58,16 +58,17 @@ export function looksFromTools(tools, strength = 100) {
       case 'chab': p.chroma += Math.abs(v[0] || 0) * 4; break;
       case 'husa': p.hue += v[0] || 0; p.saturation *= (v[1] ?? 100) / 100; break;
       case 'mjo2':
-        // Mojo II: [Mojo, tuning, …, Punch, Bleach, Cool It, Warm Skin, …]
-        // manual: Mojo esquenta realces e esfria sombras; Punch (contraste + saturação); Bleach; Cool/Warm; Strength (último)
+        // Mojo II: [Mojo, Mojo Tuning, Punch It, Bleach It, Fade It, Cool It, Warm Skin, (ajustes de pele 7-10), Strength]
+        // Bleach It (v3) deixa escuro, dessaturado e contrastado (bleach bypass) — ex.: Vampy CC 85, Reverse Dark 50.
+        // Mojo esquenta realces e esfria sombras; Punch dá contraste + saturação; Fade lava os pretos.
         {
           const k = (v[11] ?? 100) / 100;
           p.mojo = Math.max(p.mojo, (v[0] || 0) * k);
-          p.punch += (v[3] || 0) * 0.45 * k;
-          p.bleach += (v[4] || 0) * 0.5 * k;
+          p.punch += (v[2] || 0) * 0.45 * k;
+          p.bleach += (v[3] || 0) * 0.8 * k;
+          p.fade += (v[4] || 0) * 0.3 * k;
           if (v[5] > 0) p.mojoCool = clampN(v[5] * 2, 0, 100);
           if (v[6] > 0) p.mojoSkin = clampN(v[6] * 2, 0, 100);
-          p.temperature += (v[7] || 0) * 10 * k;
         }
         break;
       // Haze/Flare (manual: Spillage, Softness, …, Exposure, …, cor): luz que vaza dentro da lente + leve névoa
@@ -99,7 +100,8 @@ export function looksFromTools(tools, strength = 100) {
         // curva: [força, …, (36) canal, (37) nº de pontos, depois pares (entrada, ajuste)]
         // v[0] = força da curva (0..1): os ajustes dos pontos são escalados por ela
         const n = Math.min(4, Math.round(v[37] || 0)), k = v[0] > 0 && v[0] <= 1 ? v[0] : 1;
-        for (let i = 0; i < n; i++) curve.push([v[38 + i * 2], (v[39 + i * 2] || 0) * k]);
+        // o Looks guarda o quanto o ponto fica ABAIXO da diagonal (positivo = escurece): 0,255 → 0,13 na Vampy CC (CC escura)
+        for (let i = 0; i < n; i++) curve.push([v[38 + i * 2], -(v[39 + i * 2] || 0) * k]);
         break;
       }
       case 'cmix': if ((v[0] ?? 100) > 0) p.saturation *= (v[1] ?? 100) / 100; break;
