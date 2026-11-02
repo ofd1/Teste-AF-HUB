@@ -24,8 +24,7 @@ import { formatTime, uid, deepClone, escapeHtml } from './util.js';
 import { putMedia, getMedia, pruneMedia } from './idb.js';
 import { saveFile, registerServiceWorker } from './platform.js';
 import { getGL } from './gl.js';
-import { trackPoint, applyTrack } from './tracker.js';
-import { trackFace, applyFaceFollow, applyFaceCamera, ensureFaceModel } from './facetrack.js';
+import { TrackerPanel } from './tracker-panel.js';
 import { calibrateFromImage, CALIB_LABEL } from './calibrate.js';
 import { parseAEP, aepToProject, mainComps } from './aep.js';
 
@@ -142,6 +141,7 @@ function drawOverlay() {
   const k = overlay.width / store.project.width;
   octx.setTransform(1, 0, 0, 1, 0, 0);
   octx.clearRect(0, 0, overlay.width, overlay.height);
+  trackerPanel.drawOverlay(octx, k, window.devicePixelRatio || 1);
   const layer = store.layer();
   // prévia limpa: a caixa só aparece enquanto você arrasta/redimensiona a camada
   if (!gesture?.moved) return;
@@ -370,8 +370,8 @@ new Inspector(document.getElementById('effectsPanel'), store, 'effects', {
 new Inspector(document.getElementById('propsPanel'), store, 'props', {
   speed: (layer) => { ensureSpeedEffect(layer); openSheet('effects'); },
   beats: (layer) => addBeatMarkers(layer),
-  track: (layer) => startTrack(layer),
-  faceTrack: (layer) => startFaceTrack(layer),
+  track: (layer) => openTracker(layer, 'point'),
+  faceTrack: (layer) => openTracker(layer, 'face'),
   replace: (layer) => replaceLayerMedia(layer),
 });
 const library = new Library(document.getElementById('library'), store, {
@@ -397,59 +397,18 @@ new FxBrowser(document.getElementById('fxBrowser'), (type) => {
 keyTools = new KeyTools(document.getElementById('keyTools'), store);
 new TopazPanel(document.getElementById('topazPanel'), store);
 
-// ---- tracker
-function drawTrackMarker(pt) {
-  const k = overlay.width / store.project.width, dpr = window.devicePixelRatio || 1;
-  octx.strokeStyle = '#2d8ceb'; octx.lineWidth = 2 * dpr;
-  octx.strokeRect(pt[0] * k - 14 * dpr, pt[1] * k - 14 * dpr, 28 * dpr, 28 * dpr);
-  octx.beginPath(); octx.moveTo(pt[0] * k - 22 * dpr, pt[1] * k); octx.lineTo(pt[0] * k + 22 * dpr, pt[1] * k);
-  octx.moveTo(pt[0] * k, pt[1] * k - 22 * dpr); octx.lineTo(pt[0] * k, pt[1] * k + 22 * dpr); octx.stroke();
-}
-
-async function startTrack(layer) {
+// ---- tracker (painel estilo After Effects)
+const trackerPanel = new TrackerPanel(store, {
+  pick: () => { if (!desktop.matches) closeSheet(); return new Promise((res) => { trackPick = res; }); },
+  redraw: () => { dirty = true; },
+  pause: () => setPlaying(false),
+  setTime: (t) => store.setTime(t),
+  stabilize: (layer) => { store.selectedLayerId = layer.id; store.emit('selection'); openSheet('topaz'); toast('Stabilize Motion: ajuste em “Estabilização” no painel Topaz.', 'info', 4000); },
+});
+function openTracker(layer, kind) {
   if (layer.type !== 'video') { toast('O tracker funciona em camadas de vídeo.', 'warn'); return; }
-  setPlaying(false);
   if (!desktop.matches) closeSheet();
-  toast('Toque no ponto que quer seguir. Escolha algo com detalhe (número da camisa, rosto, canto) — áreas lisas ou listradas escorregam.', 'info', 6000);
-  const point = await new Promise((res) => { trackPick = res; });
-  drawTrackMarker(point);
-  const others = store.layers.filter((l) => l !== layer && l.type !== 'audio');
-  const t0 = Math.max(store.time, layer.inPoint);
-  const res = await modal('Rastrear movimento', `
-    <p class="muted small">Do playhead (${t0.toFixed(2)}s) até o fim do clipe (${layer.outPoint.toFixed(2)}s).</p>
-    <label class="row"><span>Camada que vai seguir</span><select data-f="target">
-      <option value="__text">Novo texto</option>
-      ${others.map((l) => `<option value="${l.id}">${l.name.replace(/</g, '&lt;')}</option>`).join('')}
-    </select></label>`,
-  [{ label: 'Cancelar', value: null }, { label: 'Rastrear', primary: true, value: (w) => w.querySelector('[data-f="target"]').value }]);
-  dirty = true;
-  if (!res) return;
-  let target = store.layers.find((l) => l.id === res);
-  if (!target) {
-    target = LAYER_FACTORIES.text(store.project);
-    target.props.text = 'TEXTO'; target.props.fontSize = 70;
-    target.transform.position.value = [point[0], point[1] - 160];
-    target.inPoint = t0; target.outPoint = layer.outPoint;
-    store.layers.unshift(target);
-  }
-  let cancelled = false;
-  const wrap = document.createElement('div');
-  wrap.className = 'modal-wrap';
-  wrap.innerHTML = '<div class="modal"><header><h2>Rastreando…</h2></header><div class="modal-body"><div class="progress"><div class="bar"></div></div></div><footer><button class="danger">Cancelar</button></footer></div>';
-  document.body.appendChild(wrap);
-  wrap.querySelector('button').onclick = () => { cancelled = true; };
-  try {
-    const track = await trackPoint({ layer, project: store.project, t0, t1: layer.outPoint - 1 / store.project.fps, point,
-      onProgress: (f) => { wrap.querySelector('.bar').style.width = `${Math.round(f * 100)}%`; }, isCancelled: () => cancelled });
-    const n = applyTrack(target, track);
-    store.selectedLayerId = target.id;
-    store.commit('structure');
-    toast(`${n} quadros rastreados → “${target.name}” segue o ponto.`, 'ok', 4000);
-  } catch (e) {
-    toast(`Falha no tracker: ${e.message}`, 'error');
-  } finally {
-    wrap.remove();
-  }
+  trackerPanel.open(layer, kind);
 }
 
 /**
@@ -483,65 +442,6 @@ async function replaceLayerMedia(layer) {
   store.commit('structure');
   ensureCaches?.(store.project);
   toast(`Mídia substituída — efeitos, keyframes e ajustes mantidos ✓`, 'ok', 3000);
-}
-
-async function startFaceTrack(layer) {
-  if (layer.type !== 'video') { toast('O face tracking funciona em camadas de vídeo.', 'warn'); return; }
-  setPlaying(false);
-  ensureFaceModel().catch(() => {});
-  const others = store.layers.filter((l) => l !== layer && l.type !== 'audio');
-  const t0 = Math.max(store.time, layer.inPoint);
-  const res = await modal('Face tracking', `
-    <p class="muted small">Detecta o rosto em cada quadro, do playhead (${t0.toFixed(2)}s) até o fim do clipe (${layer.outPoint.toFixed(2)}s). Tudo no aparelho.</p>
-    <label class="row"><span>Modo</span><select data-f="mode">
-      <option value="camera">Câmera no rosto (o vídeo segue o rosto: zoom e centraliza)</option>
-      <option value="follow">Uma camada segue o rosto</option></select></label>
-    <label class="row"><span>Camada que segue</span><select data-f="target"><option value="__text">Novo texto</option>
-      ${others.map((l) => `<option value="${l.id}">${l.name.replace(/</g, '&lt;')}</option>`).join('')}</select></label>
-    <label class="row"><span>Tamanho do rosto na tela %</span><input type="number" data-f="frac" value="40" min="5" max="100"></label>
-    <label class="row"><span>Intensidade do enquadramento %</span><input type="number" data-f="follow" value="100" min="0" max="100"></label>
-    <label class="row"><span>Seguir escala e rotação</span><label class="switch"><input type="checkbox" data-f="sr" checked><i></i></label></label>
-    <label class="row"><span>Endireitar a cabeça (câmera)</span><label class="switch"><input type="checkbox" data-f="level"><i></i></label></label>
-    <p class="muted small">Com vários rostos, toque em “Escolher rosto” para indicar qual seguir.</p>`,
-  [{ label: 'Cancelar', value: null }, { label: 'Escolher rosto', value: (w) => ({ pick: true, ...read(w) }) }, { label: 'Rastrear', primary: true, value: (w) => read(w) }]);
-  function read(w) { const q = (k) => w.querySelector(`[data-f="${k}"]`); return { mode: q('mode').value, target: q('target').value, frac: +q('frac').value, follow: +q('follow').value, sr: q('sr').checked, level: q('level').checked }; }
-  if (!res) return;
-  let hint = null;
-  if (res.pick) {
-    if (!desktop.matches) closeSheet();
-    toast('Toque no rosto que quer seguir.', 'info', 4000);
-    hint = await new Promise((r) => { trackPick = r; });
-  }
-  let cancelled = false;
-  const wrap = document.createElement('div');
-  wrap.className = 'modal-wrap';
-  wrap.innerHTML = '<div class="modal"><header><h2>Procurando o rosto…</h2></header><div class="modal-body"><div class="progress"><div class="bar"></div></div></div><footer><button class="danger">Cancelar</button></footer></div>';
-  document.body.appendChild(wrap);
-  wrap.querySelector('button').onclick = () => { cancelled = true; };
-  try {
-    const track = await trackFace({ layer, project: store.project, t0, t1: layer.outPoint - 1 / store.project.fps, hintComp: hint,
-      onProgress: (f) => { wrap.querySelector('.bar').style.width = `${Math.round(f * 100)}%`; }, isCancelled: () => cancelled });
-    let n;
-    if (res.mode === 'camera') {
-      n = applyFaceCamera(layer, track, store.project, { faceFrac: Math.max(0.05, res.frac / 100), follow: Math.max(0, Math.min(1, res.follow / 100)), level: res.level });
-      store.selectedLayerId = layer.id;
-    } else {
-      let target = store.layers.find((l) => l.id === res.target);
-      if (!target) {
-        target = LAYER_FACTORIES.text(store.project);
-        target.props.text = 'TEXTO'; target.props.fontSize = 70;
-        target.transform.position.value = [track[0].x, track[0].y - track[0].size * 0.9];
-        target.inPoint = t0; target.outPoint = layer.outPoint;
-        store.layers.unshift(target);
-      }
-      n = applyFaceFollow(target, track, { position: true, scale: res.sr, rotation: res.sr });
-      store.selectedLayerId = target.id;
-    }
-    store.commit('structure');
-    toast(`Rosto seguido em ${n} quadros.`, 'ok', 4000);
-  } catch (e) {
-    toast(`Face tracking: ${e.message}`, 'error', 5000);
-  } finally { wrap.remove(); }
 }
 
 function ensureSpeedEffect(layer) {

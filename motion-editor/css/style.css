@@ -481,3 +481,22 @@ body.preview-max .max-ctl { top: max(8px, env(safe-area-inset-top)); }
 .access-code { display: flex; gap: 8px; align-items: center; } .access-code code { flex: 1; font-size: 17px; letter-spacing: 1px; background: #111; padding: 10px; border-radius: 8px; user-select: all; }
 .access-card textarea { width: 100%; background: #111; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 10px; font: 13px monospace; resize: vertical; }
 .access-err { color: #ff6b6b; margin: 0; } .access-go { padding: 12px; font-size: 16px; }
+
+/* ---- painel Tracker (estilo After Effects) */
+.trk-panel { position: absolute; top: 8px; right: 8px; z-index: 30; width: min(300px, calc(100% - 16px)); max-height: calc(100% - 16px); overflow: auto;
+  background: color-mix(in srgb, var(--panel) 96%, transparent); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px #000a; font-size: 12.5px; }
+.trk-panel[hidden] { display: none; }
+.trk-panel header { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.trk-panel header button { padding: 2px 8px; }
+.trk-panel button { padding: 5px 8px; border-radius: 6px; font-size: 12px; }
+.trk-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 8px 10px 4px; }
+.trk-btns button { white-space: normal; line-height: 1.15; }
+.trk-row { display: flex; align-items: center; gap: 6px; padding: 4px 10px; }
+.trk-row > span:first-child { color: var(--muted); min-width: 92px; }
+.trk-row select { flex: 1; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 4px; }
+.trk-two button { flex: 1; }
+.trk-checks { display: flex; gap: 10px; padding: 4px 10px 4px 108px; flex-wrap: wrap; }
+.trk-checks input:disabled + * , .trk-checks label:has(input:disabled) { opacity: .5; }
+.trk-target { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trk-analyze button { flex: 1; padding: 5px 0; }
+.trk-status { padding: 6px 10px 10px; min-height: 2.4em; }

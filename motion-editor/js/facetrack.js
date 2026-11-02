@@ -3,10 +3,10 @@
 //  - "Seguir o rosto": outra camada (texto, emoji, efeito) acompanha o rosto;
 //  - "Câmera no rosto": o próprio vídeo é reenquadrado para manter o rosto centralizado e do mesmo tamanho.
 import { sourceTime } from './timing.js';
-import { contentSize, layerTransform } from './renderer.js';
+import { contentSize, layerTransform, toLayerSpace } from './renderer.js';
 import { valueAt, sortKeys } from './anim.js';
 import { setExporting } from './media.js';
-import { loadVideo, seek } from './tracker.js';
+import { analysisVideo, seek } from './tracker.js';
 
 const BASE = new URL('../vendor/mediapipe/', import.meta.url).href;
 let detPromise = null;
@@ -40,14 +40,15 @@ function pick(dets, prev, hint) {
 }
 
 /**
- * Rastreia o rosto numa camada de vídeo de t0 a t1. hint = ponto (pixels de análise) para escolher entre vários rostos.
- * Retorna [{ t, x, y, size, angle, lx, ly }] — x/y em coordenadas da composição, lx/ly no espaço da camada.
+ * Analisa o rosto quadro a quadro em `times` (em ordem de análise: para frente ou para trás).
+ * hintLocal = ponto no conteúdo da camada para escolher o rosto (ou o último rosto rastreado).
+ * Devolve amostras cruas no espaço da camada: [{ t, lx, ly, lsize, angle, ok }].
  */
-export async function trackFace({ layer, project, t0, t1, hintComp, onProgress, isCancelled }) {
+export async function analyzeFace({ layer, project, times, hintLocal, onFrame, isCancelled }) {
   const det = await ensureFaceModel();
   setExporting(true);
   try {
-    const v = await loadVideo(layer.props.src);
+    const v = await analysisVideo(layer.props.src);
     const vw = v.videoWidth || 1080, vh = v.videoHeight || 1920;
     const aw = Math.min(AW, vw), ah = Math.round((aw * vh) / vw);
     const c = document.createElement('canvas');
@@ -55,47 +56,56 @@ export async function trackFace({ layer, project, t0, t1, hintComp, onProgress, 
     const ctx = c.getContext('2d', { willReadFrequently: true });
     const { w, h } = contentSize(layer, project);
     const fps = project.fps;
-    const raw = [];
-    let prev = null;
-    let hint = null;
-    if (hintComp) {
-      const m = layerTransform(layer, t0), r = (-m.rot * Math.PI) / 180, dx = hintComp[0] - m.x, dy = hintComp[1] - m.y;
-      const lx = (dx * Math.cos(r) - dy * Math.sin(r)) / (m.sx || 1) + m.anchor[0], ly = (dx * Math.sin(r) + dy * Math.cos(r)) / (m.sy || 1) + m.anchor[1];
-      hint = [((lx + w / 2) / w) * aw, ((ly + h / 2) / h) * ah];
-    }
-    const n = Math.max(1, Math.round((t1 - t0) * fps) + 1);
-    for (let i = 0; i < n; i++) {
+    const hint = hintLocal ? [((hintLocal.lx + w / 2) / w) * aw, ((hintLocal.ly + h / 2) / h) * ah] : null;
+    let prev = hintLocal?.lsize ? { cx: hint[0], cy: hint[1], size: (hintLocal.lsize / w) * aw, angle: hintLocal.angle || 0 } : null;
+    const out = [];
+    for (let i = 0; i < times.length; i++) {
       if (isCancelled?.()) break;
-      const t = +(t0 + i / fps).toFixed(5);
+      const t = times[i];
       await seek(v, sourceTime(layer, t) + 0.3 / fps);
       ctx.drawImage(v, 0, 0, aw, ah);
       const res = det.detect(c);
       const d = pick(res.detections || [], prev, hint);
+      let smp;
       if (d) {
         const b = d.boundingBox, k = d.keypoints || [];
         let angle = prev ? prev.angle : 0;
         // keypoints normalizados: 0 = olho direito, 1 = olho esquerdo (da pessoa)
         if (k.length >= 2) angle = (Math.atan2((k[1].y - k[0].y) * ah, (k[1].x - k[0].x) * aw) * 180) / Math.PI;
         prev = { cx: b.originX + b.width / 2, cy: b.originY + b.height / 2, size: b.width, angle };
-        raw.push({ t, ...prev, ok: true });
-      } else raw.push({ t, ...(prev || { cx: aw / 2, cy: ah / 2, size: aw / 4, angle: 0 }), ok: false });
-      onProgress?.((i + 1) / n);
+        smp = { t, ok: true, conf: d.categories?.[0]?.score ?? 1 };
+      } else smp = { t, ok: false, conf: 0 };
+      const P = prev || { cx: aw / 2, cy: ah / 2, size: aw / 4, angle: 0 };
+      Object.assign(smp, { lx: (P.cx / aw) * w - w / 2, ly: (P.cy / ah) * h - h / 2, lsize: (P.size / aw) * w, angle: P.angle });
+      out.push(smp);
+      onFrame?.(smp, (i + 1) / times.length);
     }
-    v.removeAttribute('src');
-    v.load();
-    if (!raw.some((r) => r.ok)) throw new Error('nenhum rosto encontrado nesse trecho');
-    // preenche o começo sem rosto com a primeira detecção e suaviza (tira o tremido do detector)
-    const first = raw.find((r) => r.ok);
-    for (const r of raw) { if (r.ok) break; Object.assign(r, { cx: first.cx, cy: first.cy, size: first.size, angle: first.angle }); }
-    const sm = smooth(raw);
-    // pixels de análise → espaço da camada → composição
-    return sm.map((r) => {
-      const lx = (r.cx / aw) * w - w / 2, ly = (r.cy / ah) * h - h / 2;
-      const m = layerTransform(layer, r.t), rr = (m.rot * Math.PI) / 180;
-      const sx = (lx - m.anchor[0]) * m.sx, sy = (ly - m.anchor[1]) * m.sy;
-      return { t: r.t, x: m.x + sx * Math.cos(rr) - sy * Math.sin(rr), y: m.y + sx * Math.sin(rr) + sy * Math.cos(rr), size: (r.size / aw) * w * m.sx, angle: r.angle + m.rot, lx, ly, lsize: (r.size / aw) * w };
-    });
+    return out;
   } finally { setExporting(false); }
+}
+
+/** Amostras cruas (espaço da camada) → rastro suavizado em coordenadas da composição (formato de trackFace). */
+export function faceSamplesToTrack(layer, samples, smoothAmt = 0.45) {
+  const raw = samples.slice().sort((a, b) => a.t - b.t).map((r) => ({ ...r, cx: r.lx, cy: r.ly, size: r.lsize }));
+  if (!raw.some((r) => r.ok)) throw new Error('nenhum rosto encontrado nesse trecho');
+  const first = raw.find((r) => r.ok);
+  for (const r of raw) { if (r.ok) break; Object.assign(r, { cx: first.cx, cy: first.cy, size: first.size, angle: first.angle }); }
+  const sm = smoothAmt < 1 ? smooth(raw, smoothAmt) : raw;
+  return sm.map((r) => {
+    const m = layerTransform(layer, r.t), rr = (m.rot * Math.PI) / 180;
+    const sx = (r.cx - m.anchor[0]) * m.sx, sy = (r.cy - m.anchor[1]) * m.sy;
+    return { t: r.t, x: m.x + sx * Math.cos(rr) - sy * Math.sin(rr), y: m.y + sx * Math.sin(rr) + sy * Math.cos(rr), size: r.size * m.sx, angle: r.angle + m.rot, lx: r.cx, ly: r.cy, lsize: r.size };
+  });
+}
+
+/** Rastreia o rosto de t0 a t1 (atalho usado pelo modo rápido). */
+export async function trackFace({ layer, project, t0, t1, hintComp, onProgress, isCancelled }) {
+  const fps = project.fps, n = Math.max(1, Math.round((t1 - t0) * fps) + 1);
+  const times = Array.from({ length: n }, (_, i) => +(t0 + i / fps).toFixed(5));
+  let hintLocal = null;
+  if (hintComp) { const p = toLayerSpace(layer, t0, hintComp[0], hintComp[1]); hintLocal = { lx: p.x, ly: p.y }; }
+  const s = await analyzeFace({ layer, project, times, hintLocal, onFrame: (_, f) => onProgress?.(f), isCancelled });
+  return faceSamplesToTrack(layer, s);
 }
 
 /** Suavização de ida e volta (sem atraso): média exponencial nos dois sentidos. */

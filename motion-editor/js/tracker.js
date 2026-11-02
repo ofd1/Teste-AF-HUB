@@ -138,3 +138,95 @@ export function applyTrack(target, track) {
   sortKeys(pos);
   return track.length;
 }
+
+// ---------------------------------------------------------------- análise passo a passo (painel Tracker estilo AE)
+let cachedVid = null;
+/** Vídeo de análise reaproveitado entre cliques de Analyze (abrir de novo a cada passo de 1 quadro é lento). */
+export async function analysisVideo(src) {
+  if (cachedVid && cachedVid.src0 === src) return cachedVid.v;
+  releaseAnalysisVideo();
+  const v = await loadVideo(src);
+  cachedVid = { src0: src, v };
+  return v;
+}
+export function releaseAnalysisVideo() {
+  if (!cachedVid) return;
+  cachedVid.v.removeAttribute('src'); cachedVid.v.load();
+  cachedVid = null;
+}
+
+/**
+ * Track Point do AE, em qualquer direção: `times` em ordem de análise (para frente ou para trás). start = ponto no
+ * espaço do conteúdo da camada (px, centro = 0). Devolve [{ t, lx, ly, conf }] e chama onFrame a cada quadro.
+ * featureK = tamanho da região do modelo (1 = padrão), searchK = tamanho da busca.
+ */
+export async function analyzePoint({ layer, project, times, start, featureK = 1, searchK = 1, onFrame, isCancelled }) {
+  setExporting(true);
+  try {
+    const v = await analysisVideo(layer.props.src);
+    const vw = v.videoWidth || 1080, vh = v.videoHeight || 1920;
+    const aw = Math.min(AW, vw), ah = Math.round((aw * vh) / vw);
+    const c = document.createElement('canvas'); c.width = aw; c.height = ah;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    const { w, h } = contentSize(layer, project);
+    let x = ((start.lx + w / 2) / w) * aw, y = ((start.ly + h / 2) / h) * ah;
+    const R = Math.max(5, Math.round((aw / 28) * featureK)), S = Math.max(8, Math.round((aw / 12) * searchK));
+    const fps = project.fps;
+    await seek(v, sourceTime(layer, times[0]) + 0.3 / fps);
+    let g = grayFrame(v, ctx, aw, ah);
+    const tpl = patch(g, aw, ah, x, y, R), ref = tpl.slice();
+    const out = [];
+    const emit = (t, conf) => { const s = { t, lx: (x / aw) * w - w / 2, ly: (y / ah) * h - h / 2, conf }; out.push(s); onFrame?.(s, out.length / times.length); };
+    emit(times[0], 1);
+    for (let i = 1; i < times.length; i++) {
+      if (isCancelled?.()) break;
+      await seek(v, sourceTime(layer, times[i]) + 0.3 / fps);
+      g = grayFrame(v, ctx, aw, ah);
+      const cx0 = Math.round(x), cy0 = Math.round(y);
+      let best = Infinity, bx = cx0, by = cy0;
+      for (let dy = -S; dy <= S; dy++) for (let dx = -S; dx <= S; dx++) {
+        const s = sad(g, aw, ah, tpl, cx0 + dx, cy0 + dy, R, best);
+        if (s < best) { best = s; bx = cx0 + dx; by = cy0 + dy; }
+      }
+      const cxm = sad(g, aw, ah, tpl, bx - 1, by, R, Infinity), cxp = sad(g, aw, ah, tpl, bx + 1, by, R, Infinity);
+      const cym = sad(g, aw, ah, tpl, bx, by - 1, R, Infinity), cyp = sad(g, aw, ah, tpl, bx, by + 1, R, Infinity);
+      x = bx + Math.max(-0.5, Math.min(0.5, (cxm - cxp) / (2 * (cxm + cxp - 2 * best) || 1)));
+      y = by + Math.max(-0.5, Math.min(0.5, (cym - cyp) / (2 * (cym + cyp - 2 * best) || 1)));
+      const now = patch(g, aw, ah, x, y, R);
+      for (let k = 0; k < tpl.length; k++) tpl[k] = tpl[k] * 0.8 + now[k] * 0.12 + ref[k] * 0.08;
+      // confiança como no AE: 100% = idêntico ao modelo
+      emit(times[i], Math.max(0, 1 - best / (tpl.length * 60)));
+    }
+    return out;
+  } finally { setExporting(false); }
+}
+
+/** Ponto do conteúdo da camada (px, centro = 0) → composição, no tempo t. */
+export function localToComp(layer, t, lx, ly) {
+  const m = layerTransform(layer, t), r = (m.rot * Math.PI) / 180;
+  const sx = (lx - m.anchor[0]) * m.sx, sy = (ly - m.anchor[1]) * m.sy;
+  return [m.x + sx * Math.cos(r) - sy * Math.sin(r), m.y + sx * Math.sin(r) + sy * Math.cos(r)];
+}
+/** Composição → conteúdo da camada (px, centro = 0). */
+export function compToLocal(layer, t, x, y) {
+  const p = toLayerSpace(layer, t, x, y);
+  return { lx: p.x, ly: p.y };
+}
+
+/** Aplica um rastro de ponto (no espaço da camada de origem) à posição do alvo. dims: 'xy' | 'x' | 'y'. */
+export function applyPointTrack(source, target, samples, dims = 'xy') {
+  const s = samples.slice().sort((a, b) => a.t - b.t);
+  if (!s.length) return 0;
+  const pts = s.map((p) => { const [x, y] = localToComp(source, p.t, p.lx, p.ly); return { t: p.t, x, y }; });
+  const pos = target.transform.position;
+  const t0 = pts[0].t, t1 = pts[pts.length - 1].t;
+  const base = valueAt(pos, t0);
+  const ox = base[0] - pts[0].x, oy = base[1] - pts[0].y;
+  pos.keys = (pos.keys || []).filter((k) => k.t < t0 - 1e-4 || k.t > t1 + 1e-4);
+  for (const p of pts) {
+    const cur = valueAt(pos, p.t);
+    pos.keys.push({ t: p.t, v: [dims === 'y' ? cur[0] : Math.round((p.x + ox) * 10) / 10, dims === 'x' ? cur[1] : Math.round((p.y + oy) * 10) / 10], ease: 'linear' });
+  }
+  sortKeys(pos);
+  return pts.length;
+}
