@@ -101,6 +101,7 @@ export class GLEngine {
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    this.htype = this.detectHalfFloat();
     gl.disable(gl.BLEND);
     gl.disable(gl.DEPTH_TEST);
     this.env = {};
@@ -119,7 +120,12 @@ export class GLEngine {
     };
     const prog = gl.createProgram();
     gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
-    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, frag));
+    // com texturas de 16 bits o resultado de cada passada não é mais cortado em 0..1 automaticamente:
+    // o main() original vira mf_main() e o novo main() corta no fim (mesmo visual do 8 bits, sem perder precisão)
+    const src = this.htype && /void\s+main\s*\(\s*\)/.test(frag)
+      ? `${frag.replace(/void\s+main\s*\(\s*\)/, 'void mf_main()')}\nvoid main() { mf_main(); gl_FragColor = clamp(gl_FragColor, 0.0, 1.0); }`
+      : frag;
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, src));
     gl.bindAttribLocation(prog, 0, 'a_pos');
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`Link: ${gl.getProgramInfoLog(prog)}`);
@@ -133,22 +139,47 @@ export class GLEngine {
     return p.locs.get(name);
   }
 
-  acquire(w, h) {
+  /**
+   * Texturas intermediárias em 16 bits (half-float) quando o aparelho suporta renderizar e filtrar nelas:
+   * efeitos empilhados (glow, blur, CC, grão…) não perdem precisão a cada passada → sem faixas nos degradês.
+   */
+  detectHalfFloat() {
+    const gl = this.gl;
+    try {
+      const hf = gl.getExtension('OES_texture_half_float');
+      const lin = gl.getExtension('OES_texture_half_float_linear');
+      gl.getExtension('EXT_color_buffer_half_float');
+      if (!hf || !lin) return 0;
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 4, 4, 0, gl.RGBA, hf.HALF_FLOAT_OES, null);
+      const fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.deleteFramebuffer(fbo); gl.deleteTexture(tex);
+      return ok ? hf.HALF_FLOAT_OES : 0;
+    } catch { return 0; }
+  }
+
+  acquire(w, h, u8 = false) {
     w = Math.max(1, Math.min(this.maxSize, Math.round(w)));
     h = Math.max(1, Math.min(this.maxSize, Math.round(h)));
-    const i = this.pool.findIndex((t) => t.w === w && t.h === h);
+    u8 = u8 || !this.htype;
+    const i = this.pool.findIndex((t) => t.w === w && t.h === h && t.u8 === u8);
     let t;
     if (i >= 0) t = this.pool.splice(i, 1)[0];
     else {
       const gl = this.gl;
       const tex = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, u8 ? gl.UNSIGNED_BYTE : this.htype, null);
       this.texParams();
       const fbo = gl.createFramebuffer();
       gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-      t = { tex, fbo, w, h };
+      t = { tex, fbo, w, h, u8 };
     }
     this.live.push(t);
     return t;
@@ -174,7 +205,7 @@ export class GLEngine {
 
   upload(source, w = source.width, h = source.height) {
     const gl = this.gl;
-    const t = this.acquire(w, h);
+    const t = this.acquire(w, h, true); // imagens/vídeos entram em 8 bits (é o que o navegador entrega)
     gl.bindTexture(gl.TEXTURE_2D, t.tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
     return t;

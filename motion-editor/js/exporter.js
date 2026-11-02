@@ -9,6 +9,8 @@ import { prepareBgModels } from './bgremove.js';
 import { flatLayers } from './state.js';
 
 const even = (n) => Math.max(2, Math.round(n / 2) * 2);
+/** Bitrate alto pela resolução e fps (~0,35 bit por pixel: 1080×1920 a 30 fps ≈ 22 Mbps, 4K ≈ 87 Mbps). */
+export const autoBitrate = (p, scale = 1, fps = p.fps) => Math.round(Math.max(20, Math.min(150, (p.width * scale) * (p.height * scale) * fps * 0.35 / 1e6)));
 
 async function pickVideoCodec(width, height, bitrate, fps) {
   if (!window.VideoEncoder) return null;
@@ -16,9 +18,10 @@ async function pickVideoCodec(width, height, bitrate, fps) {
     ['avc', 'avc1.640034'], ['avc', 'avc1.640033'], ['avc', 'avc1.4d0034'], ['avc', 'avc1.42e034'],
     ['vp9', 'vp09.00.51.08'], ['vp9', 'vp09.00.41.08'], ['av1', 'av01.0.08M.08'],
   ];
-  for (const [mux, codec] of candidates) {
+  // se o aparelho não aceita o bitrate pedido, tenta valores menores antes de desistir do codificador
+  for (const k of [1, 0.6, 0.35]) for (const [mux, codec] of candidates) {
     for (const hw of ['prefer-hardware', 'no-preference']) {
-      const config = { codec, width, height, bitrate, framerate: fps, hardwareAcceleration: hw };
+      const config = { codec, width, height, bitrate: Math.round(bitrate * k), framerate: fps, hardwareAcceleration: hw, bitrateMode: 'variable', latencyMode: 'quality' };
       if (codec.startsWith('avc')) config.avc = { format: 'avc' };
       try {
         const s = await VideoEncoder.isConfigSupported(config);
@@ -79,7 +82,8 @@ export async function fitExportScale(project, scale, fps = 30, bitrate = 16) {
   return Math.min(scale, 1);
 }
 
-export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } = {}) {
+export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {}) {
+  bitrate = bitrate || autoBitrate(store.project, scale, fpsOverride || store.project.fps);
   const { project } = store;
   const fps = fpsOverride || project.fps;
   const width = even(project.width * scale), height = even(project.height * scale);
@@ -191,7 +195,8 @@ export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } 
 }
 
 /** Fallback: grava em tempo real via MediaRecorder (sem áudio). */
-export async function exportRealtime(store, { scale = 1, bitrate = 12 } = {}) {
+export async function exportRealtime(store, { scale = 1, bitrate } = {}) {
+  bitrate = bitrate || autoBitrate(store.project, scale);
   const types = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm', 'video/mp4'];
   const mime = types.find((t) => window.MediaRecorder?.isTypeSupported?.(t));
   if (!mime) { toast('Este aparelho não suporta exportação de vídeo no navegador.', 'error'); return; }
@@ -260,8 +265,16 @@ export async function exportDialog(store) {
     <label class="row"><span>Formato</span><select data-f="fmt"><option value="video">Vídeo MP4</option><option value="png">Quadro atual (PNG)</option><option value="project">Projeto (.json)</option></select></label>
     <label class="row"><span>Resolução</span><select data-f="scale" data-def="${store.project.exportScale || 1}"><option value="1">100% (${store.project.width}×${store.project.height})</option><option value="1.5">150% upscale (${even(store.project.width * 1.5)}×${even(store.project.height * 1.5)})</option><option value="2">2× upscale (${store.project.width * 2}×${store.project.height * 2})</option><option value="4">4× upscale (${store.project.width * 4}×${store.project.height * 4})</option><option value="8">8× upscale (${store.project.width * 8}×${store.project.height * 8})</option><option value="0.6667">66%</option><option value="0.5">50%</option></select></label>
     <label class="row"><span>FPS</span><select data-f="fps">${[24, 25, 30, 50, 60].map((f) => `<option ${f === store.project.fps ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
-    <label class="row"><span>Qualidade (Mbps)</span><input type="number" data-f="bitrate" value="16" min="2" max="80"></label>`,
-  [{ label: 'Cancelar', value: null }, { label: 'Exportar', primary: true, value: (w) => ({ fmt: w.querySelector('[data-f="fmt"]').value, scale: +w.querySelector('[data-f="scale"]').value, fps: +w.querySelector('[data-f="fps"]').value, bitrate: +w.querySelector('[data-f="bitrate"]').value }) }], { onMount: (w) => { const sel = w.querySelector('[data-f="scale"]'); sel.value = sel.dataset.def; if (!sel.value) sel.value = '1'; } });
+    <label class="row"><span>Qualidade (Mbps)</span><input type="number" data-f="bitrate" value="${autoBitrate(store.project, store.project.exportScale || 1)}" min="4" max="200"></label>
+    <p class="muted small">Edits com shake, glitch, grão e flashes precisam de bitrate alto para não “quadricular”. O valor já vem calculado pela resolução e fps; aumente se ainda ver blocos.</p>`,
+  [{ label: 'Cancelar', value: null }, { label: 'Exportar', primary: true, value: (w) => ({ fmt: w.querySelector('[data-f="fmt"]').value, scale: +w.querySelector('[data-f="scale"]').value, fps: +w.querySelector('[data-f="fps"]').value, bitrate: +w.querySelector('[data-f="bitrate"]').value }) }], { onMount: (w) => {
+    const sel = w.querySelector('[data-f="scale"]'), fpsSel = w.querySelector('[data-f="fps"]'), br = w.querySelector('[data-f="bitrate"]');
+    sel.value = sel.dataset.def; if (!sel.value) sel.value = '1';
+    let touched = false;
+    br.addEventListener('input', () => { touched = true; });
+    const upd = () => { if (!touched) br.value = autoBitrate(store.project, Math.min(+sel.value, 4), +fpsSel.value); };
+    sel.addEventListener('change', upd); fpsSel.addEventListener('change', upd); upd();
+  } });
   if (!res) return null;
   if (res.fmt === 'png') await exportPNG(store);
   else if (res.fmt === 'video') {
