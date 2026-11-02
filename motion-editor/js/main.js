@@ -710,7 +710,7 @@ const commands = {
   'add-media': async () => importMedia(await pickFiles('video/*,image/*')),
   'add-audio': async () => importMedia(await pickFiles('audio/*,.mp3,.wav,.m4a,.aac,.ogg')),
   'import-ffx': async () => {
-    const files = await pickFiles('.ffx,.rgx,.json,application/octet-stream');
+    const files = await pickFiles('.ffx,.rgx,.cube,.json,application/octet-stream');
     if (files.length) { openSheet('presets'); library.importFiles(files); }
   },
   'browse-fx': () => openSheet('browser'),
@@ -820,8 +820,8 @@ window.addEventListener('drop', (e) => {
   dragDepth = 0;
   dropOverlay.classList.remove('show');
   const files = [...(e.dataTransfer?.files || [])];
-  const presets = files.filter((f) => /\.(ffx|rgx|json)$/i.test(f.name));
-  const media = files.filter((f) => !/\.(ffx|rgx|json)$/i.test(f.name));
+  const presets = files.filter((f) => /\.(ffx|rgx|cube|json)$/i.test(f.name));
+  const media = files.filter((f) => !/\.(ffx|rgx|cube|json)$/i.test(f.name));
   if (presets.length) { openSheet('presets'); library.importFiles(presets); }
   if (media.length) importMedia(media);
 });

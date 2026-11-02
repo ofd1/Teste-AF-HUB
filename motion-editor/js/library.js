@@ -1,5 +1,6 @@
 // Biblioteca de presets: nativos, pacote FREE (presets/manifest.json), importados (.ffx/.json) e do usuário.
 import { parseFFX, retimeFFX } from './ffx.js';
+import { parseCube, encodeCube } from './fx/lut.js';
 import { BUILTIN_PRESETS, rgxToParsed, ffxToPreset, applyPreset, layerToPreset, serializePreset, parsePresetJSON } from './presets.js';
 import { LAYER_FACTORIES } from './state.js';
 import { sourceTimeRaw } from './timing.js';
@@ -85,7 +86,7 @@ export class Library {
     const items = all.filter((p) => (this.cat === 'Todos' || p.category === this.cat) && (!q || `${p.name} ${p.category}`.toLowerCase().includes(q)));
     this.root.innerHTML = `
       <div class="lib-tools">
-        <button class="primary" data-act="import">⤒ Importar .ffx / .rgx / preset</button>
+        <button class="primary" data-act="import">⤒ Importar .ffx / .rgx / .cube / preset</button>
         <button data-act="save-layer">★ Salvar camada como preset</button>
       </div>
       <label class="fit-toggle ${this.fit ? 'on' : ''}">
@@ -119,7 +120,7 @@ export class Library {
   bind() {
     const r = this.root;
     r.querySelector('[data-act="import"]').addEventListener('click', async () => {
-      const files = await pickFiles('.ffx,.aep,.rgx,.json,application/json,application/octet-stream');
+      const files = await pickFiles('.ffx,.aep,.rgx,.cube,.json,application/json,application/octet-stream');
       if (files.length) this.importFiles(files);
     });
     r.querySelector('[data-act="save-layer"]').addEventListener('click', () => this.saveLayer());
@@ -252,6 +253,11 @@ export class Library {
           preset.fileName = f.name;
           preset._parsed = parsed;
           imported.push(preset);
+        } else if (/\.cube$/i.test(f.name)) {
+          const enc = encodeCube(parseCube(await f.text()));
+          const name = f.name.replace(/\.cube$/i, '');
+          imported.push({ id: `lut_${Date.now().toString(36)}_${imported.length}`, name, category: 'LUTs (.cube)', source: 'user', anchor: 'playhead', transform: {},
+            effects: [{ type: 'lut3d', label: `LUT · ${name}`, params: { amount: 100, lut: enc.b64, lutSize: enc.size } }] });
         } else if (/\.rgx$/i.test(f.name)) {
           const parsed = rgxToParsed(JSON.parse(await f.text()), f.name);
           const preset = ffxToPreset(parsed);

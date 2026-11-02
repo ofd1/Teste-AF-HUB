@@ -52,28 +52,6 @@ void main() {
   gl_FragColor = vec4(mix(c.rgb, acc / wt, u_amt), c.a);
 }`);
 
-// detalhe + nitidez: CAS (sharpen adaptativo ao contraste) + realce de alta frequência em 2 escalas, com dehalo
-const DETAIL = frag(`
-uniform sampler2D u_b1, u_b2; uniform float u_det, u_sharp, u_deblur, u_dehalo, u_px;
-void main() {
-  vec4 c = texture2D(u_tex, v_uv);
-  vec2 t = u_texel * u_px;
-  vec3 n = texture2D(u_tex, v_uv + vec2(0.0, -t.y)).rgb, s = texture2D(u_tex, v_uv + vec2(0.0, t.y)).rgb;
-  vec3 e = texture2D(u_tex, v_uv + vec2(t.x, 0.0)).rgb, w = texture2D(u_tex, v_uv + vec2(-t.x, 0.0)).rgb;
-  vec3 mn = min(c.rgb, min(min(n, s), min(e, w))), mx = max(c.rgb, max(max(n, s), max(e, w)));
-  // CAS: amplitude adaptativa (menos nitidez onde já há muito contraste → sem serrilhado)
-  vec3 amp = sqrt(clamp(min(mn, 1.0 - mx) / max(mx, 1e-4), 0.0, 1.0));
-  vec3 wgt = -amp * mix(0.0, 0.2, u_sharp);
-  vec3 cas = (c.rgb + (n + s + e + w) * wgt) / (1.0 + 4.0 * wgt);
-  // recuperar detalhes (média frequência) e anti-alias/deblur (baixa frequência, como uma deconvolução suave)
-  vec3 b1 = texture2D(u_b1, v_uv).rgb, b2 = texture2D(u_b2, v_uv).rgb;
-  vec3 o = cas + (c.rgb - b1) * u_det * 1.4 + (b1 - b2) * u_deblur * 1.1;
-  // dehalo: não deixa o realce passar dos vizinhos (halos claros/escuros nas bordas)
-  vec3 lo = mn - (1.0 - u_dehalo) * 0.08, hi = mx + (1.0 - u_dehalo) * 0.08;
-  o = mix(o, clamp(o, lo, hi), u_dehalo);
-  gl_FragColor = vec4(clamp(o, 0.0, c.a), c.a);
-}`);
-
 const GRAIN = frag(`
 uniform float u_amt, u_gsize, u_seed; uniform sampler2D u_orig; uniform float u_orig_mix;
 void main() {
@@ -135,11 +113,50 @@ void main() {
   gl_FragColor = vec4(o, clamp(aa / max(ws, 1e-4), 0.0, 1.0));
 }`);
 
+// ---- Proteus do Topaz 7 (calibrado com um print real: Fix compression 100, Improve detail 100, Sharpen 20…) ----
+// 1) Fix compression: guided filter (alisa blocos e manchas sem criar "manchas pintadas" como o bilateral)
+const SQ = frag(`void main() { vec4 c = texture2D(u_tex, v_uv); gl_FragColor = vec4(c.rgb * c.rgb, c.a); }`);
+const GUIDE_A = frag(`
+uniform sampler2D u_m2; uniform float u_eps, u_wantB;
+void main() {
+  vec3 m = texture2D(u_tex, v_uv).rgb, m2 = texture2D(u_m2, v_uv).rgb;
+  vec3 v = max(m2 - m * m, 0.0), A = v / (v + u_eps);
+  gl_FragColor = vec4(u_wantB > 0.5 ? m - A * m : A, 1.0);
+}`);
+const GUIDE_OUT = frag(`
+uniform sampler2D u_a, u_b; uniform float u_amt;
+void main() {
+  vec4 c = texture2D(u_tex, v_uv);
+  vec3 o = texture2D(u_a, v_uv).rgb * c.rgb + texture2D(u_b, v_uv).rgb;
+  gl_FragColor = vec4(mix(c.rgb, clamp(o, 0.0, c.a), u_amt), c.a);
+}`);
+// 2) Improve detail / Sharpen / Dehalo: ganho por faixa de frequência (medido no Topaz: fino ×5, médio ×1,9, grosso ×1,2),
+//    preso aos vizinhos ± halo (borda nítida sem auréola); 3) textura fina só onde já há textura (cabelo, barba, grama)
+const BANDS = frag(`
+uniform sampler2D u_b1, u_b2, u_b3; uniform vec3 u_g; uniform float u_halo, u_tex2, u_seed, u_px;
+void main() {
+  vec4 c = texture2D(u_tex, v_uv);
+  vec3 b1 = texture2D(u_b1, v_uv).rgb, b2 = texture2D(u_b2, v_uv).rgb, b3 = texture2D(u_b3, v_uv).rgb;
+  vec3 o = b3 + (b2 - b3) * u_g.x + (b1 - b2) * u_g.y + (c.rgb - b1) * u_g.z;
+  vec3 mn = c.rgb, mx = c.rgb;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) { vec3 q = texture2D(u_tex, v_uv + vec2(float(i), float(j)) * u_texel).rgb; mn = min(mn, q); mx = max(mx, q); }
+  o = clamp(o, mn - u_halo, mx + u_halo);
+  if (u_tex2 > 0.0) {
+    float e = abs(luma(b1 - b3));
+    float w = clamp((e - 0.012) / 0.03, 0.0, 1.0);
+    vec2 pp = floor(v_uv / u_texel / max(1.0, u_px * 0.6));
+    float n = (hash(pp + u_seed) + hash(pp * 1.31 + 7.0 + u_seed) - 1.0) * 1.7;
+    o += n * w * u_tex2 * (0.4 + luma(o));
+  }
+  gl_FragColor = vec4(clamp(o, 0.0, c.a), c.a);
+}`);
+
 /** Valores "automáticos" de cada modelo (como os presets da Topaz). Proteus = manual. */
 export const TOPAZ_MODELS = [
   ['Proteus (manual)', null],
   ['Artemis – ruído e compressão', { upscale: 2,  revertCompression: 60, recoverDetails: 45, sharpen: 40, reduceNoise: 40, dehalo: 35, antialiasDeblur: 35, aiSmooth: 55, recoverOriginal: 0, addNoise: 0 }],
-  ['Iris – rostos e pele', { upscale: 2,  revertCompression: 55, recoverDetails: 55, sharpen: 45, reduceNoise: 40, dehalo: 45, antialiasDeblur: 40, aiSmooth: 75, recoverOriginal: 0, addNoise: 1 }],
+  // Iris calibrado com um print real do Topaz 7 (Fix compression 100, Improve detail 100, Sharpen 20, Reduce noise 10, Dehalo 6, Anti-alias −40, Recover detail 20)
+  ['Iris – rostos e pele', { upscale: 2, revertCompression: 100, recoverDetails: 100, sharpen: 20, reduceNoise: 10, dehalo: 6, antialiasDeblur: -40, aiSmooth: 0, recoverOriginal: 20, addNoise: 0 }],
   ['Gaia – fonte boa / alta qualidade', { upscale: 2,  revertCompression: 25, recoverDetails: 60, sharpen: 40, reduceNoise: 15, dehalo: 40, antialiasDeblur: 35, aiSmooth: 35, recoverOriginal: 0, addNoise: 0 }],
   ['Nyx – só remover ruído', { revertCompression: 30, recoverDetails: 15, sharpen: 10, reduceNoise: 75, dehalo: 20, antialiasDeblur: 5, aiSmooth: 60, recoverOriginal: 0, addNoise: 0 }],
   ['Rhea – detalhe máximo (4×)', { upscale: 3,  revertCompression: 50, recoverDetails: 80, sharpen: 55, reduceNoise: 30, dehalo: 55, antialiasDeblur: 55, aiSmooth: 70, recoverOriginal: 0, addNoise: 2 }],
@@ -153,11 +170,11 @@ export default [
     params: [
       sel('model', 'Modelo', TOPAZ_MODELS.map(([n]) => n), 2),
       sel('upscale', 'Upscale (reconstruir a partir do vídeo original)', ['Desligado', '2×', '4×', '8×'], 2), num('edgeAware', 'Upscale – seguir bordas %', 80, 0, 100),
-      num('revertCompression', 'Revert Compression (tirar blocos)', 55, 0, 100), num('recoverDetails', 'Recover Details (detalhes)', 30, 0, 100),
+      num('revertCompression', 'Fix compression', 55, 0, 100), num('recoverDetails', 'Improve detail', 30, 0, 100),
       num('sharpen', 'Sharpen (nitidez)', 25, 0, 100), num('reduceNoise', 'Reduce Noise (ruído)', 40, 0, 100),
-      num('dehalo', 'Dehalo (tirar halos)', 30, 0, 100), num('antialiasDeblur', 'Anti-alias / Deblur', 20, 0, 100),
+      num('dehalo', 'Dehalo', 30, 0, 100), num('antialiasDeblur', 'Anti-alias / deblur (− suaviza, + desfoque)', 20, -100, 100),
       num('aiSmooth', 'Suavização IA (visual “desenhado”, sem pixels quadrados)', 55, 0, 100),
-      num('recoverOriginal', 'Recover Original Detail (misturar original)', 0, 0, 100), num('addNoise', 'Add Noise (grão)', 0, 0, 100), num('grainSize', 'Tamanho do grão', 1.5, 1, 6, 0.1),
+      num('recoverOriginal', 'Recover detail (misturar original)', 0, 0, 100), num('addNoise', 'Add noise (grão)', 0, 0, 100), sel('focusFix', 'Focus fix', ['Off', 'Normal', 'Strong'], 1), num('grainSize', 'Tamanho do grão', 1.5, 1, 6, 0.1),
       num('sourceScale', 'Escala da fonte (0 = automático)', 0, 0, 8, 0.1),
     ],
     render: (src, p, env) => {
@@ -179,18 +196,35 @@ export default [
         out = tw === src.w && th === src.h ? big : gl.copy(big, src.w, src.h);
       }
       const rc = v('revertCompression'), rn = v('reduceNoise');
-      if (rc > 0.01) out = gl.pass(BILAT, { u_tex: out, u_rad: 2.2 * pxs, u_sigR: 0.06 + rc * 0.06, u_amt: Math.min(1, rc * 1.2), u_flat: 0.85 });
+      // Fix compression: guided filter (raio acompanha o pixel do vídeo original)
+      if (rc > 0.01) {
+        const sg = 1.6 * pxs;
+        const m = gl.blur(out, sg), m2 = gl.blur(gl.pass(SQ, { u_tex: out }), sg);
+        const eps = 0.0009 * (0.5 + rc);
+        const A = gl.blur(gl.pass(GUIDE_A, { u_tex: m, u_m2: m2, u_eps: eps, u_wantB: 0 }), sg);
+        const B = gl.blur(gl.pass(GUIDE_A, { u_tex: m, u_m2: m2, u_eps: eps, u_wantB: 1 }), sg);
+        out = gl.pass(GUIDE_OUT, { u_tex: out, u_a: A, u_b: B, u_amt: Math.min(1, rc) });
+      }
       if (rn > 0.01) out = gl.pass(BILAT, { u_tex: out, u_rad: 3 * pxs, u_sigR: 0.05 + rn * 0.12, u_amt: Math.min(1, rn * 1.1), u_flat: 0.3 });
-      // suavização "IA": duas passadas de Kuwahara (pequena e média) — o visual liso e desenhado dos upscalers
-      const ai = (m ? m.aiSmooth : p.aiSmooth ?? 55) / 100;
+      // suavização "IA" antiga (opcional): Kuwahara
+      const ai = (m ? m.aiSmooth : p.aiSmooth ?? 0) / 100;
       if (ai > 0.01) {
         out = gl.pass(KUWAHARA, { u_tex: out, u_r: 1.2 * pxs, u_amt: Math.min(1, ai * 1.2) });
         out = gl.pass(KUWAHARA, { u_tex: out, u_r: 2.0 * pxs, u_amt: ai * 0.6 });
       }
-      const det = v('recoverDetails'), sh = v('sharpen'), db = v('antialiasDeblur');
-      if (det + sh + db > 0.01) {
-        const b1 = gl.blur(out, 0.9 * pxs), b2 = gl.blur(out, 2.4 * pxs);
-        out = gl.pass(DETAIL, { u_tex: out, u_b1: b1, u_b2: b2, u_det: det, u_sharp: sh, u_deblur: db, u_dehalo: v('dehalo'), u_px: Math.max(1, pxs * 0.6) });
+      const det = v('recoverDetails'), sh = v('sharpen'), aa = Math.max(-1, Math.min(1, v('antialiasDeblur'))), dh = v('dehalo');
+      // Anti-alias (negativo): suaviza serrilhado antes de realçar
+      if (aa < -0.01) out = gl.mix(out, gl.blur(out, 0.45 * pxs), -aa * 0.6);
+      const ff = [0, 0, 0.15, 0.3][(p.focusFix | 0) || 1] || 0;
+      if (det + sh + Math.max(0, aa) + ff > 0.01) {
+        const g = [1 + 0.06 * det + Math.max(0, aa) * 0.35 + ff, 1 + 1.9 * det + 0.8 * sh + ff * 0.5, 1 + 2.1 * det + 0.3 * sh];
+        const halo = 0.003 + 0.01 * (1 - dh);
+        const iters = det > 0.5 ? 2 : 1;
+        for (let it = 0; it < iters; it++) {
+          const gi = iters === 2 ? g.map((x) => 1 + (x - 1) * 0.72) : g;
+          const b1 = gl.blur(out, 0.875 * pxs), b2 = gl.blur(out, 1.75 * pxs), b3 = gl.blur(out, 3.5 * pxs);
+          out = gl.pass(BANDS, { u_tex: out, u_b1: b1, u_b2: b2, u_b3: b3, u_g: gi, u_halo: halo, u_tex2: it === iters - 1 ? 0.08 * det : 0, u_seed: Math.floor(env.t * 30) % 61, u_px: pxs });
+        }
       }
       const gr = v('addNoise'), ro = v('recoverOriginal');
       if (gr > 0.001 || ro > 0.001) out = gl.pass(GRAIN, { u_tex: out, u_orig: src, u_orig_mix: ro * 0.8, u_amt: gr * 0.18, u_gsize: (p.grainSize || 1.5) * env.scale, u_seed: Math.floor(env.t * 30) % 97 });

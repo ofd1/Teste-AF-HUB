@@ -205,5 +205,5 @@ test('Topaz: modelos com valores automáticos e efeitos registrados', async () =
   const { EFFECT_MAP } = await import('../js/effects.js');
   const { TOPAZ_MODELS, TOPAZ_KEYS } = await import('../js/fx/topaz.js');
   assert.ok(EFFECT_MAP.topaz && EFFECT_MAP.stabilize);
-  for (const [, auto] of TOPAZ_MODELS.slice(1)) for (const k of TOPAZ_KEYS) assert.ok(auto[k] >= 0 && auto[k] <= 100, k);
+  for (const [, auto] of TOPAZ_MODELS.slice(1)) for (const k of TOPAZ_KEYS) assert.ok(auto[k] >= (k === 'antialiasDeblur' ? -100 : 0) && auto[k] <= 100, k); // Anti-alias/deblur vai de −100 a 100 (Topaz 7)
 });

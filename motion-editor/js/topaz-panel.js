@@ -8,15 +8,15 @@ import { escapeHtml } from './util.js';
 import { toast } from './ui.js';
 
 const LABELS = {
-  revertCompression: ['Revert Compression', 'Tira blocos e borrões de compressão (vídeos do TikTok/IG/WhatsApp).'],
-  recoverDetails: ['Recover Details', 'Recupera textura (cabelo, grama, camisa).'],
+  revertCompression: ['Fix compression', 'Tira blocos e borrões de compressão (vídeos do TikTok/IG/WhatsApp).'],
+  recoverDetails: ['Improve detail', 'Recupera textura (cabelo, grama, camisa).'],
   sharpen: ['Sharpen', 'Nitidez adaptativa, sem serrilhado.'],
   reduceNoise: ['Reduce Noise', 'Remove ruído/granulado preservando as bordas.'],
   dehalo: ['Dehalo', 'Evita halos claros/escuros em volta das bordas.'],
-  antialiasDeblur: ['Anti-alias / Deblur', 'Tira desfoque leve e serrilhado de vídeos ampliados.'],
+  antialiasDeblur: ['Anti-alias/deblur', 'Negativo suaviza o serrilhado; positivo tira desfoque.'],
   aiSmooth: ['Suavização IA', 'Tira os pixels quadrados e deixa liso e “desenhado” (visual das IAs de upscale).'],
-  recoverOriginal: ['Recover Original Detail', 'Mistura um pouco do original (aspecto natural).'],
-  addNoise: ['Add Noise', 'Grão fino para parecer filmado (esconde o “plástico”).'],
+  recoverOriginal: ['Recover detail', 'Mistura um pouco do original (aspecto natural).'],
+  addNoise: ['Add noise', 'Grão fino para parecer filmado (esconde o “plástico”).'],
 };
 const SLOWMO = [[1, 'Desligada'], [2, '2× (50%)'], [4, '4× (25%)'], [8, '8× (12,5%)']];
 
@@ -50,10 +50,11 @@ export class TopazPanel {
         <label class="tz-title"><span class="switch"><input type="checkbox" data-tz="enh" ${tz?.enabled ? 'checked' : ''}><i></i></span> <b>Aprimoramento</b> <span class="muted small">— upscale/limpeza</span></label>
         ${tz ? `
           <label class="row"><span>Upscale (detalhe)</span><select data-tz="upscale">${['Desligado', '2×', '4×', '8×'].map((n, i) => `<option value="${i + 1}" ${(pv('upscale') || 2) === i + 1 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+          <label class="row"><span>Focus fix</span><select data-tz="focus">${['Off', 'Normal', 'Strong'].map((n, i) => `<option value="${i + 1}" ${(pv('focusFix') || 1) === i + 1 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
           <label class="row"><span>Modelo de IA</span><select data-tz="model">${TOPAZ_MODELS.map(([n], i) => `<option value="${i + 1}" ${model === i + 1 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
           ${auto ? '<p class="muted small">Valores automáticos do modelo. Toque em “Ajustar manualmente” para mexer (vira Proteus).</p><button class="wide" data-tz="manual">Ajustar manualmente (Proteus)</button>' : ''}
           ${TOPAZ_KEYS.map((k) => `<div class="tz-row ${auto ? 'locked' : ''}"><div><b>${LABELS[k][0]}</b><span class="muted small"> ${LABELS[k][1]}</span></div>
-            <div class="tz-ctl"><input type="range" min="0" max="100" step="1" data-tzp="${k}" value="${auto ? auto[k] : pv(k)}" ${auto ? 'disabled' : ''}><output>${auto ? auto[k] : Math.round(pv(k))}</output></div></div>`).join('')}
+            <div class="tz-ctl"><input type="range" min="${k === 'antialiasDeblur' ? -100 : 0}" max="100" step="1" data-tzp="${k}" value="${auto ? auto[k] : pv(k)}" ${auto ? 'disabled' : ''}><output>${auto ? auto[k] : Math.round(pv(k))}</output></div></div>`).join('')}
           <label class="row"><span>Comparar (antes / depois)</span><button data-tz="compare">${tz.enabled ? 'Ver original' : 'Ver aprimorado'}</button></label>` : ''}
       </section>
 
@@ -91,6 +92,7 @@ export class TopazPanel {
     // projetos antigos: parâmetros novos do upscale
     if (!tz.params.upscale) tz.params.upscale = { value: 1, keys: [] };
     if (!tz.params.edgeAware) tz.params.edgeAware = { value: 80, keys: [] };
+    if (!tz.params.focusFix) tz.params.focusFix = { value: 1, keys: [] };
     return tz;
   }
 
@@ -103,6 +105,7 @@ export class TopazPanel {
       if (e.target.checked) toast('Aprimoramento ligado. Compare com “Ver original”.', 'ok', 2500);
     });
     q('upscale')?.addEventListener('change', (e) => { const tz = this.ensureTopaz(); tz.params.upscale.value = +e.target.value; tz.params.upscale.keys = []; store.commit(); });
+    q('focus')?.addEventListener('change', (e) => { const tz = this.ensureTopaz(); tz.params.focusFix.value = +e.target.value; tz.params.focusFix.keys = []; store.commit(); });
     q('model')?.addEventListener('change', (e) => { const tz = this.ensureTopaz(); tz.params.model.value = +e.target.value; tz.params.model.keys = []; store.commit(); });
     q('manual')?.addEventListener('click', () => {
       const tz = this.ensureTopaz();
