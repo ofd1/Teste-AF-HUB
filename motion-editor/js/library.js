@@ -1,6 +1,6 @@
 // Biblioteca de presets: nativos, pacote FREE (presets/manifest.json), importados (.ffx/.json) e do usuário.
 import { parseFFX, retimeFFX } from './ffx.js';
-import { BUILTIN_PRESETS, ffxToPreset, applyPreset, layerToPreset, serializePreset, parsePresetJSON } from './presets.js';
+import { BUILTIN_PRESETS, rgxToParsed, ffxToPreset, applyPreset, layerToPreset, serializePreset, parsePresetJSON } from './presets.js';
 import { LAYER_FACTORIES } from './state.js';
 import { sourceTimeRaw } from './timing.js';
 import { modal, toast, pickFiles, storage } from './ui.js';
@@ -85,7 +85,7 @@ export class Library {
     const items = all.filter((p) => (this.cat === 'Todos' || p.category === this.cat) && (!q || `${p.name} ${p.category}`.toLowerCase().includes(q)));
     this.root.innerHTML = `
       <div class="lib-tools">
-        <button class="primary" data-act="import">⤒ Importar .ffx / preset</button>
+        <button class="primary" data-act="import">⤒ Importar .ffx / .rgx / preset</button>
         <button data-act="save-layer">★ Salvar camada como preset</button>
       </div>
       <label class="fit-toggle ${this.fit ? 'on' : ''}">
@@ -119,7 +119,7 @@ export class Library {
   bind() {
     const r = this.root;
     r.querySelector('[data-act="import"]').addEventListener('click', async () => {
-      const files = await pickFiles('.ffx,.aep,.json,application/json,application/octet-stream');
+      const files = await pickFiles('.ffx,.aep,.rgx,.json,application/json,application/octet-stream');
       if (files.length) this.importFiles(files);
     });
     r.querySelector('[data-act="save-layer"]').addEventListener('click', () => this.saveLayer());
@@ -251,6 +251,11 @@ export class Library {
           const preset = ffxToPreset(parsed);
           preset.fileName = f.name;
           preset._parsed = parsed;
+          imported.push(preset);
+        } else if (/\.rgx$/i.test(f.name)) {
+          const parsed = rgxToParsed(JSON.parse(await f.text()), f.name);
+          const preset = ffxToPreset(parsed);
+          preset.fileName = f.name; preset.category = 'Looks (.rgx)';
           imported.push(preset);
         } else errors.push(`${f.name}: formato não suportado`);
       } catch (e) {

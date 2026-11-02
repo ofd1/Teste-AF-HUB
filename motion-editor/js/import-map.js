@@ -45,7 +45,7 @@ export function looksFromTools(tools, strength = 100) {
       case 'expo': p.exposure += v[0] || 0; break;
       // Contrast (painel do Looks): [Contrast, Pivot, Exposure Compensation] — ex.: -0.035 / 0.2 / 0
       case 'cntr': case 'cont': case 'ctst': case 'cnst': case 'ctrs': case 'contr':
-        p.lkContrast = clampN((p.lkContrast || 0) + (v[0] || 0), -1, 2); p.lkPivot = clampN(v[1] ?? 0.5, 0, 1); p.lkComp = clampN(v[2] || 0, -2, 2); break;
+        p.lkContrast = clampN((p.lkContrast || 0) + (v[0] || 0), -1, 2); p.lkPivot = clampN((v[1] ?? 0.18) ** (1 / 2.2), 0, 1); /* pivô do Looks é em luz linear */ p.lkComp = clampN(v[2] || 0, -2, 2); break;
       // Color Blend / filtro (Looks): [R, G, B, Exposure Compensation] — ganhos por canal em luz linear
       case 'fltr': {
         const ec = 2 ** (v[3] || 0);
@@ -88,7 +88,7 @@ export function looksFromTools(tools, strength = 100) {
       // Film Grain: [?, Amount] → efeito de grão separado
       case 'fgrn': if ((v[1] || 0) > 0) extra.push({ type: 'noise', label: 'Looks · Film Grain', params: { amount: clampN((v[1] || 0) * 8, 0, 100), size: 1.2, animated: true, color: false } }); break;
       // Pop / Clarity: contraste local → nitidez de raio largo
-      case 'popt': if (v[0]) extra.push({ type: 'sharpen', label: 'Looks · Pop', params: { amount: clampN(Math.abs(v[0]), 0, 500), radius: 3, threshold: 0, lumaOnly: true } }); break;
+      case 'popt': if (v[0]) extra.push({ type: 'sharpen', label: 'Looks · Pop', params: { amount: clampN(Math.abs(v[0]), 0, 500), radius: clampN((v[1] ?? 100) / 33, 1, 20), threshold: 0, lumaOnly: true } }); break;
       case 'pop2': if (v[0]) extra.push({ type: 'sharpen', label: 'Looks · Pop', params: { amount: clampN(Math.abs(v[0]), 0, 500), radius: Math.max(1, (v[1] ?? 100) / 25), threshold: 0, lumaOnly: true } }); break;
       case 'Clar': case 'clar': if (v[0]) extra.push({ type: 'sharpen', label: 'Looks · Clarity', params: { amount: clampN(Math.abs(v[0]) * 20, 0, 500), radius: 6, threshold: 0, lumaOnly: true } }); break;
       // Bleach Bypass (negativo / cópia): [Silver %, Exposure Compensation] → menos cor e mais contraste
@@ -112,11 +112,53 @@ export function looksFromTools(tools, strength = 100) {
         p.temperature += (v[1] || 0) * k; p.tint += (v[2] || 0) * k; p.exposure += (v[3] || 0) * k;
         p.contrast += (v[4] || 0) * k; p.saturation *= 1 + ((v[5] ?? 100) / 100 - 1) * k; p.fade += (v[7] || 0) * 0.3 * k;
         p.mojoSkin = clampN(p.mojoSkin + (v[6] || 0) * 0.3, 0, 100);
-        if ((v[8] || 0) > 0) extra.push({ type: 'noise', label: 'Looks · Film Print grain', params: { amount: clampN(v[8] * 8, 0, 100), size: 1.2, animated: true, color: false } });
+        if ((v[8] || 0) > 0) extra.push({ type: 'noise', label: 'Looks · Film Print grain', params: { amount: clampN(v[8] * 0.22, 0, 40), size: 1.2, animated: true, color: false } });
+        break;
+      }
+      // Film Negative: [Film Stock, Temperature, Tint, Exposure, Contrast, Saturation, Vintage/Modern, Grain, Strength]
+      case 'filn': {
+        const k = (v[8] ?? 100) / 100;
+        p.temperature += (v[1] || 0) * k; p.tint += (v[2] || 0) * k; p.exposure += (v[3] || 0) * k;
+        p.contrast += (v[4] || 0) * k; p.saturation *= 1 + ((v[5] ?? 100) / 100 - 1) * k; p.fade += (v[6] || 0) * 0.3 * k;
+        if ((v[7] || 0) > 0) extra.push({ type: 'noise', label: 'Looks · Film Negative grain', params: { amount: clampN(v[7] * 0.22, 0, 40), size: 1.2, animated: true, color: false } });
         break;
       }
       // Auto Shoulder só age em valores acima do branco: sem efeito em 8 bits
       case 'ashl': break;
+      // Shoulder: [Rolloff Start, Brightest Value, Strength] — comprime os realces a partir de Rolloff Start
+      case 'shol': { const st = clampN(v[0] ?? 0.8, 0.05, 1), k = (v[2] ?? 100) / 100; if (st < 0.98) for (const c of ['R', 'G', 'B']) p[`gain${c}`] *= 1 - (1 - st) * 0.35 * k; p.contrast -= (1 - st) * 12 * k; break; }
+      // Renoiser: [Sharpen, Sharpen Edges Only, Grain Amount, Size, Texture, Log, Mono, …]
+      case 'reno':
+        if ((v[2] || 0) > 0) extra.push({ type: 'noise', label: 'Looks · Renoiser', params: { amount: clampN((v[2] || 0) * 0.3, 0, 60), size: clampN(1 + (v[3] ?? 50) / 50, 1, 4), animated: true, color: !v[6] } });
+        if ((v[0] || 0) > 0) extra.push({ type: 'sharpen', label: 'Looks · Renoiser sharpen', params: { amount: clampN(v[0], 0, 500), radius: 1.5, threshold: 0, lumaOnly: true } });
+        break;
+      // Cosmo (pele): [Skin Color, Skin Squeeze, Skin Soften, …] — aproxima a cor da pele e suaviza
+      case 'cosm': p.mojoSkin = clampN(p.mojoSkin + (v[1] || 0) * 0.3, 0, 100); break;
+      // Color Contrast: [Pivot, Exposure Compensation, R, G, B] — contraste por canal em volta do pivô
+      case 'ccon': {
+        const piv = clampN(v[0] ?? 0.18, 0.001, 1) ** (1 / 2.2);
+        ['R', 'G', 'B'].forEach((c, i) => { const g = v[2 + i] ?? 1; p[`gamma${c}`] *= g > 0 ? 1 / Math.sqrt(g) : 1; p[`gain${c}`] *= 1 + (g - 1) * 0.35; p[`lift${c}`] -= (g - 1) * piv * 0.15; });
+        p.exposure += v[1] || 0;
+        break;
+      }
+      // Spot Fill (luz de preenchimento num círculo): [Fill, Center X, Center Y, Radius, Spread, Falloff, Strength, R, G, B, Aspect]
+      case 'ssfl':
+        p.spotExposure += (v[0] || 0) / 100 * ((v[6] ?? 100) / 100);
+        p.spotCenter = [clampN(0.5 + (v[1] || 0) / 100, 0, 1), clampN(0.5 - (v[2] || 0) / 100, 0, 1)];
+        p.spotSize = clampN((v[3] ?? 1) * 100, 0, 400); p.spotSoft = clampN((v[4] ?? 0.5) * 100, 1, 400); p.spotAspect = clampN(v[10] ?? 1, 0.1, 4);
+        p.spotColor = [v[7] ?? 1, v[8] ?? 1, v[9] ?? 1, 1];
+        break;
+      // Shadow Fill: [Fill, R, G, B] — levanta as sombras com uma cor
+      case 'shfl': ['R', 'G', 'B'].forEach((c, i) => { p[`lift${c}`] += (v[0] || 0) / 100 * 0.25 * (v[1 + i] ?? 1); }); break;
+      // 3-Strip (Technicolor de 3 tiras): cores densas e saturadas
+      case '3stp': p.saturation *= 1 + (v[0] || 0) / 100 * 0.8; p.contrast += (v[0] || 0) * 0.15; p.exposure += v[1] || 0; break;
+      // Mojo (versão 1): [Mojo, Tint, Balance, Warm It, Punch It, Bleach It, Skin Color, Skin Squeeze, …, Strength]
+      case 'mojo': { const k = (v[10] ?? 100) / 100; p.mojo = Math.max(p.mojo, (v[0] || 0) * k); p.mojoTint = ((v[1] ?? 50) - 50) * 2 * k; p.punch += (v[4] || 0) * k; p.bleach += (v[5] || 0) * k; p.temperature += (v[3] || 0) * 0.3 * k; break; }
+      // Source Space / ajuste de entrada: [Source, Exposure, Contrast, Saturation, White, Black]
+      case 'sspc': p.exposure += v[1] || 0; p.contrast += (v[2] || 0) * 30; p.saturation *= (v[3] ?? 100) / 100; break;
+      // Shutter Streak e Star: brilhos de realce → Anamorphic Flare do Looks
+      case 'strk': p.anamSize = Math.max(p.anamSize, clampN(v[0] || 0, 0, 1000)); p.anamBoost = clampN(2 ** (v[1] || 0), 0, 5); break;
+      case 'star': extra.push({ type: 'starGlow', label: 'Looks · Star', params: { threshold: clampN((v[1] ?? 0.5) * 100, 0, 100), amount: clampN(2 ** (v[3] || 0) * 2, 0, 10), angle: v[4] ?? 45 } }); break;
       // Lens Vignette (Looks3.aex): [Vignette (tamanho), Amount, Highlights, Center X, Center Y, Aspect, Anamorphic]
       case 'lenv': p.vignette = Math.max(p.vignette, (v[1] ?? 50) * 0.35); p.vignetteSize = clampN(75 - (v[0] ?? 50) * 0.5, 15, 85); break;
       // Optical Diffusion (manual do Looks): Density, Size, Falloff, Glow, Highlights Only, Luster, Color…
@@ -163,25 +205,32 @@ export function looksFromTools(tools, strength = 100) {
       // Lens Distortion (manual: Distortion, Flatten)
       case 'lnsd': p.lensDistort = clampN(v[0] || 0, -100, 100); p.lensFlatten = clampN(v[1] || 0, 0, 100); break;
       case 'csta': {
-        // Colorista: [?, força, exposição, lift RGB, gamma RGB, gain RGB, ?, HSL de 8 cores (matiz/sat/lum) …, temperatura (216), tint (217)]
-        p.liftR += ((v[3] ?? 1) - 1) * 0.6; p.liftG += ((v[4] ?? 1) - 1) * 0.6; p.liftB += ((v[5] ?? 1) - 1) * 0.6;
-        p.gammaR *= v[6] ?? 1; p.gammaG *= v[7] ?? 1; p.gammaB *= v[8] ?? 1;
-        p.gainR *= v[9] ?? 1; p.gainG *= v[10] ?? 1; p.gainB *= v[11] ?? 1;
-        p.exposure += (v[2] || 0) * 0.25;
-        // Colorista (Looks3.aex): …, Saturation (12), Hue R..M (13-20), Sat R..M (21-28), Lum R..M (29-36), …,
-        // Temperature (216), Tint (217), Contrast (218)
-        if (v[12] !== undefined) p.saturation *= clampN(v[12], 0, 300) / 100;
-        HSL.forEach((k, i) => {
-          p[`hsl${k}H`] += v[13 + i] || 0;
-          p[`hsl${k}S`] += v[21 + i] || 0;
-          p[`hsl${k}L`] += v[29 + i] || 0;
+        // Colorista: [?, Strength, Exposure, Lift RGB, Gamma RGB, Gain RGB, Saturation, HSL de 8 cores…, Sat×Lum, Sat×Sat,
+        // Temperature (216), Tint (217), Contrast (218)] — tudo pesado pelo Strength
+        const k = clampN((v[1] ?? 100) / 100, 0, 1);
+        ['R', 'G', 'B'].forEach((c, i) => {
+          p[`lift${c}`] += ((v[3 + i] ?? 1) - 1) * 0.6 * k;
+          p[`gamma${c}`] *= 1 + ((v[6 + i] ?? 1) - 1) * k;
+          p[`gain${c}`] *= 1 + ((v[9 + i] ?? 1) - 1) * k;
         });
-        p.temperature += v[216] || 0;
-        p.tint += v[217] || 0;
-        p.contrast += (v[218] || 0) * 30;
+        p.exposure += (v[2] || 0) * 0.25 * k;
+        if (v[12] !== undefined) p.saturation *= 1 + (clampN(v[12], 0, 300) / 100 - 1) * k;
+        HSL.forEach((c, i) => {
+          p[`hsl${c}H`] += (v[13 + i] || 0) * k;
+          p[`hsl${c}S`] += (v[21 + i] || 0) * k;
+          p[`hsl${c}L`] += (v[29 + i] || 0) * k;
+        });
+        // curvas Sat × Lum (202-208) e Sat × Sat (209-215), confirmadas nos presets .rgx
+        if (v.length > 215 && v.slice(202, 216).some((x) => Math.abs(x || 0) > 1e-4)) {
+          p.satLum = (p.satLum || [0, 0, 0, 0, 0, 0, 0]).map((x, i) => clampN(x + (v[202 + i] || 0) * k, -1, 2));
+          p.satSat = (p.satSat || [0, 0, 0, 0, 0, 0, 0]).map((x, i) => clampN(x + (v[209 + i] || 0) * k, -1, 2));
+        }
+        p.temperature += (v[216] || 0) * k;
+        p.tint += (v[217] || 0) * k;
+        p.contrast += (v[218] || 0) * 30 * k;
         break;
       }
-      case 'crv2': {
+      case 'crv2': case 'curv': {
         // Curves (ordem dos Looks do MBL): por canal (1 = RGB, 2 = R, 3 = G, 4 = B): Contrast, Shadows, Midtones,
         // Highlights, Point 1-5; depois Gamma Space (36) e os pontos livres (37 = quantidade, 38… pares entrada/ajuste)
         p.contrast += (v[0] || 0) * 35;
@@ -207,9 +256,11 @@ export function looksFromTools(tools, strength = 100) {
         break;
       }
       // Saturation: [Saturation %, Exposure Compensation]
-      case 'satu': p.saturation *= (v[0] ?? 100) / 100; p.exposure += v[1] || 0; break;
+      // (a compensação de exposição do Saturation compensa o escurecimento do Looks em luz linear; aqui não escurece)
+      case 'satu': p.saturation *= (v[0] ?? 100) / 100; break;
       // Warm/Cool: [Warm/Cool (−1..1), Tint, Exposure Compensation]
-      case 'wmcl': p.temperature += (v[0] || 0) * 60; p.tint += (v[1] || 0) * 60; p.exposure += v[2] || 0; break;
+      // (em stops por canal, luz linear: R = −W−T+E, G = T+E, B = W+E — Warm/Cool negativo esquenta)
+      case 'wmcl': { const w = v[0] || 0, t = v[1] || 0, e = v[2] || 0; [-w - t + e, t + e, w + e].forEach((st, i) => { p[`gain${'RGB'[i]}`] *= 2 ** (st / 2.2); }); break; }
       // Shadows/Highlights: [Shadows 0..1 (abre as sombras), Highlights −1..0 (segura os realces)]
       case 'shad': for (const k of ['R', 'G', 'B']) { p[`lift${k}`] += (v[0] || 0) * 0.12; p[`gain${k}`] *= 1 + (v[1] || 0) * 0.15; } break;
       // HSL Colors: [Master Hue, Master Sat, Master Lum, Hue R..M, Sat R..M, Lum R..M]
@@ -218,16 +269,17 @@ export function looksFromTools(tools, strength = 100) {
         HSL.forEach((k, i) => { p[`hsl${k}H`] += v[3 + i] || 0; p[`hsl${k}S`] += v[11 + i] || 0; p[`hsl${k}L`] += v[19 + i] || 0; });
         break;
       // 4-Way Color: [Exposure, Contrast, Strength, Highlight RGB+Sat, Midtone RGB+Sat, Shadow RGB+Sat, Master RGB+Sat, …] (cores: 0,5 = neutro)
-      // 4-Way Color: [?, ?, Saturation, Shadows RGB+força, Midtones RGB+força, Highlights RGB+força, Master RGB+força]
-      // (cores: 0,5 = neutro; força em %) — o master entra no ganho
+      // 4-Way Color (nomes confirmados nos presets .rgx do Looks): [Exposure, Contrast, Strength,
+      // Highlight R G B Sat, Midtone R G B Sat, Shadow R G B Sat, Master R G B Sat, Midpoint, Width, …] — cores: 0,5 = neutro
       case '4way': {
-        const w = (b, l) => ((v[b + l] ?? 0.5) - 0.5) * 2 * (v[b + 3] ?? 100) / 100;
-        ['R', 'G', 'B'].forEach((c, l) => {
-          p[`lift${c}`] += w(3, l);
-          p[`gamma${c}`] *= clampN(1 / Math.max(0.1, 1 - w(7, l)), 0.25, 4);
-          p[`gain${c}`] *= 1 + w(11, l) + w(15, l);
+        const k = (v[2] ?? 100) / 100, o = (i) => ((v[i] ?? 0.5) - 0.5) * 2 * k;
+        p.exposure += (v[0] || 0) * k; p.contrast += (v[1] || 0) * k;
+        ['R', 'G', 'B'].forEach((c, i) => {
+          p[`gain${c}`] *= 1 + o(3 + i) * 0.5 + o(15 + i) * 0.5;
+          p[`gamma${c}`] *= 1 + o(7 + i) * 0.6 + o(15 + i) * 0.3;
+          p[`lift${c}`] += o(11 + i) * 0.25 + o(15 + i) * 0.1;
         });
-        if (v[2] !== undefined && Math.abs(v[2] - 100) > 1e-6) p.saturation *= clampN(v[2], 0, 300) / 100;
+        p.saturation *= 1 + (((v[6] ?? 100) + (v[10] ?? 100) + (v[14] ?? 100)) / 3 / 100 - 1) * k * 0.7 + ((v[18] ?? 100) / 100 - 1) * k;
         break;
       }
 
@@ -336,6 +388,24 @@ export const IMPORT_RULES = [
   { vendor: 'Sapphire / BCC', plugin: 'S_Clouds / BCC Fast Fog', to: 'clouds', test: /s_clouds|bcc.*fog/i, map: { density: { n: ['density', 'amount'] }, speed: { n: ['speed'] } } },
   { vendor: 'Sapphire / BCC', plugin: 'S_Sparkles / BCC Sparkles', to: 'sparkles', test: /s_sparkles|bcc.*sparkl/i, map: { amount: { n: ['brightness'] }, threshold: { n: ['threshold'], conv: (v) => (v <= 1 ? v * 100 : v) } } },
   { vendor: 'Video Copilot', plugin: 'Element 3D', to: 'element3d', test: /element ?3d|vc ?element/i },
+  // efeitos do projeto vini_centa (.aep)
+  { vendor: 'Sapphire', plugin: 'S_Hotspots', to: 'hotspots', test: /s_hotspots/i, map: { threshold: { n: ['threshold'] }, blur: { n: ['blur input'], conv: (v) => (v < 2 ? v * 20 : v) }, saturation: { n: ['saturation'] }, brightness: { n: ['brightness'] }, addColor: { n: ['threshold add color'] } } },
+  { vendor: 'Adobe', plugin: 'Minimax', to: 'minimax', match: ['ADBE Minimax'], map: { operation: { n: ['operation'], conv: (v) => (v === 2 || v === 3 ? 2 : 1) }, radius: { n: ['radius'] }, direction: { n: ['direction'], conv: (v) => Math.min(3, Math.max(1, Math.round(v))) } } },
+  { vendor: 'Adobe', plugin: 'CC Jaws', to: 'ccJaws', test: /^cc jaws/i, map: { completion: { n: ['completion'] }, height: { n: ['height'] }, width: { n: ['width'] } } },
+  { vendor: 'Adobe', plugin: 'Card Wipe', to: 'cardWipe', test: /cardwipe|card wipe/i, map: { completion: { n: ['transition completion'] }, width: { n: ['transition width'] }, rows: { n: ['rows'] }, columns: { n: ['columns'] }, axis: { n: ['flip axis'], conv: (v) => (v >= 2 ? 2 : 1) }, order: { n: ['flip order'], conv: (v) => (v <= 2 ? 1 : v <= 4 ? 2 : 3) } } },
+  { vendor: 'Cinema Spice', plugin: 'Polytrace', to: 'polytrace', test: /polytrace/i, map: { threshold: { n: ['threshold'] }, size: { n: ['size'] } } },
+  { vendor: 'Sapphire', plugin: 'S_AutoPaint', to: 'autoPaint', test: /s_autopaint/i, map: { frequency: { n: ['frequency'] } } },
+  { vendor: 'Sapphire', plugin: 'S_ReverseClip', to: 'twixtor', test: /s_reverseclip/i, set: { speed: -100 } },
+  // Magic Bullet Film (matchName genérico "Magic_Bullet_Suite_Magic_Bullet"): Negative Stock, Color Temperature, Exposure, Grain, Strength
+  { vendor: 'Red Giant', plugin: 'Magic Bullet Film', to: 'looks', test: /magic_bullet_suite_magic_bullet|magic ?bullet ?film/i,
+    expand: (fx, raw) => {
+      const k = (raw('strength') ?? 100);
+      const { params, extra } = looksFromTools([{ id: 'filp', enabled: true, values: [raw('negative stock') || 0, (raw('color temperature') || 0), raw('tint') || 0, raw('exposure') || 0, raw('contrast') || 0, raw('saturation') ?? 100, 0, 0, 0, 100] }], k);
+      const out = [{ type: 'looks', label: fx.name || 'Magic Bullet Film', params }, ...extra];
+      const g = raw('grain') || 0;
+      if (g > 0) out.push({ type: 'noise', label: 'Magic Bullet Film · grão', params: { amount: Math.min(60, g * 0.3 * k / 100), size: 1.3, animated: true, color: false } });
+      return out;
+    } },
   { vendor: 'Sapphire', plugin: 'S_Shake', to: 'shake', test: /s_shake|s_camerashake/i,
     map: {
       amount: { n: ['amplitude', 'shake amp', 'amp'], conv: (v) => (v < 20 ? v * 100 : v) }, frequency: { n: ['frequency', 'shake freq', 'freq'], conv: (v) => (v > 60 ? Math.min(40, v / 250) : v) },

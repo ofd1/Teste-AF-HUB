@@ -199,6 +199,116 @@ void main() {
   gl_FragColor = fixpre(s + vec4(acc * u_amt, 0.0));
 }`);
 
+
+// S_Hotspots: só as áreas mais claras que o limiar, com a cor original (o resto fica preto)
+const HOTSPOTS = frag(`
+uniform float u_thr, u_sat, u_bri, u_soft; uniform vec3 u_addc;
+void main() {
+  vec4 s = texture2D(u_tex, v_uv);
+  vec3 c = unpre(s).rgb;
+  float t = u_thr + dot(u_addc, c) * 0.5;
+  float k = smoothstep(t, t + u_soft, luma(c));
+  vec3 o = mix(vec3(luma(c)), c, u_sat) * k * u_bri;
+  gl_FragColor = vec4(clamp(o, 0.0, 1.0) * s.a, s.a);
+}`);
+// Minimax do AE: máximo (dilata o claro) ou mínimo (dilata o escuro) num raio, separável
+const MINIMAX = frag(`
+uniform vec2 u_dir; uniform float u_r, u_mode;
+void main() {
+  vec4 m = texture2D(u_tex, v_uv);
+  for (int i = 1; i <= 40; i++) {
+    if (float(i) > u_r) break;
+    vec4 a = texture2D(u_tex, v_uv + u_dir * u_texel * float(i)), b = texture2D(u_tex, v_uv - u_dir * u_texel * float(i));
+    m = u_mode > 0.5 ? min(m, min(a, b)) : max(m, max(a, b));
+  }
+  gl_FragColor = m;
+}`);
+// CC Jaws: a imagem "morde" e some com dentes em zigue-zague
+const JAWS = frag(`
+uniform float u_comp, u_teeth, u_hgt, u_horiz; uniform vec2 u_c;
+void main() {
+  vec4 s = texture2D(u_tex, v_uv);
+  vec2 c = contentUV(v_uv);
+  float a = u_horiz > 0.5 ? c.y : c.x, b = u_horiz > 0.5 ? c.x : c.y, cb = u_horiz > 0.5 ? u_c.x : u_c.y;
+  float tooth = abs(fract(a * u_teeth) - 0.5) * 2.0 * u_hgt;
+  float open = u_comp * (1.0 + u_hgt);
+  float d = b - cb;
+  float edgeTop = -open * cb + tooth * (u_comp > 0.0 ? 1.0 : 0.0);
+  float edgeBot = open * (1.0 - cb) - tooth * (u_comp > 0.0 ? 1.0 : 0.0);
+  bool gone = d > edgeTop && d < edgeBot && u_comp > 0.001;
+  gl_FragColor = gone ? vec4(0.0) : s;
+}`);
+// Card Wipe: cartões que viram em sequência (escala em X ou Y pelo cosseno do giro)
+const CARDS = frag(`
+uniform float u_comp, u_rows, u_cols, u_width, u_axis, u_order, u_rnd;
+void main() {
+  vec2 c = contentUV(v_uv);
+  vec2 g = vec2(u_cols, u_rows);
+  vec2 cell = floor(c * g), f = fract(c * g);
+  float ord = u_order < 1.5 ? cell.x / max(1.0, u_cols - 1.0) : u_order < 2.5 ? cell.y / max(1.0, u_rows - 1.0) : hash1(dot(cell, vec2(7.1, 31.7)) + u_rnd);
+  float w = u_width / 100.0;
+  float tt = clamp((u_comp * (1.0 + w) - ord * 1.0) / max(w, 0.01), 0.0, 1.0);
+  float ang = tt * 3.14159265, k = cos(ang);
+  if (abs(k) < 0.02 || tt >= 0.5) { gl_FragColor = vec4(0.0); return; }
+  float axisV = u_axis > 1.5 ? f.y : f.x;
+  float q = (axisV - 0.5) / k + 0.5;
+  if (q < 0.0 || q > 1.0) { gl_FragColor = vec4(0.0); return; }
+  vec2 ff = u_axis > 1.5 ? vec2(f.x, q) : vec2(q, f.y);
+  vec4 s = texture2D(u_tex, fromContent((cell + ff) / g));
+  gl_FragColor = vec4(s.rgb * (0.6 + 0.4 * k), s.a);
+}`);
+// Polytrace (low poly / plexus): pontos nas bordas, ligados por linhas aos vizinhos, sobre a imagem
+const POLY = frag(`
+uniform float u_cell, u_thr, u_lw, u_pt, u_amt, u_fill; uniform vec3 u_col;
+vec2 vtx(vec2 cell, out float on) {
+  float h = hash1(dot(cell, vec2(12.9, 78.2)));
+  vec2 p = (cell + 0.2 + 0.6 * vec2(h, hash1(h * 17.0))) * u_cell;
+  vec2 uv = p / u_size, t = u_texel * 2.0;
+  float gx = luma(texture2D(u_tex, uv + vec2(t.x, 0.0)).rgb) - luma(texture2D(u_tex, uv - vec2(t.x, 0.0)).rgb);
+  float gy = luma(texture2D(u_tex, uv + vec2(0.0, t.y)).rgb) - luma(texture2D(u_tex, uv - vec2(0.0, t.y)).rgb);
+  on = step(u_thr, length(vec2(gx, gy)) * 4.0) * texture2D(u_tex, uv).a;
+  return p;
+}
+float seg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-3), 0.0, 1.0); return length(pa - ba * h); }
+void main() {
+  vec4 s = texture2D(u_tex, v_uv);
+  vec2 px = v_uv * u_size, base = floor(px / u_cell);
+  float line = 0.0, dot1 = 0.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    float on; vec2 a = vtx(base + vec2(float(i), float(j)), on);
+    if (on < 0.5) continue;
+    dot1 = max(dot1, smoothstep(u_pt, u_pt * 0.5, length(px - a)));
+    for (int k = 0; k < 3; k++) {
+      vec2 o = k == 0 ? vec2(1.0, 0.0) : k == 1 ? vec2(0.0, 1.0) : vec2(1.0, 1.0);
+      float on2; vec2 b = vtx(base + vec2(float(i), float(j)) + o, on2);
+      if (on2 > 0.5) line = max(line, smoothstep(u_lw, 0.0, seg(px, a, b)));
+    }
+  }
+  vec3 c = unpre(s).rgb * (1.0 - u_fill);
+  vec3 o = mix(unpre(s).rgb, c, step(0.5, u_fill)) + u_col * max(line * 0.8, dot1) * u_amt;
+  gl_FragColor = vec4(clamp(o, 0.0, 1.0) * max(s.a, max(line, dot1) * u_amt), max(s.a, max(line, dot1) * u_amt));
+}`);
+// AutoPaint: pinceladas (Kuwahara anisotrópico simples + textura de tela)
+const PAINT = frag(`
+uniform float u_r, u_tex2s;
+void main() {
+  vec4 c = texture2D(u_tex, v_uv);
+  vec3 best = c.rgb; float bv = 1e9;
+  for (int q = 0; q < 4; q++) {
+    vec2 sg = vec2(q == 0 || q == 2 ? -1.0 : 1.0, q < 2 ? -1.0 : 1.0);
+    vec3 m = vec3(0.0), m2 = vec3(0.0);
+    for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) {
+      vec3 a = texture2D(u_tex, v_uv + sg * vec2(float(i), float(j)) * u_texel * u_r / 3.0).rgb;
+      m += a; m2 += a * a;
+    }
+    m /= 16.0; vec3 v = m2 / 16.0 - m * m;
+    float vv = v.r + v.g + v.b;
+    if (vv < bv) { bv = vv; best = m; }
+  }
+  float canvasTex = (vnoise(v_uv / u_texel * 0.35) - 0.5) * u_tex2s;
+  gl_FragColor = vec4(clamp(best + canvasTex, 0.0, c.a), c.a);
+}`);
+
 const fr = (env) => env.fps || 24;
 
 export default [
@@ -286,5 +396,54 @@ export default [
       num('twinkle', 'Piscar', 3, 0, 20, 0.1), num('rays', 'Raios', 4, 2, 12, 1), ang('rotate', 'Rotação', 0), col('color', 'Cor', [1, 1, 1, 1])],
     pad: (p) => p.length,
     render: (src, p, env) => env.gl.pass(SPARK, { u_tex: src, u_cell: p.cell * env.scale, u_thr: p.threshold / 100, u_len: p.length * env.scale, u_amt: p.amount, u_tw: p.twinkle, u_rays: p.rays, u_rot: rad(p.rotate), u_col: rgb(p.color) }),
+  },
+  {
+    type: 'hotspots', label: 'Hotspots', category: 'Luz e brilho', plugin: 'S_Hotspots (Sapphire)',
+    description: 'Mostra só as áreas mais claras que o limiar, com a cor original; o resto fica preto. Use com modo Adicionar/Tela numa cópia para brilho nos realces.',
+    params: [num('threshold', 'Threshold', 0.7, 0, 2, 0.01), num('blur', 'Blur Input', 0, 0, 100, 0.5), col('addColor', 'Threshold Add Color', [0, 0, 0, 1]),
+      num('saturation', 'Saturation', 1, 0, 4, 0.01), num('brightness', 'Brightness', 1, 0, 10, 0.01), num('soft', 'Suavidade da borda', 0.04, 0, 0.5, 0.005)],
+    render: (src, p, env) => {
+      const s = p.blur > 0 ? env.gl.blur(src, p.blur * env.scale) : src;
+      return env.gl.pass(HOTSPOTS, { u_tex: s, u_thr: p.threshold, u_sat: p.saturation, u_bri: p.brightness, u_soft: Math.max(0.001, p.soft), u_addc: rgb(p.addColor) });
+    },
+  },
+  {
+    type: 'minimax', label: 'Minimax', category: 'Estilizar', plugin: 'Minimax (After Effects)',
+    params: [sel('operation', 'Operação', ['Máximo (claro cresce)', 'Mínimo (escuro cresce)'], 1), num('radius', 'Raio', 3, 0, 40, 1), sel('direction', 'Direção', ['Horizontal e vertical', 'Só horizontal', 'Só vertical'], 1)],
+    render: (src, p, env) => {
+      const r = Math.round(p.radius * env.scale); if (r < 1) return src;
+      let o = src; const mode = (p.operation | 0) === 2 ? 1 : 0;
+      if ((p.direction | 0) !== 3) o = env.gl.pass(MINIMAX, { u_tex: o, u_dir: [1, 0], u_r: r, u_mode: mode });
+      if ((p.direction | 0) !== 2) o = env.gl.pass(MINIMAX, { u_tex: o, u_dir: [0, 1], u_r: r, u_mode: mode });
+      return o;
+    },
+  },
+  {
+    type: 'ccJaws', label: 'CC Jaws', category: 'Transições', plugin: 'CC Jaws (After Effects)',
+    params: [num('completion', 'Completion %', 0, 0, 100), pos('center', 'Center', [0.5, 0.5]), sel('direction', 'Direção', ['Vertical (abre para cima/baixo)', 'Horizontal'], 1), num('height', 'Altura dos dentes %', 8, 0, 100), num('width', 'Largura dos dentes %', 10, 1, 100)],
+    render: (src, p, env) => env.gl.pass(JAWS, { u_tex: src, u_comp: p.completion / 100, u_c: p.center, u_hgt: p.height / 100, u_teeth: 100 / Math.max(1, p.width), u_horiz: (p.direction | 0) === 2 ? 1 : 0 }),
+  },
+  {
+    type: 'cardWipe', label: 'Card Wipe', category: 'Transições', plugin: 'Card Wipe (After Effects)',
+    params: [num('completion', 'Transition Completion %', 0, 0, 100), num('width', 'Transition Width %', 50, 1, 100), num('rows', 'Rows', 1, 1, 100, 1), num('columns', 'Columns', 10, 1, 100, 1),
+      sel('axis', 'Flip Axis', ['X', 'Y'], 1), sel('order', 'Flip Order', ['Esquerda → direita', 'Cima → baixo', 'Aleatório'], 1), num('seed', 'Semente', 1, 0, 100, 1)],
+    render: (src, p, env) => env.gl.pass(CARDS, { u_tex: src, u_comp: p.completion / 100, u_rows: Math.max(1, p.rows), u_cols: Math.max(1, p.columns), u_width: p.width, u_axis: p.axis, u_order: p.order, u_rnd: p.seed }),
+  },
+  {
+    type: 'polytrace', label: 'Polytrace (low poly)', category: 'Estilizar', plugin: 'Polytrace (Cinema Spice)',
+    description: 'Pontos nas bordas da imagem ligados por linhas (visual low-poly / plexus).',
+    params: [num('size', 'Size (espaçamento px)', 40, 6, 400), num('threshold', 'Threshold', 0.25, 0, 2, 0.01), num('lineWidth', 'Espessura da linha', 1.5, 0.3, 10, 0.1), num('point', 'Tamanho do ponto', 3, 0, 20, 0.5),
+      num('amount', 'Intensidade', 1, 0, 3, 0.05), col('color', 'Cor', [1, 1, 1, 1]), bool('only', 'Esconder a imagem', false)],
+    render: (src, p, env) => env.gl.pass(POLY, { u_tex: src, u_cell: Math.max(4, p.size * env.scale), u_thr: p.threshold, u_lw: p.lineWidth * env.scale, u_pt: Math.max(0.1, p.point * env.scale), u_amt: p.amount, u_col: rgb(p.color), u_fill: p.only ? 1 : 0 }),
+  },
+  {
+    type: 'autoPaint', label: 'AutoPaint (pintura)', category: 'Estilizar', plugin: 'S_AutoPaint (Sapphire)',
+    description: 'Transforma o vídeo em pintura: pinceladas que mantêm as bordas e textura de tela.',
+    params: [num('brush', 'Tamanho do pincel', 8, 1, 60, 0.5), num('frequency', 'Detalhe (Frequency)', 50, 0, 200), num('texture', 'Textura da tela %', 15, 0, 100)],
+    render: (src, p, env) => {
+      const r = p.brush * env.scale * (1.4 - Math.min(1, p.frequency / 200));
+      let o = env.gl.pass(PAINT, { u_tex: src, u_r: r, u_tex2s: 0 });
+      return env.gl.pass(PAINT, { u_tex: o, u_r: r * 0.5, u_tex2s: p.texture / 100 * 0.12 });
+    },
   },
 ];

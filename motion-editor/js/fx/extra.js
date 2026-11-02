@@ -92,6 +92,8 @@ const LGG = colorFrag('uniform vec3 u_lift, u_gamma, u_gain; uniform float u_sat
 
 // "Looks": um único efeito com as ferramentas do Magic Bullet Looks (Colorista, Mojo II, Curves, Haze…).
 const LOOKS = frag(`
+uniform float u_svl[7], u_svs[7]; uniform float u_svon;
+float curve7(float x, float c[7]) { x = clamp(x, 0.0, 1.0) * 6.0; float r = c[6]; for (int i = 0; i < 6; i++) { if (x >= float(i) && x < float(i + 1)) r = mix(c[i], c[i + 1], x - float(i)); } return r; }
 uniform float u_mtint; uniform float u_exp, u_sat, u_hue, u_con, u_fade, u_mojo, u_cool, u_skin, u_punch, u_bleach, u_vig, u_vsize, u_strength, u_temp, u_tint, u_fdens;
 uniform vec3 u_filter, u_lift, u_gamma, u_gain, u_mixr, u_mixg, u_mixb; uniform float u_mixamt;
 uniform vec3 u_hsl[8];
@@ -212,6 +214,11 @@ void main() {
   vec3 sCurve = mix(cx, cx * cx * (3.0 - 2.0 * cx), clamp(u_con, 0.0, 1.0) * 1.2);
   r = u_con >= 0.0 ? sCurve + (r - cx) : (r - 0.45) * (1.0 + u_con) + 0.45;
   r = mix(vec3(luma(r)), r, u_sat);
+  // Colorista: curvas Saturação × Luminância e Saturação × Saturação (7 pontos, 0 = neutro, −1 = sem cor)
+  if (u_svon > 0.5) {
+    float lw = luma(r), sw = max(r.r, max(r.g, r.b)) - min(r.r, min(r.g, r.b));
+    r = mix(vec3(lw), r, max(0.0, 1.0 + curve7(lw, u_svl)) * max(0.0, 1.0 + curve7(sw, u_svs)));
+  }
   r += vec3(curveDy(clamp(r.r, 0.0, 1.0)), curveDy(clamp(r.g, 0.0, 1.0)), curveDy(clamp(r.b, 0.0, 1.0)));
   r = mix(r, vec3(0.08) + r * 0.86, u_fade);
   // vinheta
@@ -306,7 +313,7 @@ const EFFECTS = [
       num('temperature', 'Temperatura', 0, -100, 100), num('tint', 'Tint', 0, -100, 100),
       num('contrast', 'Contraste', 0, -100, 100), num('saturation', 'Saturação %', 100, 0, 300),
       num('mojo', 'Mojo (teal & orange) %', 0, 0, 100), num('mojoCool', 'Mojo – esfriar %', 50, 0, 100), num('mojoSkin', 'Mojo – pele quente %', 50, 0, 100),
-      num('punch', 'Punch %', 0, 0, 100), num('bleach', 'Bleach %', 0, -100, 100), adv(num('mojoTint', 'Mojo Tint', 0, -100, 100)), num('fade', 'Haze / fade %', 0, 0, 100),
+      num('punch', 'Punch %', 0, 0, 100), num('bleach', 'Bleach %', 0, -100, 100), adv(num('mojoTint', 'Mojo Tint', 0, -100, 100)), { key: 'satLum', label: 'Colorista – Sat × Lum', kind: 'hidden', default: [0, 0, 0, 0, 0, 0, 0] }, { key: 'satSat', label: 'Colorista – Sat × Sat', kind: 'hidden', default: [0, 0, 0, 0, 0, 0, 0] }, num('fade', 'Haze / fade %', 0, 0, 100),
       num('vignette', 'Vinheta %', 0, 0, 100), num('vignetteSize', 'Tamanho da vinheta %', 50, 0, 100),
       num('diffusion', 'Difusão (glow) %', 0, 0, 300), num('diffusionRadius', 'Raio da difusão', 60, 1, 600), num('diffusionThreshold', 'Limiar da difusão %', 60, 0, 100),
       num('chroma', 'Aberração cromática', 0, 0, 50, 0.1),
@@ -340,6 +347,7 @@ const EFFECTS = [
       const curve = [0, 1, 2, 3].flatMap((i) => pts[i] || [1, 0]);
       let out = gl.pass(LOOKS, {
         u_tex: src, u_exp: p.exposure, u_sat: p.saturation / 100, u_hue: p.hue / 360, u_con: p.contrast / 100, u_fade: p.fade / 100,
+        u_svl: { f1: (p.satLum && p.satLum.length === 7 ? p.satLum : [0, 0, 0, 0, 0, 0, 0]) }, u_svs: { f1: (p.satSat && p.satSat.length === 7 ? p.satSat : [0, 0, 0, 0, 0, 0, 0]) }, u_svon: [...(p.satLum || []), ...(p.satSat || [])].some((x) => Math.abs(x) > 1e-4) ? 1 : 0,
         u_mtint: Math.max(-1, Math.min(1, (p.mojoTint || 0) / 100)), u_mojo: p.mojo / 100, u_cool: (p.mojoCool ?? 50) / 50, u_skin: (p.mojoSkin ?? 50) / 50, u_punch: (p.punch || 0) / 100, u_bleach: (p.bleach || 0) / 100,
         u_temp: (p.temperature || 0) / 100, u_tint: (p.tint || 0) / 100,
         u_vig: p.vignette / 100, u_vsize: p.vignetteSize / 100, u_strength: s,

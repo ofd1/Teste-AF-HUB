@@ -163,6 +163,41 @@ function convertProp(src, kind, conv) {
 
 const kindFromFfx = (t) => ({ color: 'color', angle: 'angle', checkbox: 'bool', point: 'point', point3d: 'point', popup: 'select' }[t] || 'number');
 
+/**
+ * Preset do Magic Bullet Looks salvo como .rgx (JSON do Looks 4/5): lista de ferramentas com os parâmetros na mesma
+ * ordem dos dados do .ffx/.aep → vira o mesmo efeito Looks. Ferramentas desligadas (isBypassed) são ignoradas.
+ */
+export function rgxToParsed(json, fileName = 'Look') {
+  const blocks = json?.content?.blocks || [];
+  const head = blocks.find((b) => /preset\.header$/.test(b.block_type_id))?.values || {};
+  const tc = blocks.find((b) => /toolchain$/.test(b.block_type_id))?.values || {};
+  let chain = tc.tools;
+  // preset do Colorista V (param_streams): vira a ferramenta Colorista do Looks (mesmas rodas, HSL e curvas de saturação)
+  if (!Array.isArray(chain) && Array.isArray(tc.param_streams)) {
+    const g = (n) => tc.param_streams.find((q) => q.name === n)?.value;
+    const fl = (n, len) => { const f = g(n)?.floats || []; return Array.from({ length: len }, (_, i) => f[i] ?? 0); };
+    const v = new Array(228).fill(0);
+    const tw = g('three-way')?.floats || [1, 1, 1, 1, 1, 1, 1, 1, 1];
+    v[1] = g('strength') ?? 100; v[2] = g('exposure') || 0;
+    for (let i = 0; i < 9; i++) v[3 + i] = tw[i] ?? 1;
+    v[12] = 100 + (g('saturation') || 0);
+    fl('hsl', 24).forEach((x, i) => { v[13 + i] = x; });
+    fl('saturation-eq', 14).forEach((x, i) => { v[202 + i] = x; });
+    v[216] = g('temperature') || 0; v[217] = g('tint') || 0; v[218] = (g('contrast') || 0) / 100;
+    chain = [{ toolId: 'csta', parameters: v.map((value) => ({ value })) }];
+    if (g('pop')) chain.push({ toolId: 'popt', parameters: [{ value: g('pop') }, { value: 100 }] });
+    if (g('vignette')) chain.push({ toolId: 'lenv', parameters: [{ value: 50 }, { value: g('vignette') }] });
+  }
+  if (!Array.isArray(chain)) throw new Error('arquivo .rgx sem a lista de ferramentas do Looks');
+  const tools = chain.map((t) => ({ id: t.toolId, enabled: !t.isBypassed, category: t.category, values: (t.parameters || []).map((q) => (Number.isFinite(q.value) ? q.value : 0)) }));
+  // Colorista no .rgx tem um parâmetro a menos no início do que no .ffx (força fica no índice 1 nos dois): mantém como está
+  const name = json?.naming?.name || fileName.replace(/\.rgx$/i, '');
+  return {
+    format: 'Magic Bullet Looks (.rgx)', name, warnings: [], matchNames: ['MB Looks'], properties: [],
+    effects: [{ matchName: 'MB Looks', name, looksTools: tools, params: [{ name: 'Strength', type: 'number', value: [(head.strength ?? 1) * 100], keyframes: [] }] }],
+  };
+}
+
 export function ffxToPreset(parsed) {
   const preset = {
     id: uid('ffx'), name: parsed.name || 'Preset FFX', category: 'Importado (FFX)', source: 'ffx', anchor: 'playhead',
