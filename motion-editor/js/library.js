@@ -10,7 +10,7 @@ import { saveFile } from './platform.js';
 import { putMedia, getMedia } from './idb.js';
 
 const STORE_KEY = 'motionframe.presets.v1';
-const CAT_ORDER = ['Importado (FFX)', 'Meus presets', 'Shakes', 'Transições', 'Velocity', 'Glows', 'CC / Cor', 'Looks', 'Entradas', 'Saídas'];
+const CAT_ORDER = ['Importado (FFX)', 'Meus presets', 'Shakes', 'Shatter 3D', 'Transições', 'Velocity', 'Glows', 'CC / Cor', 'Looks', 'Entradas', 'Saídas'];
 const STATUS = {
   native: ['ok', 'Nativo AE'],
   plugin: ['plugin', 'Plugin reconhecido'],

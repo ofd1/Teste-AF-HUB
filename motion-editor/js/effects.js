@@ -15,8 +15,9 @@ import plugins3 from './fx/plugins3.js';
 import element3d from './fx/element3d.js';
 import plugins4 from './fx/plugins4.js';
 import lut from './fx/lut.js';
+import plugins5 from './fx/plugins5.js';
 
-export const EFFECTS = [...blurLight, ...color, ...extra, ...distort, ...stylize, ...motion, ...shatter, ...ai, ...more, ...topaz, ...plugins2, ...plugins3, ...plugins4, ...element3d, ...lut];
+export const EFFECTS = [...blurLight, ...color, ...extra, ...distort, ...stylize, ...motion, ...shatter, ...ai, ...more, ...topaz, ...plugins2, ...plugins3, ...plugins4, ...element3d, ...lut, ...plugins5];
 // Como no AE (Compositing Options): todo efeito que altera a imagem tem "Opacidade do efeito", animável.
 for (const e of EFFECTS) {
   if (e.render && !e.params.some((p) => p.key === 'fxOpacity')) {

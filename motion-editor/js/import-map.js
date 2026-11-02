@@ -494,7 +494,7 @@ export const IMPORT_RULES = [
   { vendor: 'aescripts', plugin: 'Datamosh 2', to: 'datamosh', test: /datamosh|pixel ?encoder/i },
   { vendor: 'Video Copilot', plugin: 'VC Reflect', to: 'reflect', test: /vc ?reflect|^reflect$/i, map: { opacity: { n: ['opacity', 'reflection opacity'] } } },
   { vendor: 'aescripts', plugin: 'Quick Chromatic Aberration 2', to: 'qca', test: /quick ?chromatic|qca/i, map: { amount: { n: ['aberration amount', 'amount'], conv: (v) => Math.min(60, v) } } },
-  { vendor: 'Sapphire', plugin: 'S_Halftone', to: 'halftone', test: /s_halftone|halftone|cc ball action/i, map: { cell: { n: ['dot size', 'scale', 'grid spacing'] }, angle: { n: ['angle', 'rotate'] } } },
+  { vendor: 'Sapphire', plugin: 'S_Halftone', to: 'halftone', test: /s_halftone|halftone/i, map: { cell: { n: ['dot size', 'scale', 'grid spacing'] }, angle: { n: ['angle', 'rotate'] } } },
   { vendor: 'Red Giant', plugin: 'Universe Holomatrix', to: 'holomatrix', test: /holomatrix/i },
   { vendor: 'Red Giant', plugin: 'Starglow', to: 'starGlow', test: /starglow/i, map: { length: { n: ['streak length'], conv: (v) => v * 3 }, amount: { n: ['boost light'], conv: (v) => Math.max(0.3, v) }, threshold: { n: ['threshold'], conv: (v) => v / 2.55 } } },
   { vendor: 'Sapphire', plugin: 'S_Glint', to: 'starGlow', test: /s_glint/i, map: { length: { n: ['length', 'rays length'], conv: (v) => v * 100 }, amount: { n: ['brightness'] }, threshold: { n: ['threshold'], conv: (v) => v * 100 }, angle: { n: ['rotate'] } } },
@@ -533,6 +533,12 @@ export const IMPORT_RULES = [
   // S_Vignette (sapphire_ae.dll): Opacity (força), Radius 0,9, Edge Softness 1, Rel Height 0,75 (elipse do quadro), Color
   { vendor: 'Sapphire', plugin: 'S_Vignette', to: 'vignette', test: /s_vignette/i, map: { amount: { n: ['opacity', 'amount', 'vignette amount', 'darken'], conv: (v) => (v <= 1 ? v * 100 : v) }, size: { n: ['radius', 'size'], conv: (v) => (v <= 2 ? v * 60 : v) }, feather: { n: ['edge softness', 'softness', 'feather'], conv: (v) => (v <= 1 ? v * 100 : v) }, color: { n: ['color'] } }, set: { round: false } },
   { vendor: 'Sapphire', plugin: 'S_Kaleido', to: 'kaleida', test: /s_kaleid/i },
+  { vendor: 'Sapphire', plugin: 'S_WarpFishEye', to: 'fishEye', test: /s_warpfisheye|fish ?eye/i,
+    map: { amount: { n: ['amount'] }, center: { n: ['center'] }, wrapX: { n: ['wrap x'], conv: (v) => Math.min(3, Math.max(1, v)) }, wrapY: { n: ['wrap y'], conv: (v) => Math.min(3, Math.max(1, v)) } } },
+  { vendor: 'Sapphire', plugin: 'S_TimeWarpRGB', to: 'timeWarpRGB', test: /s_timewarprgb/i, map: { red: { n: ['red shift frames'] }, blue: { n: ['blue shift frames'] } } },
+  { vendor: 'Sapphire', plugin: 'S_Invert', to: 'invert', test: /\bs_invert\b/i },
+  { vendor: 'Cycore (CC)', plugin: 'CC Ball Action', to: 'ballAction', test: /cc ball action/i,
+    map: { scatter: { n: ['scatter'] }, spacing: { n: ['grid spacing'] }, size: { n: ['ball size'] }, rotation: { n: ['rotation'] }, twist: { n: ['twist angle'] }, seed: { n: ['instability state'] } } },
   { vendor: 'Sapphire', plugin: 'S_Distort', to: 'turbulentDisplace', test: /s_distort|s_warp/i },
   { vendor: 'Sapphire', plugin: 'S_Mosaic', to: 'mosaic', test: /s_mosaic/i },
 
@@ -590,8 +596,9 @@ export const IMPORT_RULES = [
   { vendor: ADOBE, plugin: 'Shatter', to: 'shatter', match: ['APC Shatter', 'ADBE Shatter'],
     map: {
       render: { i: 4 },
-      // padrões do AE: 3 Tijolos, 8 Vidro, 15 Pranchas, 18 Quadrados, 14 Quadrados sobrepostos, 21/22 Triângulos → vidro/quadrados/triângulos/tijolos
-      pattern: { i: 6, conv: (v) => ({ 3: 4, 15: 4, 18: 2, 14: 2, 13: 2, 19: 3, 21: 3, 22: 3, 20: 3, 17: 3 })[Math.round(v)] || 1 },
+      // padrões do AE: 3 Tijolos, 8 Vidro, 9 Hexágonos, 10 Quebra-cabeça (Jigsaw), 11 Octógonos e quadrados, 15 Tábuas, 18 Quadrados, 21/22 Triângulos
+      pattern: { i: 6, conv: (v) => ({ 3: 4, 9: 5, 10: 6, 11: 10, 15: 9, 18: 2, 14: 2, 13: 2, 19: 3, 21: 3, 22: 3, 20: 3, 17: 3 })[Math.round(v)] || 1 },
+      depth: { n: ['extrusion depth'], conv: (v) => Math.min(30, Math.max(0, v * 10)) },
       repetitions: { i: 10, conv: (v) => Math.min(80, Math.max(3, v * 1.6)) },
       force: { i: 24 }, forceDepth: { i: 26 }, radius: { i: 28, conv: (v) => v * 0.65 }, strength: { i: 30 },
       force2: { i: 32 }, force2Depth: { i: 34 }, radius2: { i: 36, conv: (v) => v * 0.65 }, strength2: { i: 38 },
@@ -623,6 +630,11 @@ export const IMPORT_RULES = [
   { vendor: ADOBE, plugin: 'Vibrance', to: 'vibrance', match: ['ADBE Vibrance'], map: { vibrance: { n: ['vibrance'] }, saturation: { n: ['saturation'] } } },
   { vendor: ADOBE, plugin: 'Tint', to: 'tint', match: ['ADBE Tint'], map: { black: { i: 1, n: ['map black to'] }, white: { i: 2, n: ['map white to'] }, amount: { i: 3, n: ['amount to tint'] } } },
   { vendor: ADOBE, plugin: 'Black & White', to: 'blackWhite', match: ['ADBE Black&White', 'ADBE Black & White'] },
+  { vendor: ADOBE, plugin: 'Bevel Alpha', to: 'bevelAlpha', match: ['ADBE Bevel Alpha'], map: { thickness: { i: 1, n: ['edge thickness'] }, angle: { i: 2, n: ['light angle'] }, color: { i: 3, n: ['light color'] }, intensity: { i: 4, n: ['light intensity'] } } },
+  { vendor: ADOBE, plugin: 'Crop Edges', to: 'cropEdges', match: ['ADBE CM CropEdges'], map: { amount: { i: 1, n: ['crop amount (per edge)', 'crop amount'] } } },
+  { vendor: ADOBE, plugin: 'Color Key', to: 'colorKey', match: ['ADBE Color Key'], map: { key: { i: 1, n: ['key color'] }, tolerance: { i: 2, n: ['color tolerance'] }, feather: { i: 4, n: ['edge feather'] } } },
+  { vendor: ADOBE, plugin: 'Change To Color', to: 'changeToColor', match: ['ADBE Change To Color'],
+    map: { from: { i: 1, n: ['from'] }, to: { i: 2, n: ['to'] }, change: { i: 3, n: ['change'] }, hueTol: { n: ['hue'] }, lumTol: { n: ['lightness'] }, satTol: { n: ['saturation'] }, softness: { n: ['softness'] } } },
   { vendor: ADOBE, plugin: 'Invert', to: 'invert', match: ['ADBE Invert'], map: { blend: { i: 2, n: ['blend with original'] } } },
   { vendor: ADOBE, plugin: 'Fill', to: 'fill', match: ['ADBE Fill'], map: { color: { n: ['color'] }, opacity: { n: ['opacity'], conv: pct } } },
   { vendor: ADOBE, plugin: 'Gradient Ramp', to: 'ramp', match: ['ADBE Ramp'],

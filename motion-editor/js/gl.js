@@ -276,7 +276,7 @@ export class GLEngine {
    * Desenha geometria (triângulos) num alvo novo — usado por efeitos 3D como o Shatter.
    * build() → { data: Float32Array, attribs: [[nome, tamanho], …] } (intercalado); fica em cache por `key`.
    */
-  mesh(key, build, vert, frag, uniforms, w, h) {
+  mesh(key, build, vert, frag, uniforms, w, h, opts = {}) {
     const gl = this.gl;
     let m = this.meshes.get(key);
     if (!m) {
@@ -313,7 +313,25 @@ export class GLEngine {
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
     gl.viewport(0, 0, target.w, target.h);
     gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    // profundidade (cacos 3D com espessura): renderbuffer de profundidade reaproveitado por tamanho
+    let depthRb = null;
+    if (opts.depth) {
+      const k = `${target.w}x${target.h}`;
+      if (!this.depthRbs) this.depthRbs = new Map();
+      depthRb = this.depthRbs.get(k);
+      if (!depthRb) {
+        depthRb = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, depthRb);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, target.w, target.h);
+        if (this.depthRbs.size > 3) { const [k0, old] = this.depthRbs.entries().next().value; gl.deleteRenderbuffer(old); this.depthRbs.delete(k0); }
+        this.depthRbs.set(k, depthRb);
+      }
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRb);
+      gl.clearDepth(1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthFunc(gl.LEQUAL);
+    } else gl.clear(gl.COLOR_BUFFER_BIT);
     let unit = 0;
     for (const [name, v] of Object.entries({ ...this.env, ...uniforms })) {
       const l = this.loc(p, name);
@@ -334,6 +352,7 @@ export class GLEngine {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.TRIANGLES, 0, m.count);
     gl.disable(gl.BLEND);
+    if (depthRb) { gl.disable(gl.DEPTH_TEST); gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, null); }
     for (let i = 1; i < m.attribs.length; i++) gl.disableVertexAttribArray(i);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quad);
     return target;

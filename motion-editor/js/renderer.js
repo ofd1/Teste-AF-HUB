@@ -477,6 +477,29 @@ function drawTimeSlices(ctx, layer, t, scale, extra, p, m, fps) {
   }
 }
 
+/** S_TimeWarpRGB: vermelho, verde e azul vêm de tempos diferentes da mesma camada (rastro colorido). */
+let chA = null, chB = null;
+function drawChannelTime(ctx, layer, t, scale, extra, img, m, p, fps) {
+  const W = ctx.canvas.width, H = ctx.canvas.height, tf = ctx.getTransform();
+  for (const c of [chA, chB]) if (c && (c.width !== W || c.height !== H)) { c.width = W; c.height = H; }
+  if (!chA) chA = makeCanvas(W, H);
+  if (!chB) chB = makeCanvas(W, H);
+  const a = chA.getContext('2d'), b = chB.getContext('2d');
+  a.setTransform(1, 0, 0, 1, 0, 0); a.globalCompositeOperation = 'source-over'; a.clearRect(0, 0, W, H);
+  // verde primeiro: a imagem do tempo atual já está pronta (o canvas do WebGL é reaproveitado no próximo render)
+  for (const [shift, color] of [[0, '#00ff00'], [p.red || 0, '#ff0000'], [p.blue || 0, '#0000ff']]) {
+    const tc = Math.max(layer.inPoint, Math.min(layer.outPoint - 1e-4, t + shift / fps));
+    const im = shift === 0 ? img : renderLayerImage(layer, tc, scale, { ...extra, offTime: true });
+    const mm = shift === 0 ? m : layerTransform(layer, tc);
+    b.setTransform(1, 0, 0, 1, 0, 0); b.globalCompositeOperation = 'source-over'; b.globalAlpha = 1; b.clearRect(0, 0, W, H);
+    b.setTransform(tf); drawLayerImage(b, im, mm, scale);
+    b.setTransform(1, 0, 0, 1, 0, 0); b.globalCompositeOperation = 'multiply'; b.fillStyle = color; b.fillRect(0, 0, W, H);
+    b.globalCompositeOperation = 'destination-in'; b.setTransform(tf); drawLayerImage(b, im, mm, scale);
+    a.globalCompositeOperation = 'lighter'; a.drawImage(chB, 0, 0);
+  }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.drawImage(chA, 0, 0); ctx.restore();
+}
+
 function findFx(layer, type) {
   return layer.effects.find((fx) => fx.enabled && fx.type === type) || null;
 }
@@ -526,7 +549,9 @@ export function renderLayer(ctx, layer, t, scale, extra, fps = 30) {
       ctx.setTransform(baseTf);
       ctx.drawImage(accumCanvas, 0, 0);
     } else {
-      drawLayerImage(ctx, img, m, scale);
+      const cw = layer.effects.find((fx) => fx.enabled && EFFECT_MAP[fx.type]?.channelTime);
+      if (cw) drawChannelTime(ctx, layer, t, scale, extra, img, m, evalParams(cw, layerTime(layer, t)), fps);
+      else drawLayerImage(ctx, img, m, scale);
     }
   }
 
