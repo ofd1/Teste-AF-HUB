@@ -3,7 +3,7 @@ import { EFFECTS, CATEGORIES } from './effects.js';
 import { escapeHtml } from './util.js';
 
 const ICON = {
-  'Luz e brilho': '✺', Movimento: '〰', Tempo: '⏱', Desfoque: '◌', Estilizar: '✦', Distorção: '≋', Cor: '◑', Transições: '⇋',
+  'Luz e brilho': '✺', Movimento: '〰', Tempo: '⏱', Desfoque: '◌', Estilizar: '✦', Distorção: '≋', Cor: '◑', '3D': '⬢', Transições: '⇋',
 };
 
 export class FxBrowser {

@@ -73,9 +73,9 @@ export function looksFromTools(tools, strength = 100) {
         {
           const k = (v[11] ?? 100) / 100;
           p.mojo = Math.max(p.mojo, (v[0] || 0) * k);
-          p.punch += (v[2] || 0) * 0.45 * k;
-          p.bleach += (v[3] || 0) * 0.9 * k;
-          p.fade += (v[4] || 0) * 0.3 * k;
+          p.punch += (v[2] || 0) * k;
+          p.bleach += (v[3] || 0) * k;
+          p.fade += (v[4] || 0) * 0.5 * k; // Fade It: levanta os pretos
           if (v[5] > 0) p.mojoCool = clampN(50 + v[5], 0, 100);
           if (v[6] > 0) p.mojoSkin = clampN(50 + v[6], 0, 100);
           p.exposure += (v[7] || 0) * k;
@@ -248,6 +248,25 @@ export const IMPORT_RULES = [
     // Slide Direction do Twitch é um ÂNGULO (pode ser animado: -67°, -192°, -540°…), não um menu
     post: (p) => { p.slideDir = p.slideAngle !== undefined ? 4 : 1; } },
   // S_Shake: deslocamento = Amplitude (mestre) × X/Y Rand Amp (px); motion blur, wrap e rajadas (Stillness) do próprio plugin
+  // recriações novas (antes das regras genéricas de s_film / s_glow / bcc.*film / bcc.*glow)
+  { vendor: 'Sapphire / BCC', plugin: 'S_FilmDamage / BCC Film Damage', to: 'filmDamage', test: /s_filmdamage|bcc.*(film ?damage|old ?film)/i,
+    // S_FilmDamage: a parte de cor (grão, vinheta, pretos, flicker) continua no Film Look calibrado;
+    // riscos, poeira, cabelos e tremor viram o Film Damage
+    expand: (fx, raw) => {
+      const out = [{ type: 'filmLook', label: fx.name, params: { grain: Math.min(100, (raw('grain amp') || 0) * 30), scratch: 0, vignette: Math.min(100, (raw('vignette darkness') || 0) * 100), flicker: Math.min(100, ((raw('flicker amp') ?? raw('flicker')) || 0) * 100), warmth: 0, fade: Math.min(60, Math.max(0, -(raw('offset darks') || 0)) * 20) } }];
+      const scr = (raw('scratches') ?? raw('scratch amount') ?? 0), dust = (raw('dust density') ?? raw('dust') ?? 0) + (raw('hairs') || 0) * 0.5, shk = raw('shake amplitude') || 0;
+      if (scr > 0 || dust > 0 || shk > 0) out.push({ type: 'filmDamage', label: `${fx.name} (danos)`, params: { scratches: Math.min(100, scr * 50), dust: Math.min(100, dust * 25), flicker: 0, jitter: Math.min(40, shk * 10), grain: 0, sepia: 0, fps: 24, seed: (raw('seed') || 1) % 100 } });
+      return out;
+    } },
+  { vendor: 'Sapphire / BCC', plugin: 'S_Bokeh / BCC Bokeh', to: 'bokeh', test: /s_bokeh|bcc.*bokeh/i, map: { radius: { n: ['bokeh size', 'size', 'radius'] }, threshold: { n: ['threshold'], conv: (v) => (v <= 1 ? v * 100 : v) } } },
+  { vendor: 'Sapphire / BCC', plugin: 'S_Zap / BCC Lightning', to: 'zap', test: /s_zap|bcc.*lightning/i, map: { width: { n: ['width', 'core width'] }, glow: { n: ['glow brightness', 'glow'] }, color: { n: ['color', 'glow color'] } } },
+  { vendor: 'Sapphire', plugin: 'S_Aurora', to: 'aurora', test: /s_aurora/i, map: { intensity: { n: ['brightness'] }, speed: { n: ['speed'] } } },
+  { vendor: 'Sapphire / BCC', plugin: 'S_GlowEdges / BCC Glow Edges', to: 'glowEdges', test: /s_glowedges|bcc.*(glow ?edges|edge ?glow)/i, map: { width: { n: ['glow width', 'width'], conv: (v) => (v < 5 ? v * 40 : v) }, amount: { n: ['brightness', 'glow intensity'] } } },
+  { vendor: 'BCC / Sapphire', plugin: 'BCC Cartoon Look', to: 'cartoon', test: /cartoon/i },
+  { vendor: 'Sapphire / BCC / Red Giant', plugin: 'Unmult', to: 'unmult', test: /unmult/i },
+  { vendor: 'Sapphire / BCC', plugin: 'S_Clouds / BCC Fast Fog', to: 'clouds', test: /s_clouds|bcc.*fog/i, map: { density: { n: ['density', 'amount'] }, speed: { n: ['speed'] } } },
+  { vendor: 'Sapphire / BCC', plugin: 'S_Sparkles / BCC Sparkles', to: 'sparkles', test: /s_sparkles|bcc.*sparkl/i, map: { amount: { n: ['brightness'] }, threshold: { n: ['threshold'], conv: (v) => (v <= 1 ? v * 100 : v) } } },
+  { vendor: 'Video Copilot', plugin: 'Element 3D', to: 'element3d', test: /element ?3d|vc ?element/i },
   { vendor: 'Sapphire', plugin: 'S_Shake', to: 'shake', test: /s_shake|s_camerashake/i,
     map: {
       amount: { n: ['amplitude', 'shake amp', 'amp'], conv: (v) => (v < 20 ? v * 100 : v) }, frequency: { n: ['frequency', 'shake freq', 'freq'], conv: (v) => (v > 60 ? Math.min(40, v / 250) : v) },

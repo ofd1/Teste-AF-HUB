@@ -12,8 +12,10 @@ import more from './fx/more.js';
 import topaz from './fx/topaz.js';
 import plugins2 from './fx/plugins2.js';
 import plugins3 from './fx/plugins3.js';
+import element3d from './fx/element3d.js';
+import plugins4 from './fx/plugins4.js';
 
-export const EFFECTS = [...blurLight, ...color, ...extra, ...distort, ...stylize, ...motion, ...shatter, ...ai, ...more, ...topaz, ...plugins2, ...plugins3];
+export const EFFECTS = [...blurLight, ...color, ...extra, ...distort, ...stylize, ...motion, ...shatter, ...ai, ...more, ...topaz, ...plugins2, ...plugins3, ...plugins4, ...element3d];
 // Como no AE (Compositing Options): todo efeito que altera a imagem tem "Opacidade do efeito", animável.
 for (const e of EFFECTS) {
   if (e.render && !e.params.some((p) => p.key === 'fxOpacity')) {
@@ -21,7 +23,7 @@ for (const e of EFFECTS) {
   }
 }
 export const EFFECT_MAP = Object.fromEntries(EFFECTS.map((e) => [e.type, e]));
-export const CATEGORIES = ['Luz e brilho', 'Movimento', 'Tempo', 'Desfoque', 'Estilizar', 'Distorção', 'Cor', 'Transições'];
+export const CATEGORIES = ['Luz e brilho', 'Movimento', 'Tempo', 'Desfoque', 'Estilizar', 'Distorção', 'Cor', '3D', 'Transições'];
 
 /** Efeito para parâmetros importados que não têm renderização equivalente. */
 export const GENERIC_EFFECT = { type: 'generic', label: 'Controles importados', category: 'Importado', params: [] };

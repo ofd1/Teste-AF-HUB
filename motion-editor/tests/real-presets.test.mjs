@@ -21,10 +21,10 @@ const EXPECTED = {
   'Velocity & Reverse/Sonhei Reverse.ffx': ['twixtor', 'blurMoCurves'],
   'CC (Color Correction)/Sonhei CC.ffx': ['looks', 'looks', 'sharpen', 'fourColor', 'exposure', 'filmLook', 'sharpen', 'looks', 'exposure'],
   'CC (Color Correction)/Sonhei New CC.ffx': ['looks', 'looks', 'sharpen'],
-  'CC (Color Correction)/Galego CC.ffx': ['looks', 'sharpen', 'flicker', 'exposure', 'filmLook', 'hueSat', 'brightnessContrast'],
+  'CC (Color Correction)/Galego CC.ffx': ['looks', 'sharpen', 'flicker', 'exposure', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
   'CC (Color Correction)/FTB Main CC.ffx': ['looks', 'sharpen', 'sharpen', 'hueSat', 'sharpen', 'looks', 'looks', 'looks'],
   'CC (Color Correction)/FTB AEP CC.ffx': ['looks', 'fourColor', 'looks', 'hueSat', 'looks', 'looks', 'brightnessContrast'],
-  'CC (Color Correction)/ZAZ Reverse Dark CC.ffx': ['looks', 'sharpen', 'filmLook', 'hueSat', 'brightnessContrast'],
+  'CC (Color Correction)/ZAZ Reverse Dark CC.ffx': ['looks', 'sharpen', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
   'Warp/ZAZ Warp.ffx': ['motionTile', 'warp'],
 };
 
@@ -82,7 +82,7 @@ test('CC: Looks decodificado e Gradiente de 4 cores', () => {
   const dark = load('CC (Color Correction)/ZAZ Reverse Dark CC.ffx').preset.effects[0].params;
   assert.equal(dark.saturation, 65);
   assert.equal(dark.mojo, 100); // Mojo II = 100 no Looks original
-  assert.equal(dark.bleach, 45); // Bleach It 50 × 0,9 (Reverse Dark: escuro e dessaturado)
+  assert.equal(dark.bleach, 50); // Bleach It 50 (manual: menos saturação)
 
   const de = load('CC (Color Correction)/FTB Main CC.ffx'); // salvo num After Effects em alemão
   const um = de.preset.effects.find((e) => e.matchName === 'ADBE Unsharp Mask2');

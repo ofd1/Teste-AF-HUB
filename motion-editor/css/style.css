@@ -137,6 +137,7 @@ h4 { margin: 16px 0 8px; font-size: 12px; text-transform: uppercase; letter-spac
 .pinputs input[type="number"] { width: 100%; min-width: 50px; }
 .pinputs input.num { width: 66px; flex: none; }
 .pinputs select { width: 100%; }
+.pinputs .ptext { width: 100%; min-height: 30px; resize: vertical; background: var(--bg); color: inherit; border: 1px solid var(--line, #333); border-radius: 4px; padding: 4px 6px; font: inherit; }
 .unit { color: var(--muted); }
 .kfnav { display: flex; }
 .kfnav button { padding: 4px 6px; border: 0; background: none; color: var(--muted); font-size: 15px; }

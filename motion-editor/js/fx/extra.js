@@ -92,7 +92,7 @@ const LGG = colorFrag('uniform vec3 u_lift, u_gamma, u_gain; uniform float u_sat
 
 // "Looks": um único efeito com as ferramentas do Magic Bullet Looks (Colorista, Mojo II, Curves, Haze…).
 const LOOKS = frag(`
-uniform float u_exp, u_sat, u_hue, u_con, u_fade, u_mojo, u_cool, u_skin, u_punch, u_bleach, u_vig, u_vsize, u_strength, u_temp, u_tint, u_fdens;
+uniform float u_mtint; uniform float u_exp, u_sat, u_hue, u_con, u_fade, u_mojo, u_cool, u_skin, u_punch, u_bleach, u_vig, u_vsize, u_strength, u_temp, u_tint, u_fdens;
 uniform vec3 u_filter, u_lift, u_gamma, u_gain, u_mixr, u_mixg, u_mixb; uniform float u_mixamt;
 uniform vec3 u_hsl[8];
 uniform vec2 u_curve[4]; uniform float u_ncurve;
@@ -181,7 +181,8 @@ void main() {
     vec3 mh = rgb2hsv(clamp(r, 0.0, 1.0));
     float hd = mh.x * 360.0;
     float warmSide = 1.0 - smoothstep(70.0, 95.0, hd) + smoothstep(310.0, 335.0, hd);
-    float target = warmSide > 0.5 ? 28.0 : 185.0;
+    // Mojo Tint (manual): positivo = frios mais azuis (azul royal/verde-água), negativo = mais quentes
+    float target = warmSide > 0.5 ? 28.0 : 185.0 + 30.0 * u_mtint;
     float dh = mod(target - hd + 540.0, 360.0) - 180.0;
     float k = u_mojo * (warmSide > 0.5 ? 0.45 * u_skin : 0.6 * u_cool) * smoothstep(0.04, 0.2, mh.y);
     mh.x = fract((hd + dh * clamp(k, 0.0, 0.9)) / 360.0);
@@ -193,17 +194,18 @@ void main() {
   vec3 warmH = r * mix(vec3(1.0), vec3(1.07, 1.01, 0.88), hiW);
   r = mix(r, cool, u_mojo * u_cool);
   r = mix(r, warmH, u_mojo * (0.6 + 0.4 * skin) * u_skin);
-  // Mojo II: pele quente e viva, FUNDO esfriado e com menos cor (o “blockbuster”); com Mojo 100 o fundo fica quase sem cor
-  r = mix(vec3(luma(r)), r, 1.0 - u_mojo * 0.72 * (1.0 - skin * 0.6));
-  // Punch (curva S + saturação) e Bleach (bleach bypass)
-  vec3 sc = r * r * (3.0 - 2.0 * r);
-  r = mix(r, sc, u_punch);
-  r = mix(vec3(luma(r)), r, 1.0 + u_punch * 0.25);
-  // Bleach It (Mojo II): tira a cor e dá um pouco de contraste prateado, SEM afundar a imagem
+  // Mojo (manual da Maxon): "aumenta o contraste, esquenta realces e esfria sombras preservando a pele";
+  // o fundo frio perde um pouco de cor, a pele não
+  r = mix(vec3(luma(r)), r, 1.0 - u_mojo * 0.35 * (1.0 - skin * 0.7));
+  r = mix(r, r * r * (3.0 - 2.0 * r), u_mojo * 0.3);
+  // Punch It (manual): contraste nas SOMBRAS — empurra as sombras para o preto, preservando a pele
+  float shw = (1.0 - smoothstep(0.0, 0.55, luma(r))) * (1.0 - skin * 0.6);
+  r = mix(r, r * r * 1.4, clamp(u_punch * shw * 0.8, 0.0, 1.0));
+  r = max(r, 0.0);
+  // Bleach It (manual): menos saturação quanto maior (negativo = mais saturação), com leve contraste prateado
   float bl = luma(r);
-  vec3 ds = mix(r, vec3(bl), 0.85);
-  vec3 bs = ds * ds * (3.0 - 2.0 * ds);
-  r = mix(r, mix(ds, bs, 0.3), u_bleach);
+  r = mix(vec3(bl), r, 1.0 - 0.6 * u_bleach);
+  r = mix(r, r * r * (3.0 - 2.0 * r), max(0.0, u_bleach) * 0.12);
   // contraste, saturação, curva, haze/fade
   // Contraste do Looks: curva de filme (S) em torno do pivô, não uma reta que estoura pretos/brancos
   vec3 cx = clamp(r, 0.0, 1.0);
@@ -304,7 +306,7 @@ const EFFECTS = [
       num('temperature', 'Temperatura', 0, -100, 100), num('tint', 'Tint', 0, -100, 100),
       num('contrast', 'Contraste', 0, -100, 100), num('saturation', 'Saturação %', 100, 0, 300),
       num('mojo', 'Mojo (teal & orange) %', 0, 0, 100), num('mojoCool', 'Mojo – esfriar %', 50, 0, 100), num('mojoSkin', 'Mojo – pele quente %', 50, 0, 100),
-      num('punch', 'Punch %', 0, 0, 100), num('bleach', 'Bleach %', 0, 0, 100), num('fade', 'Haze / fade %', 0, 0, 100),
+      num('punch', 'Punch %', 0, 0, 100), num('bleach', 'Bleach %', 0, -100, 100), adv(num('mojoTint', 'Mojo Tint', 0, -100, 100)), num('fade', 'Haze / fade %', 0, 0, 100),
       num('vignette', 'Vinheta %', 0, 0, 100), num('vignetteSize', 'Tamanho da vinheta %', 50, 0, 100),
       num('diffusion', 'Difusão (glow) %', 0, 0, 300), num('diffusionRadius', 'Raio da difusão', 60, 1, 600), num('diffusionThreshold', 'Limiar da difusão %', 60, 0, 100),
       num('chroma', 'Aberração cromática', 0, 0, 50, 0.1),
@@ -338,7 +340,7 @@ const EFFECTS = [
       const curve = [0, 1, 2, 3].flatMap((i) => pts[i] || [1, 0]);
       let out = gl.pass(LOOKS, {
         u_tex: src, u_exp: p.exposure, u_sat: p.saturation / 100, u_hue: p.hue / 360, u_con: p.contrast / 100, u_fade: p.fade / 100,
-        u_mojo: p.mojo / 100, u_cool: (p.mojoCool ?? 50) / 50, u_skin: (p.mojoSkin ?? 50) / 50, u_punch: (p.punch || 0) / 100, u_bleach: (p.bleach || 0) / 100,
+        u_mtint: Math.max(-1, Math.min(1, (p.mojoTint || 0) / 100)), u_mojo: p.mojo / 100, u_cool: (p.mojoCool ?? 50) / 50, u_skin: (p.mojoSkin ?? 50) / 50, u_punch: (p.punch || 0) / 100, u_bleach: (p.bleach || 0) / 100,
         u_temp: (p.temperature || 0) / 100, u_tint: (p.tint || 0) / 100,
         u_vig: p.vignette / 100, u_vsize: p.vignetteSize / 100, u_strength: s,
         u_filter: rgb(p.filter), u_fdens: p.filterDensity / 100,

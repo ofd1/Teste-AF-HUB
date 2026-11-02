@@ -24,7 +24,7 @@ test('identifica plugins de terceiros e converte', () => {
   assert.equal(byMn['BCC Glow'].vendor, 'BCC');
   assert.equal(byMn.RSMB.plugin, 'ReelSmart Motion Blur');
   assert.equal(byMn['CC Radial Blur'].status, 'native');
-  assert.equal(byMn['Element 3D'].status, 'unsupported');
+  assert.equal(byMn['Element 3D'].status, 'plugin'); // recriado (raymarching)
 
   const fx = Object.fromEntries(preset.effects.map((e) => [e.matchName, e]));
   assert.equal(fx['Twixtor Pro'].type, 'twixtor');
@@ -37,7 +37,7 @@ test('identifica plugins de terceiros e converte', () => {
   assert.equal(fx['VIDEOCOPILOT Twitch'].params.slide, true);
   assert.equal(fx.RSMB.params.amount, 100);
   assert.equal(fx['CC Radial Blur'].params.amount, 40);
-  assert.equal(fx['Element 3D'].type, 'generic');
+  assert.equal(fx['Element 3D'].type, 'element3d');
   assert.ok(preset.report.plugins.includes('Twixtor'));
 });
 

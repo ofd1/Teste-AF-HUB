@@ -210,6 +210,7 @@ export class Inspector {
       case 'bool': inputs = '<label class="switch"><input type="checkbox" data-i="b"><i></i></label>'; break;
       case 'select': inputs = `<select data-i="s">${(d.options || []).map((o, i) => `<option value="${i + 1}">${escapeHtml(o)}</option>`).join('')}</select>`; break;
       case 'angle': inputs = `<input type="number" inputmode="decimal" data-i="n" data-fid="${fid}" step="1"><span class="unit">°</span>`; break;
+      case 'text': inputs = '<textarea data-i="t" rows="1" class="ptext"></textarea>'; break;
       default: {
         const hasRange = d.max !== undefined && d.min !== undefined;
         inputs = `${hasRange ? `<input type="range" data-i="r" min="${d.min}" max="${d.max}" step="${d.step ?? 0.1}">` : ''}<input type="number" inputmode="decimal" class="num" data-i="n" data-fid="${fid}" step="${d.step ?? 0.1}">`;
@@ -218,7 +219,7 @@ export class Inspector {
     return `<div class="prop-row" data-path="${path}" data-kind="${d.kind}">
       <span class="plabel" data-pact="scrub">${escapeHtml(d.label)}</span>
       <span class="pinputs">${inputs}</span>
-      <span class="kfnav"><button data-pact="prev" aria-label="Keyframe anterior">‹</button><button data-pact="key" class="kbtn" aria-label="Keyframe">◆</button><button data-pact="next" aria-label="Próximo keyframe">›</button></span>
+      ${d.kind === 'text' ? '' : `<span class="kfnav"><button data-pact="prev" aria-label="Keyframe anterior">‹</button><button data-pact="key" class="kbtn" aria-label="Keyframe">◆</button><button data-pact="next" aria-label="Próximo keyframe">›</button></span>`}
     </div>`;
   }
 
@@ -318,6 +319,7 @@ export class Inspector {
       if (kind === 'color') return hexToRgba(row.querySelector('[data-i="c"]').value, cur?.[3] ?? 1);
       if (kind === 'bool') return row.querySelector('[data-i="b"]').checked;
       if (kind === 'select') return +row.querySelector('[data-i="s"]').value;
+      if (kind === 'text') return row.querySelector('[data-i="t"]').value;
       const v = parseFloat(row.querySelector('[data-i="n"]').value);
       return Number.isFinite(v) ? v : cur;
     };
@@ -378,6 +380,7 @@ export class Inspector {
       else if (kind === 'color') set('[data-i="c"]', rgbaToHex(v));
       else if (kind === 'bool') { const el = row.querySelector('[data-i="b"]'); if (el) el.checked = !!v; }
       else if (kind === 'select') set('[data-i="s"]', Math.round(v));
+      else if (kind === 'text') set('[data-i="t"]', v ?? '');
       else { set('[data-i="n"]', round(v)); set('[data-i="r"]', v); }
       row.classList.toggle('animated', isAnimated(prop));
       row.classList.toggle('on-key', keyIndexAt(prop, t) >= 0);
