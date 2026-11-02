@@ -75,6 +75,13 @@ function drawContent(ctx, layer, w, h, extra) {
       if (p.strokeWidth > 0) { ctx.strokeStyle = p.strokeColor; ctx.lineWidth = p.strokeWidth; ctx.stroke(); }
       break;
     }
+    case 'shape': {
+      ctx.save();
+      ctx.translate(w / 2, h / 2); // origem da camada de formas = centro (como o (0,0) do AE)
+      drawShapeItems(ctx, p.shapes || [], extra?.lt ?? 0);
+      ctx.restore();
+      break;
+    }
     case 'ellipse': {
       ctx.beginPath();
       ctx.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
@@ -132,8 +139,139 @@ export function layerTransform(layer, t) {
     sy: (sc[1] / 100) * extra.scale,
     rot: valueAt(tr.rotation, lt) + extra.rot,
     opacity: Math.max(0, Math.min(1, (valueAt(tr.opacity, lt) / 100) * extra.opacity)),
-    anchor: valueAt(tr.anchor, lt),
+    anchor: aeTextAnchor(layer, valueAt(tr.anchor, lt)),
   };
+}
+
+/** Texto vindo do AE: a âncora fica na linha de base (início, meio ou fim conforme o alinhamento), não no centro da caixa. */
+function aeTextAnchor(layer, a) {
+  if (layer.type !== 'text' || !layer.props.aeBaseline) return a;
+  const p = layer.props, { w } = contentSize(layer);
+  const lines = String(p.text).split('\n').length, lh = p.fontSize * p.lineHeight;
+  const ax = p.align === 'left' ? -(w / 2 - 4) : p.align === 'right' ? w / 2 - 4 : 0;
+  return [a[0] + ax, a[1] - ((lines - 1) / 2) * lh + p.fontSize * 0.33];
+}
+
+// ---------------------------------------------------------------- formas (Shape Layer do AE)
+const V = (a, t, d) => (a == null ? d : valueAt(a, t) ?? d);
+function shapePath(it, t) {
+  const p = new Path2D();
+  if (it.t === 'rect') {
+    const [sw, sh] = V(it.size, t, [100, 100]), [x, y] = V(it.position, t, [0, 0]), rr = Math.min(V(it.round, t, 0), sw / 2, sh / 2);
+    if (rr > 0 && p.roundRect) p.roundRect(x - sw / 2, y - sh / 2, sw, sh, rr); else p.rect(x - sw / 2, y - sh / 2, sw, sh);
+  } else if (it.t === 'ellipse') {
+    const [sw, sh] = V(it.size, t, [100, 100]), [x, y] = V(it.position, t, [0, 0]);
+    p.ellipse(x, y, Math.abs(sw) / 2, Math.abs(sh) / 2, 0, 0, Math.PI * 2);
+  } else if (it.t === 'star') {
+    const n = Math.max(3, Math.round(V(it.points, t, 5))), [x, y] = V(it.position, t, [0, 0]), rot = (V(it.rotation, t, 0) * Math.PI) / 180;
+    const ro = V(it.outer, t, 100), ri = V(it.inner, t, 50), star = (it.kind || 1) === 1;
+    const steps = star ? n * 2 : n;
+    for (let i = 0; i < steps; i++) {
+      const r = star && i % 2 ? ri : ro, a = -Math.PI / 2 + rot + (i * Math.PI * 2) / steps;
+      if (i) p.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); else p.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    }
+    p.closePath();
+  } else if (it.t === 'path') {
+    const sh = pathAt(it.path, t);
+    if (sh) tracePath(p, sh);
+  }
+  return p;
+}
+/** Caminho animado: interpola os pontos entre os keyframes (quando têm o mesmo número de pontos). */
+export function pathAt(path, t) {
+  const S = path?.shapes || [];
+  if (!S.length) return null;
+  const T = path.times || [];
+  if (S.length === 1 || !T.length || t <= T[0]) return S[0];
+  if (t >= T[T.length - 1]) return S[Math.min(S.length, T.length) - 1];
+  for (let i = 0; i < T.length - 1 && i + 1 < S.length; i++) {
+    if (t >= T[i] && t < T[i + 1]) {
+      const a = S[i], b = S[i + 1], f = (t - T[i]) / (T[i + 1] - T[i] || 1);
+      if (a.pts.length !== b.pts.length) return f < 0.5 ? a : b;
+      return { closed: a.closed, pts: a.pts.map((q, k) => [q[0] + (b.pts[k][0] - q[0]) * f, q[1] + (b.pts[k][1] - q[1]) * f]) };
+    }
+  }
+  return S[S.length - 1];
+}
+export function tracePath(p, sh) {
+  const P = sh.pts, n = Math.floor(P.length / 3);
+  if (!n) return;
+  p.moveTo(P[0][0], P[0][1]);
+  for (let i = 0; i < n; i++) {
+    const nx = (i + 1) % n;
+    if (nx === 0 && !sh.closed) break;
+    const o = P[i * 3 + 1], inn = P[i * 3 + 2], v = P[nx * 3];
+    p.bezierCurveTo(o[0], o[1], inn[0], inn[1], v[0], v[1]);
+  }
+  if (sh.closed) p.closePath();
+}
+const css3 = (c, a = 1) => `rgba(${Math.round((c?.[0] ?? 1) * 255)},${Math.round((c?.[1] ?? 1) * 255)},${Math.round((c?.[2] ?? 1) * 255)},${a})`;
+function drawShapeItems(ctx, items, t) {
+  // como no AE: preenchimento/contorno valem para as formas ACIMA deles no mesmo grupo; a lista é desenhada de baixo para cima
+  for (let k = items.length - 1; k >= 0; k--) {
+    const it = items[k];
+    if (it.t === 'group') {
+      const tr = it.tr || {};
+      ctx.save();
+      const [px, py] = V(tr.position, t, [0, 0]), [ax, ay] = V(tr.anchor, t, [0, 0]), [sx, sy] = V(tr.scale, t, [100, 100]);
+      ctx.translate(px, py); ctx.rotate((V(tr.rotation, t, 0) * Math.PI) / 180); ctx.scale(sx / 100, sy / 100); ctx.translate(-ax, -ay);
+      ctx.globalAlpha *= Math.max(0, Math.min(1, V(tr.opacity, t, 100) / 100));
+      drawShapeItems(ctx, it.items || [], t);
+      ctx.restore();
+    } else if (it.t === 'fill' || it.t === 'stroke') {
+      const above = items.slice(0, k).filter((x) => ['rect', 'ellipse', 'star', 'path'].includes(x.t));
+      if (!above.length) continue;
+      const path = new Path2D();
+      for (const sItem of above) path.addPath(shapePath(sItem, t));
+      const op = Math.max(0, Math.min(1, V(it.opacity, t, 100) / 100));
+      if (it.t === 'fill') { ctx.fillStyle = css3(V(it.color, t, [1, 0, 0]), op); ctx.fill(path, it.rule === 2 ? 'evenodd' : 'nonzero'); }
+      else {
+        ctx.strokeStyle = css3(V(it.color, t, [1, 1, 1]), op); ctx.lineWidth = Math.max(0, V(it.width, t, 2));
+        ctx.lineCap = ['butt', 'butt', 'round', 'square'][it.cap || 1] || 'butt'; ctx.lineJoin = ['miter', 'miter', 'round', 'bevel'][it.join || 1] || 'miter';
+        if (ctx.lineWidth > 0) ctx.stroke(path);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------- máscaras (como as do AE: Add, Subtract, Intersect, inverter, feather)
+function applyMasks(cx, layer, t, scale, pad, W, H) {
+  const masks = (layer.masks || []).filter((m) => m.mode !== 0 && m.path);
+  if (!masks.length) return;
+  const mc = poolCanvas(`${layer.id}__mask`, W, H), m = mc.getContext('2d');
+  m.setTransform(1, 0, 0, 1, 0, 0); m.globalCompositeOperation = 'source-over'; m.filter = 'none'; m.clearRect(0, 0, W, H);
+  if (masks[0].mode === 2 || masks[0].mode === 3) { m.fillStyle = '#fff'; m.fillRect(0, 0, W, H); }
+  const tmp = poolCanvas(`${layer.id}__mask2`, W, H), q = tmp.getContext('2d');
+  for (const mk of masks) {
+    const sh = pathAt(mk.path, t);
+    if (!sh) continue;
+    q.setTransform(1, 0, 0, 1, 0, 0); q.globalCompositeOperation = 'source-over'; q.clearRect(0, 0, W, H);
+    const fe = V(mk.feather, t, [0, 0]); const f = Math.max(fe[0] || 0, fe[1] || 0) * scale;
+    q.filter = f > 0.5 ? `blur(${f / 2}px)` : 'none';
+    q.translate(pad, pad); q.scale(scale, scale);
+    const path = new Path2D(); tracePath(path, sh);
+    q.fillStyle = `rgba(255,255,255,${Math.max(0, Math.min(1, V(mk.opacity, t, 100) / 100))})`;
+    if (mk.inverted) { q.setTransform(1, 0, 0, 1, 0, 0); q.fillRect(0, 0, W, H); q.translate(pad, pad); q.scale(scale, scale); q.globalCompositeOperation = 'destination-out'; q.fillStyle = '#fff'; }
+    q.fill(path);
+    q.filter = 'none';
+    m.globalCompositeOperation = mk.mode === 2 ? 'destination-out' : mk.mode === 3 ? 'destination-in' : mk.mode === 5 ? 'lighten' : mk.mode === 4 ? 'darken' : 'source-over';
+    m.drawImage(tmp, 0, 0);
+  }
+  cx.save(); cx.setTransform(1, 0, 0, 1, 0, 0); cx.globalCompositeOperation = 'destination-in'; cx.drawImage(mc, 0, 0); cx.restore();
+}
+
+// ---------------------------------------------------------------- parentesco (pai/filho) e Null
+let layerIndex = new Map();
+function indexLayers(layers) { layerIndex = new Map(); const add = (ls) => { for (const l of ls) { layerIndex.set(l.id, l); if (l.type === 'group') add(l.props.layers || []); } }; add(layers); }
+function applyParents(c, layer, t, scale) {
+  const chain = [];
+  let p = layer.parent ? layerIndex.get(layer.parent) : null;
+  while (p && chain.length < 12) { chain.unshift(p); p = p.parent ? layerIndex.get(p.parent) : null; }
+  for (const P of chain) {
+    const m = layerTransform(P, t), { w, h } = contentSize(P);
+    c.translate(m.x * scale, m.y * scale); c.rotate((m.rot * Math.PI) / 180); c.scale(m.sx, m.sy);
+    c.translate(-(w / 2 + m.anchor[0]) * scale, -(h / 2 + m.anchor[1]) * scale);
+  }
 }
 
 /** Renderiza conteúdo + efeitos. O resultado deve ser desenhado imediatamente (canvas WebGL é reutilizado). */
@@ -164,19 +302,13 @@ function renderLayerImage(layer, t, scale, extra) {
     if (layer.type === 'group') {
       // grupo (pré-composição): desenha as camadas filhas como uma composição própria
       cx.setTransform(1, 0, 0, 1, pad, pad);
-      const kids = layer.props.layers || [];
-      for (let i = kids.length - 1; i >= 0; i--) {
-        const k = kids[i];
-        if (!k.visible || k.type === 'audio' || k.type === 'adjustment' || t < k.inPoint || t >= k.outPoint) continue;
-        cx.save();
-        renderLayer(cx, k, t, scale, null, fps);
-        cx.restore();
-      }
+      drawLayerList(cx, layer.props.layers || [], t, scale, fps);
       return canvas;
     }
     cx.translate(pad, pad);
     cx.scale(scale, scale);
-    drawContent(cx, layer, w, h, { ...extra, videoSource: source });
+    drawContent(cx, layer, w, h, { ...extra, videoSource: source, lt });
+    if (layer.masks?.length) applyMasks(cx, layer, lt, scale, pad, W, H);
     return canvas;
   };
   const canvas = paint(layer.id, vf?.a);
@@ -295,6 +427,8 @@ export function renderLayer(ctx, layer, t, scale, extra, fps = 30) {
   const mb = findFx(layer, 'motionBlur');
   ctx.save();
   ctx.globalCompositeOperation = layer.blend || 'source-over';
+  const baseTf = ctx.getTransform();
+  if (layer.parent) applyParents(ctx, layer, t, scale);
 
   const drawEchoes = () => {
     const p = evalParams(echo, layerTime(layer, t));
@@ -322,12 +456,14 @@ export function renderLayer(ctx, layer, t, scale, extra, fps = 30) {
       ac.setTransform(1, 0, 0, 1, 0, 0);
       ac.globalCompositeOperation = 'source-over';
       ac.clearRect(0, 0, accumCanvas.width, accumCanvas.height);
+      if (layer.parent) applyParents(ac, layer, t, scale);
       ac.globalCompositeOperation = 'lighter';
       for (let i = 0; i < n; i++) {
         const tau = t + shutter * (i / (n - 1) - 0.5);
         drawLayerImage(ac, img, layerTransform(layer, tau), scale, 1 / n);
       }
       ctx.globalAlpha = 1;
+      ctx.setTransform(baseTf);
       ctx.drawImage(accumCanvas, 0, 0);
     } else {
       drawLayerImage(ctx, img, m, scale);
@@ -336,6 +472,42 @@ export function renderLayer(ctx, layer, t, scale, extra, fps = 30) {
 
   if (echo && !evalParams(echo, t).behind) drawEchoes();
   ctx.restore();
+}
+
+/** Track Matte (como no AE): a camada usa a camada de CIMA como máscara (1 alfa, 2 alfa invertido, 3 luma, 4 luma invertida). */
+let matteA = null, matteB = null;
+function renderWithMatte(ctx, l, matte, t, scale, fps) {
+  const W = ctx.canvas.width, H = ctx.canvas.height, tf = ctx.getTransform();
+  if (!matteA) { matteA = makeCanvas(W, H); matteB = makeCanvas(W, H); }
+  for (const c of [matteA, matteB]) if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+  const a = matteA.getContext('2d'), b = matteB.getContext('2d', { willReadFrequently: matte.trackLuma });
+  for (const x of [a, b]) { x.setTransform(1, 0, 0, 1, 0, 0); x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1; x.clearRect(0, 0, W, H); x.setTransform(tf); }
+  renderLayer(a, l, t, scale, null, fps);
+  if (t >= matte.inPoint && t < matte.outPoint) renderLayer(b, matte, t, scale, null, fps);
+  const mode = l.trackMatte;
+  if (mode === 3 || mode === 4) { // luma → alfa
+    b.setTransform(1, 0, 0, 1, 0, 0);
+    const img = b.getImageData(0, 0, W, H), d = img.data;
+    for (let i = 0; i < d.length; i += 4) d[i + 3] = Math.round((0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) * (d[i + 3] / 255));
+    b.putImageData(img, 0, 0);
+  }
+  a.setTransform(1, 0, 0, 1, 0, 0);
+  a.globalCompositeOperation = mode === 2 || mode === 4 ? 'destination-out' : 'destination-in';
+  a.drawImage(matteB, 0, 0);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = l.blend || 'source-over'; ctx.drawImage(matteA, 0, 0); ctx.restore();
+}
+
+/** Desenha uma lista de camadas (de baixo para cima), com Null, Track Matte e parentesco. */
+function drawLayerList(ctx, layers, t, scale, fps, onAdjust) {
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const l = layers[i];
+    if (!l.visible || l.type === 'audio' || l.type === 'null' || t < l.inPoint || t >= l.outPoint) continue;
+    if (l.type === 'adjustment') { if (onAdjust) onAdjust(l); continue; }
+    if (l.trackMatte && layers[i - 1]) { renderWithMatte(ctx, l, layers[i - 1], t, scale, fps); continue; }
+    ctx.save();
+    renderLayer(ctx, l, t, scale, null, fps);
+    ctx.restore();
+  }
 }
 
 export function renderFrame(ctx, proj, t, scale = 1, opts = {}) {
@@ -347,10 +519,9 @@ export function renderFrame(ctx, proj, t, scale = 1, opts = {}) {
   ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = proj.background;
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  for (let i = proj.layers.length - 1; i >= 0; i--) {
-    const l = proj.layers[i];
-    if (!l.visible || l.type === 'audio' || t < l.inPoint || t >= l.outPoint) continue;
-    if (l.type === 'adjustment') {
+  indexLayers(proj.layers);
+  drawLayerList(ctx, proj.layers, t, scale, proj.fps, (l) => {
+    {
       if (!snapshotCanvas) snapshotCanvas = makeCanvas(ctx.canvas.width, ctx.canvas.height);
       snapshotCanvas.width = ctx.canvas.width;
       snapshotCanvas.height = ctx.canvas.height;
@@ -361,10 +532,8 @@ export function renderFrame(ctx, proj, t, scale = 1, opts = {}) {
       ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
       if (op < 1) { ctx.globalAlpha = 1 - op; ctx.drawImage(snapshotCanvas, 0, 0); ctx.globalAlpha = 1; }
       renderLayer(ctx, l, t, scale, { snapshot: snapshotCanvas }, proj.fps);
-      continue;
     }
-    renderLayer(ctx, l, t, scale, null, proj.fps);
-  }
+  });
   ctx.restore();
 }
 

@@ -280,6 +280,11 @@ function flattenGroup(tdgp, defs, fx, ctx) {
   }
 }
 
+/** Lê uma propriedade (tdbs) isolada: valor + keyframes (usado pelo importador de .aep). */
+export function parsePropertyChunk(r, tdbs, matchName, fps) {
+  return parseProperty(tdbs, matchName, null, { r, fps, result: { warnings: [] } });
+}
+
 export function paramIndex(mn) {
   const m = /-(\d{4})$/.exec(mn || '');
   return m ? parseInt(m[1], 10) : -1;

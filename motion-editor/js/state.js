@@ -47,6 +47,10 @@ export const LAYER_FACTORIES = {
   video: (p, src, w, h, name) => baseLayer(p, 'video', name || 'Vídeo', { src, width: w, height: h, sourceStart: 0, speed: 1 }),
   audio: (p, src, name) => baseLayer(p, 'audio', name || 'Áudio', { src, volume: 100, sourceStart: 0, muted: false }),
   adjustment: (p) => baseLayer(p, 'adjustment', 'Ajuste', {}),
+  // Null (como no After Effects): invisível, serve de "pai" para outras camadas
+  null: (p) => baseLayer(p, 'null', 'Null', { width: 100, height: 100 }),
+  // Camada de formas (Shape Layer do AE): retângulos, elipses, estrelas e caminhos com preenchimento/contorno
+  shape: (p, shapes = []) => baseLayer(p, 'shape', 'Formas', { width: p.width, height: p.height, shapes }),
 };
 
 /** Estado global do editor com histórico de desfazer/refazer. */
