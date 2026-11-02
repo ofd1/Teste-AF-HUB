@@ -49,6 +49,7 @@ export class TopazPanel {
       <section class="tz-sec">
         <label class="tz-title"><span class="switch"><input type="checkbox" data-tz="enh" ${tz?.enabled ? 'checked' : ''}><i></i></span> <b>Aprimoramento</b> <span class="muted small">— upscale/limpeza</span></label>
         ${tz ? `
+          <label class="row"><span>Upscale (detalhe)</span><select data-tz="upscale">${['Desligado', '2×', '4×', '8×'].map((n, i) => `<option value="${i + 1}" ${(pv('upscale') || 2) === i + 1 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
           <label class="row"><span>Modelo de IA</span><select data-tz="model">${TOPAZ_MODELS.map(([n], i) => `<option value="${i + 1}" ${model === i + 1 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
           ${auto ? '<p class="muted small">Valores automáticos do modelo. Toque em “Ajustar manualmente” para mexer (vira Proteus).</p><button class="wide" data-tz="manual">Ajustar manualmente (Proteus)</button>' : ''}
           ${TOPAZ_KEYS.map((k) => `<div class="tz-row ${auto ? 'locked' : ''}"><div><b>${LABELS[k][0]}</b><span class="muted small"> ${LABELS[k][1]}</span></div>
@@ -78,7 +79,8 @@ export class TopazPanel {
 
       <section class="tz-sec">
         <div class="tz-title"><b>Saída</b></div>
-        <p class="muted small">Na exportação, escolha <b>150%</b> ou <b>200% (upscale)</b> em Resolução para gerar o vídeo maior (ex.: 1080×1920 → 2160×3840). O Aprimoramento recupera os detalhes na resolução de saída.</p>
+        <label class="row"><span>Upscale do vídeo (exportação)</span><select data-tz="outscale">${[1, 2, 4, 8].map((v) => `<option value="${v}" ${(this.store.project.exportScale || 1) === v ? 'selected' : ''}>${v === 1 ? '1× (tamanho do projeto)' : `${v}× (${this.store.project.width * v}×${this.store.project.height * v})`}</option>`).join('')}</select></label>
+        <p class="muted small">Como no Topaz: o clipe é reconstruído a partir da resolução original (Upscale do Aprimoramento) e exportado maior. O iPhone grava até ~4K; se pedir 8× e não couber, exporta no maior tamanho possível e avisa.</p>
       </section>`;
     this.bind();
   }
@@ -86,6 +88,9 @@ export class TopazPanel {
   ensureTopaz() {
     let tz = this.fx('topaz');
     if (!tz) { tz = createEffectInstance('topaz', {}); this.layer.effects.unshift(tz); }
+    // projetos antigos: parâmetros novos do upscale
+    if (!tz.params.upscale) tz.params.upscale = { value: 1, keys: [] };
+    if (!tz.params.edgeAware) tz.params.edgeAware = { value: 80, keys: [] };
     return tz;
   }
 
@@ -97,6 +102,7 @@ export class TopazPanel {
       const tz = this.ensureTopaz(); tz.enabled = e.target.checked; store.commit();
       if (e.target.checked) toast('Aprimoramento ligado. Compare com “Ver original”.', 'ok', 2500);
     });
+    q('upscale')?.addEventListener('change', (e) => { const tz = this.ensureTopaz(); tz.params.upscale.value = +e.target.value; tz.params.upscale.keys = []; store.commit(); });
     q('model')?.addEventListener('change', (e) => { const tz = this.ensureTopaz(); tz.params.model.value = +e.target.value; tz.params.model.keys = []; store.commit(); });
     q('manual')?.addEventListener('click', () => {
       const tz = this.ensureTopaz();
@@ -115,6 +121,11 @@ export class TopazPanel {
       r.addEventListener('change', () => { this.dragging = false; store.commit(); });
     });
     q('compare')?.addEventListener('click', () => { const tz = this.fx('topaz'); if (tz) { tz.enabled = !tz.enabled; store.commit(); } });
+    q('outscale')?.addEventListener('change', (e) => {
+      store.project.exportScale = +e.target.value;
+      const tz = this.ensureTopaz(); if (+e.target.value > 1) { tz.params.upscale.value = [1, 1, 2, 3, 3, 4, 4, 4, 4][+e.target.value]; tz.params.upscale.keys = []; tz.enabled = true; }
+      store.commit(); toast(`Exportação em ${e.target.value}× — escolhida também na janela Exportar.`, 'ok', 2500);
+    });
     q('interp')?.addEventListener('change', (e) => { l.props.interpolate = e.target.checked; store.commit(); });
     q('dedupe')?.addEventListener('change', (e) => { l.props.dedupe = e.target.checked; store.commit(); if (e.target.checked) toast('Preparando quadros para achar os duplicados…', 'info', 2500); });
     q('slowmo')?.addEventListener('change', (e) => {

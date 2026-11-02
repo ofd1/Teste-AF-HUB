@@ -99,14 +99,50 @@ void main() {
   gl_FragColor = texture2D(u_tex, fromContent(clamp(cu, e, 1.0 - e)));
 }`);
 
+// Upscale com reconstrução direcional (estilo EASU/Lanczos adaptativo às bordas): amostra a imagem na resolução
+// ORIGINAL do vídeo e reconstrói em N× com o núcleo esticado ao longo das bordas (sem serrilhado nem borrão),
+// com anti-ringing (limita aos vizinhos mais próximos).
+const UPSCALE = frag(`
+uniform vec2 u_nat; uniform float u_edge;
+float lz(float x) { x = abs(x); if (x < 1e-4) return 1.0; if (x >= 2.0) return 0.0; float px = 3.14159265 * x; return 2.0 * sin(px) * sin(px * 0.5) / (px * px); }
+void main() {
+  vec2 pos = v_uv * u_nat - 0.5;
+  vec2 b = floor(pos), f = pos - b;
+  vec2 it = 1.0 / u_nat;
+  // gradiente (estrutura da borda) no ponto, a partir de 4×4 vizinhos
+  float l[16];
+  for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) l[j * 4 + i] = luma(texture2D(u_tex, (b + vec2(float(i) - 0.5, float(j) - 0.5)) * it).rgb);
+  float gx = (l[6] + l[10] - l[5] - l[9]) * 0.5 + (l[7] + l[11] - l[4] - l[8]) * 0.25;
+  float gy = (l[9] + l[10] - l[5] - l[6]) * 0.5 + (l[13] + l[14] - l[1] - l[2]) * 0.25;
+  vec2 g = vec2(gx, gy);
+  float gl2 = length(g);
+  vec2 dir = gl2 > 1e-5 ? g / gl2 : vec2(1.0, 0.0);
+  float str = clamp(gl2 * 6.0, 0.0, 1.0) * u_edge;
+  vec3 acc = vec3(0.0); float ws = 0.0; float aa = 0.0;
+  vec3 mn = vec3(1e3), mx = vec3(-1e3);
+  for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) {
+    vec2 o = vec2(float(i) - 1.0, float(j) - 1.0);
+    vec2 d = o - f;
+    // eixo across = direção do gradiente (mantém nitidez); along = ao longo da borda (núcleo mais longo, suaviza o serrilhado)
+    vec2 r = vec2(dot(d, dir), dot(d, vec2(-dir.y, dir.x)) * (1.0 - 0.5 * str));
+    float w = lz(r.x) * lz(r.y);
+    vec4 c = texture2D(u_tex, (b + o + 0.5) * it);
+    acc += c.rgb * w; aa += c.a * w; ws += w;
+    if (o.x > -0.5 && o.x < 1.5 && o.y > -0.5 && o.y < 1.5) { mn = min(mn, c.rgb); mx = max(mx, c.rgb); }
+  }
+  vec3 o = acc / max(ws, 1e-4);
+  o = clamp(o, mn, mx);
+  gl_FragColor = vec4(o, clamp(aa / max(ws, 1e-4), 0.0, 1.0));
+}`);
+
 /** Valores "automáticos" de cada modelo (como os presets da Topaz). Proteus = manual. */
 export const TOPAZ_MODELS = [
   ['Proteus (manual)', null],
-  ['Artemis – ruído e compressão', { revertCompression: 60, recoverDetails: 45, sharpen: 40, reduceNoise: 40, dehalo: 35, antialiasDeblur: 35, aiSmooth: 55, recoverOriginal: 0, addNoise: 0 }],
-  ['Iris – rostos e pele', { revertCompression: 55, recoverDetails: 55, sharpen: 45, reduceNoise: 40, dehalo: 45, antialiasDeblur: 40, aiSmooth: 75, recoverOriginal: 0, addNoise: 1 }],
-  ['Gaia – fonte boa / alta qualidade', { revertCompression: 25, recoverDetails: 60, sharpen: 40, reduceNoise: 15, dehalo: 40, antialiasDeblur: 35, aiSmooth: 35, recoverOriginal: 0, addNoise: 0 }],
+  ['Artemis – ruído e compressão', { upscale: 2,  revertCompression: 60, recoverDetails: 45, sharpen: 40, reduceNoise: 40, dehalo: 35, antialiasDeblur: 35, aiSmooth: 55, recoverOriginal: 0, addNoise: 0 }],
+  ['Iris – rostos e pele', { upscale: 2,  revertCompression: 55, recoverDetails: 55, sharpen: 45, reduceNoise: 40, dehalo: 45, antialiasDeblur: 40, aiSmooth: 75, recoverOriginal: 0, addNoise: 1 }],
+  ['Gaia – fonte boa / alta qualidade', { upscale: 2,  revertCompression: 25, recoverDetails: 60, sharpen: 40, reduceNoise: 15, dehalo: 40, antialiasDeblur: 35, aiSmooth: 35, recoverOriginal: 0, addNoise: 0 }],
   ['Nyx – só remover ruído', { revertCompression: 30, recoverDetails: 15, sharpen: 10, reduceNoise: 75, dehalo: 20, antialiasDeblur: 5, aiSmooth: 60, recoverOriginal: 0, addNoise: 0 }],
-  ['Rhea – detalhe máximo (4×)', { revertCompression: 50, recoverDetails: 80, sharpen: 55, reduceNoise: 30, dehalo: 55, antialiasDeblur: 55, aiSmooth: 70, recoverOriginal: 0, addNoise: 2 }],
+  ['Rhea – detalhe máximo (4×)', { upscale: 3,  revertCompression: 50, recoverDetails: 80, sharpen: 55, reduceNoise: 30, dehalo: 55, antialiasDeblur: 55, aiSmooth: 70, recoverOriginal: 0, addNoise: 2 }],
 ];
 export const TOPAZ_KEYS = ['revertCompression', 'recoverDetails', 'sharpen', 'reduceNoise', 'dehalo', 'antialiasDeblur', 'aiSmooth', 'recoverOriginal', 'addNoise'];
 
@@ -116,6 +152,7 @@ export default [
     description: 'Mesmos controles do Proteus manual da Topaz: tira blocos de compressão e ruído, recupera detalhes e nitidez sem halo — ótimo para clipes baixados do TikTok/Instagram ampliados para 1080p. Escolha um modelo (valores automáticos) ou Proteus para ajustar tudo. Recriação com algoritmos na GPU (não as redes neurais da Topaz).',
     params: [
       sel('model', 'Modelo', TOPAZ_MODELS.map(([n]) => n), 2),
+      sel('upscale', 'Upscale (reconstruir a partir do vídeo original)', ['Desligado', '2×', '4×', '8×'], 2), num('edgeAware', 'Upscale – seguir bordas %', 80, 0, 100),
       num('revertCompression', 'Revert Compression (tirar blocos)', 55, 0, 100), num('recoverDetails', 'Recover Details (detalhes)', 30, 0, 100),
       num('sharpen', 'Sharpen (nitidez)', 25, 0, 100), num('reduceNoise', 'Reduce Noise (ruído)', 40, 0, 100),
       num('dehalo', 'Dehalo (tirar halos)', 30, 0, 100), num('antialiasDeblur', 'Anti-alias / Deblur', 20, 0, 100),
@@ -131,6 +168,16 @@ export default [
       const auto = env.srcW ? env.w / env.srcW : 1.5;
       const pxs = Math.max(1, (p.sourceScale > 0 ? p.sourceScale : auto)) * env.scale;
       let out = src;
+      // Upscale: volta à grade de pixels do vídeo original e reconstrói N× com o filtro direcional
+      const up = [0, 1, 2, 4, 8][(p.upscale || (m && m.upscale) || 1)] || 0;
+      if (up >= 2 && pxs > 1.15) {
+        const nw = Math.max(8, Math.round(src.w / pxs)), nh = Math.max(8, Math.round(src.h / pxs));
+        let nat = gl.copy(src, nw, nh);
+        if (pxs > 2.2) nat = gl.copy(gl.blur(src, pxs * 0.22), nw, nh); // anti-alias ao voltar para a grade original
+        const tw = Math.min(nw * up, src.w * 2), th = Math.min(nh * up, src.h * 2);
+        const big = gl.pass(UPSCALE, { u_tex: nat, u_nat: [nw, nh], u_edge: (p.edgeAware ?? 80) / 100 }, tw, th);
+        out = tw === src.w && th === src.h ? big : gl.copy(big, src.w, src.h);
+      }
       const rc = v('revertCompression'), rn = v('reduceNoise');
       if (rc > 0.01) out = gl.pass(BILAT, { u_tex: out, u_rad: 2.2 * pxs, u_sigR: 0.06 + rc * 0.06, u_amt: Math.min(1, rc * 1.2), u_flat: 0.85 });
       if (rn > 0.01) out = gl.pass(BILAT, { u_tex: out, u_rad: 3 * pxs, u_sigR: 0.05 + rn * 0.12, u_amt: Math.min(1, rn * 1.1), u_flat: 0.3 });

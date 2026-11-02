@@ -67,6 +67,18 @@ function progressModal(title, detail) {
 }
 
 /** Exporta MP4 quadro a quadro (preciso: respeita velocidade/Twixtor, motion blur e frame blending). */
+/** Maior escala ≤ pedida que o aparelho consegue (limite de canvas do iPhone ~16,7 MP e do codificador). */
+export async function fitExportScale(project, scale, fps = 30, bitrate = 16) {
+  const MAXPX = 16_700_000;
+  let s = Math.min(scale, Math.sqrt(MAXPX / (project.width * project.height)));
+  for (let k = 0; k < 12; k++) {
+    const w = even(project.width * s), h = even(project.height * s);
+    if (!window.VideoEncoder || await pickVideoCodec(w, h, bitrate * 1e6, fps)) return s;
+    s *= 0.85;
+  }
+  return Math.min(scale, 1);
+}
+
 export async function exportMP4(store, { scale = 1, bitrate = 16, fpsOverride } = {}) {
   const { project } = store;
   const fps = fpsOverride || project.fps;
@@ -246,13 +258,18 @@ export async function exportPNG(store) {
 export async function exportDialog(store) {
   const res = await modal('Exportar', `
     <label class="row"><span>Formato</span><select data-f="fmt"><option value="video">Vídeo MP4</option><option value="png">Quadro atual (PNG)</option><option value="project">Projeto (.json)</option></select></label>
-    <label class="row"><span>Resolução</span><select data-f="scale"><option value="1">100% (${store.project.width}×${store.project.height})</option><option value="1.5">150% upscale (${even(store.project.width * 1.5)}×${even(store.project.height * 1.5)})</option><option value="2">200% upscale (${store.project.width * 2}×${store.project.height * 2})</option><option value="0.6667">66%</option><option value="0.5">50%</option></select></label>
+    <label class="row"><span>Resolução</span><select data-f="scale" data-def="${store.project.exportScale || 1}"><option value="1">100% (${store.project.width}×${store.project.height})</option><option value="1.5">150% upscale (${even(store.project.width * 1.5)}×${even(store.project.height * 1.5)})</option><option value="2">2× upscale (${store.project.width * 2}×${store.project.height * 2})</option><option value="4">4× upscale (${store.project.width * 4}×${store.project.height * 4})</option><option value="8">8× upscale (${store.project.width * 8}×${store.project.height * 8})</option><option value="0.6667">66%</option><option value="0.5">50%</option></select></label>
     <label class="row"><span>FPS</span><select data-f="fps">${[24, 25, 30, 50, 60].map((f) => `<option ${f === store.project.fps ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
     <label class="row"><span>Qualidade (Mbps)</span><input type="number" data-f="bitrate" value="16" min="2" max="80"></label>`,
-  [{ label: 'Cancelar', value: null }, { label: 'Exportar', primary: true, value: (w) => ({ fmt: w.querySelector('[data-f="fmt"]').value, scale: +w.querySelector('[data-f="scale"]').value, fps: +w.querySelector('[data-f="fps"]').value, bitrate: +w.querySelector('[data-f="bitrate"]').value }) }]);
+  [{ label: 'Cancelar', value: null }, { label: 'Exportar', primary: true, value: (w) => ({ fmt: w.querySelector('[data-f="fmt"]').value, scale: +w.querySelector('[data-f="scale"]').value, fps: +w.querySelector('[data-f="fps"]').value, bitrate: +w.querySelector('[data-f="bitrate"]').value }) }], { onMount: (w) => { const sel = w.querySelector('[data-f="scale"]'); sel.value = sel.dataset.def; if (!sel.value) sel.value = '1'; } });
   if (!res) return null;
   if (res.fmt === 'png') await exportPNG(store);
   else if (res.fmt === 'video') {
+    if (res.scale > 1) {
+      const fit = await fitExportScale(store.project, res.scale, res.fps, res.bitrate);
+      if (fit < res.scale - 1e-3) toast(`Este aparelho grava no máximo ${even(store.project.width * fit)}×${even(store.project.height * fit)} — exportando nesse tamanho (o maior possível).`, 'info', 6000);
+      res.scale = fit;
+    }
     const ok = await exportMP4(store, { scale: res.scale, bitrate: res.bitrate, fpsOverride: res.fps });
     if (!ok) await exportRealtime(store, res);
   }

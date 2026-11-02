@@ -37,7 +37,7 @@ export function looksFromTools(tools, strength = 100) {
   const HSL = ['Red', 'Orange', 'Yellow', 'Green', 'Aqua', 'Blue', 'Purple', 'Magenta'];
   for (const k of HSL) { p[`hsl${k}H`] = 0; p[`hsl${k}S`] = 0; p[`hsl${k}L`] = 0; }
   let curve = [];
-  const used = [], ignored = [];
+  const used = [], ignored = [], extra = [];
   for (const t of tools) {
     const v = t.values;
     if (!t.enabled) { ignored.push(`${t.id} (desligada)`); continue; }
@@ -46,10 +46,77 @@ export function looksFromTools(tools, strength = 100) {
       // Contrast (painel do Looks): [Contrast, Pivot, Exposure Compensation] — ex.: -0.035 / 0.2 / 0
       case 'cntr': case 'cont': case 'ctst': case 'cnst': case 'ctrs': case 'contr':
         p.lkContrast = clampN((p.lkContrast || 0) + (v[0] || 0), -1, 2); p.lkPivot = clampN(v[1] ?? 0.5, 0, 1); p.lkComp = clampN(v[2] || 0, -2, 2); break;
-      case 'fltr':
-        if (Math.min(v[0], v[1], v[2]) < 0.995) { p.filter = [v[0], v[1], v[2], 1]; p.filterDensity = 100; } else { ignored.push('fltr (neutro)'); continue; }
+      // Color Blend / filtro (Looks): [R, G, B, Exposure Compensation] — ganhos por canal em luz linear
+      case 'fltr': {
+        const ec = 2 ** (v[3] || 0);
+        if ([0, 1, 2].every((i) => Math.abs((v[i] ?? 1) - 1) < 0.005) && !v[3]) { ignored.push('fltr (neutro)'); continue; }
+        ['R', 'G', 'B'].forEach((c, i) => { p[`gain${c}`] *= Math.max(0, (v[i] ?? 1) * ec) ** (1 / 2.2); });
         break;
-      case 'vign': p.vignette = Math.max(p.vignette, (v[5] || 0) * 0.8); p.vignetteSize = clampN(60 - ((v[2] || 1) - 1) * 50, 15, 85); break;
+      }
+      // Vignette (Looks): [Center X, Center Y, Size, Softness, Falloff, Amount, Exposure Comp., R, G, B, Aspect]
+      case 'vign': p.vignette = Math.max(p.vignette, clampN(v[5] ?? 0, 0, 100) * 0.8); p.vignetteSize = clampN(60 - ((v[2] ?? 1) - 1) * 50, 15, 85); p.exposure += v[6] || 0; break;
+      // Gradient (Looks): [X1, Y1, X2, Y2, Falloff, Tint %, Exposure Comp., R, G, B] — tinge em degradê
+      case 'grad': {
+        const a = clampN((v[5] ?? 0) / 100, 0, 1);
+        if (!a) { ignored.push('grad (neutro)'); continue; }
+        p.gradTwoPoint = true;
+        p.gradP1 = [0.5 + (v[0] || 0) / 100, 0.5 - (v[1] || 0) / 100];
+        p.gradP2 = [0.5 + (v[2] || 0) / 100, 0.5 - (v[3] || 0) / 100];
+        p.gradSoft = clampN(v[4] ?? 0.5, 0.01, 2);
+        p.gradColor = [0, 1, 2].map((i) => 1 + ((v[7 + i] ?? 1) - 1) * a).concat(1);
+        p.exposure += v[6] || 0;
+        break;
+      }
+      // Lift-Gamma-Gain: [?, Strength, Exposure, Lift RGB (1 = neutro), Gamma RGB, Gain RGB]
+      case 'lgg2': case 'lggn': {
+        const k = (v[1] ?? 100) / 100;
+        ['R', 'G', 'B'].forEach((c, i) => {
+          p[`lift${c}`] += ((v[3 + i] ?? 1) - 1) * k;
+          p[`gamma${c}`] *= 1 + ((v[6 + i] ?? 1) - 1) * k;
+          p[`gain${c}`] *= 1 + ((v[9 + i] ?? 1) - 1) * k;
+        });
+        p.exposure += (v[2] || 0) * k;
+        break;
+      }
+      // 3-Way Color Corrector: [?, ?, ?, Saturation, Lift RGB, Gamma RGB, Gain RGB]
+      case '3wcc':
+        ['R', 'G', 'B'].forEach((c, i) => { p[`lift${c}`] += (v[4 + i] ?? 1) - 1; p[`gamma${c}`] *= v[7 + i] ?? 1; p[`gain${c}`] *= v[10 + i] ?? 1; });
+        if (v[3] !== undefined) p.saturation *= clampN(v[3], 0, 300) / 100;
+        break;
+      // Black & White: pesos R, G, B do mono
+      case 'mono': { const w = [v[0] ?? 0.3, v[1] ?? 0.59, v[2] ?? 0.11]; p.mixR = w; p.mixG = w.slice(); p.mixB = w.slice(); p.mixAmt = 1; break; }
+      // Film Grain: [?, Amount] → efeito de grão separado
+      case 'fgrn': if ((v[1] || 0) > 0) extra.push({ type: 'noise', label: 'Looks · Film Grain', params: { amount: clampN((v[1] || 0) * 8, 0, 100), size: 1.2, animated: true, color: false } }); break;
+      // Pop / Clarity: contraste local → nitidez de raio largo
+      case 'popt': if (v[0]) extra.push({ type: 'sharpen', label: 'Looks · Pop', params: { amount: clampN(Math.abs(v[0]), 0, 500), radius: 3, threshold: 0, lumaOnly: true } }); break;
+      case 'pop2': if (v[0]) extra.push({ type: 'sharpen', label: 'Looks · Pop', params: { amount: clampN(Math.abs(v[0]), 0, 500), radius: Math.max(1, (v[1] ?? 100) / 25), threshold: 0, lumaOnly: true } }); break;
+      case 'Clar': case 'clar': if (v[0]) extra.push({ type: 'sharpen', label: 'Looks · Clarity', params: { amount: clampN(Math.abs(v[0]) * 20, 0, 500), radius: 6, threshold: 0, lumaOnly: true } }); break;
+      // Bleach Bypass (negativo / cópia): [Silver %, Exposure Compensation] → menos cor e mais contraste
+      case 'blby': case 'nbby': {
+        const sv = clampN((v[0] ?? 100) / 100, 0, 1);
+        p.saturation *= 1 - sv * 0.55; p.contrast += sv * 22; p.exposure += v[1] || 0;
+        break;
+      }
+      // Lightflex: [Flash (stops), Exposure, R, G, B] — "flash" de luz colorida que levanta as sombras
+      case 'flex': {
+        const f = 2 ** (v[0] ?? -4);
+        ['R', 'G', 'B'].forEach((c, i) => { p[`lift${c}`] += clampN(f * Math.max(0, v[2 + i] ?? 1) * 0.35, 0, 0.3); });
+        p.exposure += v[1] || 0;
+        break;
+      }
+      // Telecine Net: [?, Density, Exposure Compensation]
+      case 'tele': p.exposure += v[2] || 0; p.fade += clampN((v[1] || 0) * 20, 0, 20); break;
+      // Film Print: [Stock, Temperature, Tint, Exposure, Contrast, Saturation, Skin Tone, Vintage, Grain, Strength]
+      case 'filp': {
+        const k = (v[9] ?? 100) / 100;
+        p.temperature += (v[1] || 0) * k; p.tint += (v[2] || 0) * k; p.exposure += (v[3] || 0) * k;
+        p.contrast += (v[4] || 0) * k; p.saturation *= 1 + ((v[5] ?? 100) / 100 - 1) * k; p.fade += (v[7] || 0) * 0.3 * k;
+        p.mojoSkin = clampN(p.mojoSkin + (v[6] || 0) * 0.3, 0, 100);
+        if ((v[8] || 0) > 0) extra.push({ type: 'noise', label: 'Looks · Film Print grain', params: { amount: clampN(v[8] * 8, 0, 100), size: 1.2, animated: true, color: false } });
+        break;
+      }
+      // Auto Shoulder só age em valores acima do branco: sem efeito em 8 bits
+      case 'ashl': break;
       // Lens Vignette (Looks3.aex): [Vignette (tamanho), Amount, Highlights, Center X, Center Y, Aspect, Anamorphic]
       case 'lenv': p.vignette = Math.max(p.vignette, (v[1] ?? 50) * 0.35); p.vignetteSize = clampN(75 - (v[0] ?? 50) * 0.5, 15, 85); break;
       // Optical Diffusion (manual do Looks): Density, Size, Falloff, Glow, Highlights Only, Luster, Color…
@@ -151,22 +218,24 @@ export function looksFromTools(tools, strength = 100) {
         HSL.forEach((k, i) => { p[`hsl${k}H`] += v[3 + i] || 0; p[`hsl${k}S`] += v[11 + i] || 0; p[`hsl${k}L`] += v[19 + i] || 0; });
         break;
       // 4-Way Color: [Exposure, Contrast, Strength, Highlight RGB+Sat, Midtone RGB+Sat, Shadow RGB+Sat, Master RGB+Sat, …] (cores: 0,5 = neutro)
+      // 4-Way Color: [?, ?, Saturation, Shadows RGB+força, Midtones RGB+força, Highlights RGB+força, Master RGB+força]
+      // (cores: 0,5 = neutro; força em %) — o master entra no ganho
       case '4way': {
-        const k = (v[2] ?? 100) / 100, o = (i) => ((v[i] ?? 0.5) - 0.5) * 2 * k;
-        p.exposure += (v[0] || 0) * k; p.contrast += (v[1] || 0) * k;
-        ['R', 'G', 'B'].forEach((c, i) => {
-          p[`gain${c}`] *= 1 + o(3 + i) * 0.5 + o(15 + i) * 0.5;
-          p[`gamma${c}`] *= 1 + o(7 + i) * 0.6;
-          p[`lift${c}`] += o(11 + i) * 0.25;
+        const w = (b, l) => ((v[b + l] ?? 0.5) - 0.5) * 2 * (v[b + 3] ?? 100) / 100;
+        ['R', 'G', 'B'].forEach((c, l) => {
+          p[`lift${c}`] += w(3, l);
+          p[`gamma${c}`] *= clampN(1 / Math.max(0.1, 1 - w(7, l)), 0.25, 4);
+          p[`gain${c}`] *= 1 + w(11, l) + w(15, l);
         });
-        p.saturation *= 1 + (((v[6] ?? 100) + (v[10] ?? 100) + (v[14] ?? 100)) / 3 / 100 - 1) * k * 0.7 + ((v[18] ?? 100) / 100 - 1) * k;
+        if (v[2] !== undefined && Math.abs(v[2] - 100) > 1e-6) p.saturation *= clampN(v[2], 0, 300) / 100;
         break;
       }
 
       // Duotone: [Highlight RGB, Highlight Tint, Shadow RGB, Shadow Tint, Balance]
       case 'duto': ['R', 'G', 'B'].forEach((c, i) => { p[`gain${c}`] *= 1 + ((v[i] ?? 1) - 1) * ((v[3] || 0) / 100) * 0.6; p[`lift${c}`] += ((v[4 + i] ?? 1) - 1) * ((v[7] || 0) / 100) * 0.25; }); break;
       // Two Strip (Technicolor de 2 tiras): laranja/ciano forte, pele quente — não dessatura
-      case '2stp': p.mojo = Math.max(p.mojo, (v[0] || 0) * 0.6); p.mojoSkin = Math.max(p.mojoSkin, 70); p.saturation *= 1 + (v[0] || 0) / 500; break;
+      // Two Strip (Technicolor de 2 tiras): laranja/ciano forte, pele quente (mantido: mais perto dos prints de referência)
+      case '2stp': p.mojo = Math.max(p.mojo, (v[0] || 0) * 0.6); p.mojoSkin = Math.max(p.mojoSkin, 70); p.saturation *= 1 + (v[0] || 0) / 500; p.exposure += v[1] || 0; break;
       // S Curve: [Contrast (1 = neutro), Midpoint, Brightness (0,5 = neutro), Black Point, White Point, Log]
       case 'logc':
         p.contrast += clampN(((v[0] ?? 1) - 1) * 25, -60, 80);
@@ -219,13 +288,13 @@ export function looksFromTools(tools, strength = 100) {
   p.fade = clampN(p.fade, 0, 60); p.vignette = clampN(p.vignette, 0, 100); p.diffusion = clampN(p.diffusion, 0, 150);
   p.diffusionRadius = clampN(p.diffusionRadius, 1, 300); p.chroma = clampN(p.chroma, 0, 20); p.optGlow = clampN(p.optGlow, 0, 200);
   p.spotExposure = clampN(p.spotExposure, -4, 4); p.gradExposure = clampN(p.gradExposure, -4, 4); p.edgeBlur = clampN(p.edgeBlur, 0, 100);
-  return { params: p, used, ignored };
+  return { params: p, used, ignored, extra };
 }
 
 function looksExpand(fx, raw) {
   const strength = raw('strength') ?? 100;
-  const { params, used, ignored } = looksFromTools(fx.looksTools || [], strength);
-  return [{ type: 'looks', label: fx.name || 'Looks', params, note: `ferramentas: ${used.join(', ') || '—'}${ignored.length ? `; ignoradas: ${ignored.join(', ')}` : ''}` }];
+  const { params, used, ignored, extra } = looksFromTools(fx.looksTools || [], strength);
+  return [{ type: 'looks', label: fx.name || 'Looks', params, note: `ferramentas: ${used.join(', ') || '—'}${ignored.length ? `; ignoradas: ${ignored.join(', ')}` : ''}` }, ...extra];
 }
 
 export const IMPORT_RULES = [
