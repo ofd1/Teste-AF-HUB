@@ -19,9 +19,9 @@ const EXPECTED = {
   'Shakes/Sonhei Shake.ffx': ['twitch', 'exposure'],
   'Shakes/ZAZ Shake.ffx': ['motionTile', 'dirBlur', 'shake', 'twitch', 'tint'], // o motion blur do S_Shake agora é do próprio shake
   'Velocity & Reverse/Sonhei Reverse.ffx': ['twixtor', 'blurMoCurves'],
-  'CC (Color Correction)/Sonhei CC.ffx': ['looks', 'looks', 'sharpen', 'fourColor', 'exposure', 'filmLook', 'sharpen', 'looks', 'exposure'],
+  'CC (Color Correction)/Sonhei CC.ffx': ['looks', 'looks', 'sharpen', 'fourColor', 'levels', 'filmLook', 'sharpen', 'looks', 'exposure'],
   'CC (Color Correction)/Sonhei New CC.ffx': ['looks', 'looks', 'sharpen'],
-  'CC (Color Correction)/Galego CC.ffx': ['looks', 'glow', 'sharpen', 'flicker', 'exposure', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
+  'CC (Color Correction)/Galego CC.ffx': ['looks', 'glow', 'sharpen', 'flicker', 'levels', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
   'CC (Color Correction)/FTB Main CC.ffx': ['looks', 'sharpen', 'sharpen', 'hueSat', 'sharpen', 'looks', 'glow', 'looks', 'looks'], // Optical Diffusion → glow
   'CC (Color Correction)/FTB AEP CC.ffx': ['looks', 'glow', 'fourColor', 'looks', 'hueSat', 'looks', 'looks', 'brightnessContrast'],
   'CC (Color Correction)/ZAZ Reverse Dark CC.ffx': ['looks', 'glow', 'sharpen', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],

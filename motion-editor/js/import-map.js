@@ -21,6 +21,9 @@ const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
  * Converte as ferramentas do Magic Bullet Looks (decodificadas do .ffx) para o efeito "Looks" do app.
  * Os valores vêm do arquivo; a correspondência ferramenta → parâmetro é uma aproximação.
  */
+/** "Color Balance" das ferramentas do Looks é um equilíbrio de matiz: normaliza pelo maior canal; quase preto = neutro. */
+const balanceColor = (r = 1, g = 1, b = 1) => { const m = Math.max(r, g, b); return m < 0.05 ? [1, 1, 1] : [r / m, g / m, b / m]; };
+
 export function looksFromTools(tools, strength = 100) {
   const p = {
     strength, exposure: 0, temperature: 0, tint: 0, filter: [1, 1, 1, 1], filterDensity: 0,
@@ -309,7 +312,7 @@ export function looksFromTools(tools, strength = 100) {
         p.spotCenter = [clampN(0.5 + (v[1] || 0) / 100, 0, 1), clampN(0.5 - (v[2] || 0) / 100, 0, 1)];
         p.spotSize = clampN((v[3] ?? 1) * 100, 0, 400);
         p.spotSoft = clampN(Math.max(0.05, v[4] ?? 0.5) * 100, 1, 400);
-        p.spotColor = [v[7] ?? 1, v[8] ?? 1, v[9] ?? 1, 1];
+        p.spotColor = [...balanceColor(v[7] ?? 1, v[8] ?? 1, v[9] ?? 1), 1];
         p.spotAspect = clampN(v[10] ?? 1, 0.1, 4);
         p.spotInvert = !!v[11];
         break;
@@ -317,7 +320,7 @@ export function looksFromTools(tools, strength = 100) {
         // Grad Exposure (painel do Looks): [Stops, X1 %, Y1 %, X2 %, Y2 %, Falloff, Strength, Color Balance RGB (7-9)]
         // Pontos em % a partir do centro (Y para cima). Stops 0 com cor preta = escurece em degradê (filtro ND).
         {
-          const col = [v[7] ?? 1, v[8] ?? 1, v[9] ?? 1];
+          const col = balanceColor(v[7] ?? 1, v[8] ?? 1, v[9] ?? 1);
           if (!v[0] && col.every((c) => Math.abs(c - 1) < 0.005)) { ignored.push('grex (neutro)'); continue; }
           p.gradTwoPoint = true;
           p.gradExposure = clampN((p.gradTwoPoint && p.gradExposure ? p.gradExposure : 0) + (v[0] || 0), -4, 4);
@@ -430,8 +433,15 @@ export const IMPORT_RULES = [
     map: { amount: { n: ['sharpen amp'], conv: (v) => v * 60 }, radius: { n: ['small detail size'], conv: (v) => v * 0.8 } } },
   { vendor: 'Sapphire', plugin: 'S_HueSatBright', to: 'looks', test: /s_huesat/i,
     expand: (fx, raw) => [{ type: 'looks', label: 'S_HueSatBright', params: { hue: (raw('hue shift') || 0) * 360, saturation: (raw('saturation') ?? 1) * 100, exposure: Math.log2(Math.max(0.01, raw('brightness') ?? 1)) } }] },
-  { vendor: 'Sapphire', plugin: 'S_MathOps', to: 'exposure', test: /s_mathops/i,
-    expand: (fx, raw) => [{ type: 'exposure', label: 'S_MathOps', params: { offset: (raw('a darks') || 0) + (raw('dest darks') || 0), exposure: Math.log2(Math.max(0.01, (raw('a lights') ?? 1) * (raw('dest lights') ?? 1))) } }] },
+  // S_MathOps: A × Lights + Darks direto no valor da imagem (não em luz linear) → Níveis
+  { vendor: 'Sapphire', plugin: 'S_MathOps', to: 'levels', test: /s_mathops/i,
+    expand: (fx, raw) => {
+      const L = Math.max(0.01, (raw('a lights') ?? 1) * (raw('dest lights') ?? 1)), D = (raw('a darks') || 0) + (raw('dest darks') || 0);
+      const p = { inBlack: 0, inWhite: 255, gamma: 1, outBlack: 0, outWhite: 255 };
+      if (D < 0) p.inBlack = Math.min(254, (-D / L) * 255); else p.outBlack = Math.min(254, D * 255);
+      if (L >= 1) p.inWhite = Math.max(p.inBlack + 1, Math.min(255, 255 / L)); else p.outWhite = Math.max(p.outBlack + 1, L * 255);
+      return [{ type: 'levels', label: 'S_MathOps', params: p }];
+    } },
   { vendor: 'Sapphire', plugin: 'S_FilmDamage / S_FilmEffect', to: 'filmLook', test: /s_film/i,
     expand: (fx, raw) => [{ type: 'filmLook', label: fx.name, params: { grain: Math.min(100, (raw('grain amp') || 0) * 30), scratch: Math.min(100, (raw('dust density') || 0) * 10 + (raw('scratch density') || 0) * 10), vignette: Math.min(100, (raw('vignette darkness') || 0) * 100), flicker: Math.min(100, ((raw('flicker amp') ?? raw('flicker')) || 0) * 100), warmth: 0, fade: Math.min(60, Math.max(0, -(raw('offset darks') || 0)) * 20) } }] }, // S_FilmEffect: Vignette Darkness, Offset Darks; S_FilmDamage: Flicker
   { vendor: 'Sapphire', plugin: 'S_Flicker', to: 'flicker', test: /s_flicker/i,

@@ -129,7 +129,8 @@ test('Looks: Spot Exposure, Gradient Exposure e Edge Softness convertidos', asyn
     { id: 'edgs', enabled: true, values: [5.003, 10, 1.962, -1.61, 1.351, 0.634, 1.179] },
   ]);
   assert.equal(params.spotExposure, 0.4);
-  assert.deepEqual(params.spotColor, [0.545, 0.463, 0.421, 1]);
+  // Color Balance do Looks é matiz (normalizado pelo maior canal), não escurece
+  assert.deepEqual(params.spotColor.map((x) => +x.toFixed(3)), [1, 0.85, 0.772, 1]);
   assert.equal(params.gradExposure, 0); // exposição 0 → ignorado
   assert.equal(params.edgeBlur, 5.003);
   assert.ok(Math.abs(params.edgeSize - 135.1) < 0.01);
