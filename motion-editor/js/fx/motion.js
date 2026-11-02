@@ -138,6 +138,8 @@ export default [
       num('ampX', 'Amplitude X %', 100, 0, 400), num('ampY', 'Amplitude Y %', 100, 0, 400),
       num('stillness', 'Stillness (pausas entre trancos)', 0, 0, 0.95, 0.01), num('twitchFreq', 'Twitch Frequency (rajadas/s)', 2, 0.1, 20, 0.1),
       num('drift', 'Drift (deriva lenta)', 0, 0, 2, 0.01), num('rgbShake', 'RGB separado (px)', 0, 0, 100),
+      // modo S_Shake exato (definição tirada do sapphire_ae.dll): Style Normal/Twitchy/Jumpy, Tilt e Z × Amplitude
+      bool('sapphire', 'Modo S_Shake (Sapphire)', false), sel('style', 'S_Shake – Style', ['Normal', 'Twitchy', 'Jumpy'], 1), num('centerBias', 'S_Shake – Center Bias', 0, 0, 1, 0.01),
     ],
     pad: (p, { layer, w, h } = {}) => (isFull(layer) ? 0 : p.amount * 1.3 + (Math.max(w || 0, h || 0) * (p.zoom + p.rotation)) / 100),
     render: (src, p, env) => {
@@ -152,8 +154,16 @@ export default [
         if (tt < 0) return 0;
         return Math.min(1, tt * fps * 2) * Math.exp(-tt / Math.max(0.02, (p.decay ?? 0.45) / 3));
       };
+      // S_Shake (Sapphire): twitch = valor aleatório por período (Twitch Frequency) acima do limiar → 1, senão 0,
+      // suavizado em 3 quadros; Twitchy usa Frequency × 10; Jumpy usa Center Bias como limiar e 4 × Frequency
+      const sap = !!p.sapphire, style = p.style || 1;
+      const twitch1 = (t, freq, thr) => (hash1(Math.floor(t * freq) * 1.618 + (p.seed || 0) * 7.1 + 3.3) > thr ? 1 : 0);
+      const smoothTwitch = (t, freq, thr) => (twitch1(t - 1 / fps, freq, thr) + twitch1(t, freq, thr) + twitch1(t + 1 / fps, freq, thr)) / 3;
+      const sapScale = (t) => (style === 2 ? smoothTwitch(t, p.twitchFreq || 2, p.stillness ?? 0.7) : style === 3 ? smoothTwitch(t, 4 * p.frequency, p.centerBias || 0) : 1);
+      const freqMul = sap && style === 2 ? 10 : 1;
       // Stillness / Twitch Frequency (S_Shake): o tremor vem em rajadas, com pausas — o visual agressivo de edit
       const burst = (t) => {
+        if (sap) return sapScale(t);
         if (!(p.stillness > 0)) return 1;
         // Stillness = fração do tempo parada (0,7 → 70% parado / 30% em rajada). O ruído é convertido em
         // distribuição uniforme para a fração bater; nas pausas fica um tremor leve, como no S_Shake.
@@ -163,15 +173,17 @@ export default [
         return 0.22 + 0.78 * on;
       };
       const at = (t) => {
-        const f = t * p.frequency, k = env0(t) * burst(t);
-        const ax = (p.ampX ?? 100) / 100, ay = (p.ampY ?? 100) / 100, dr = (p.drift || 0) * p.amount;
+        const f = t * p.frequency * freqMul, k = env0(t) * burst(t);
+        const ax = (p.ampX ?? 100) / 100, ay = (p.ampY ?? 100) / 100, dr = sap && style !== 3 ? 0 : (p.drift || 0) * p.amount;
+        const am = sap ? p.amount / 100 : 1; // no S_Shake a Amplitude multiplica também o Tilt (graus) e o Z
         return {
           dx: p.axis === 3 ? 0 : wig(f, p.seed) * p.amount * ax * k + noiseG(t * 0.35, p.seed + 7) * dr,
           dy: p.axis === 2 ? 0 : wig(f, p.seed + 17) * p.amount * ay * k + noiseG(t * 0.3, p.seed + 8) * dr,
-          rot: wig(f, p.seed + 33) * p.rotation * k, s: 1 + Math.abs(wig(f * 0.9, p.seed + 51)) * (p.zoom / 100) * k,
+          rot: wig(f, p.seed + 33) * p.rotation * am * k, s: sap ? 1 + wig(f * 0.9, p.seed + 51) * (p.zoom / 100) * am * k : 1 + Math.abs(wig(f * 0.9, p.seed + 51)) * (p.zoom / 100) * k,
         };
       };
-      const c = at(env.t), q = at(env.t - (p.shutter ?? 1) / fps);
+      // S_Shake: o borrão vai do quadro atual até o próximo × Mo Blur Length
+      const c = sap ? at(env.t + (p.shutter ?? 1) / fps) : at(env.t), q = sap ? at(env.t) : at(env.t - (p.shutter ?? 1) / fps);
       const moving = (p.shutter ?? 1) > 0 && (Math.abs(c.dx - q.dx) + Math.abs(c.dy - q.dy) > 0.3 || Math.abs(c.rot - q.rot) > 0.05 || Math.abs(c.s - q.s) > 1e-3);
       const n = moving ? blurSamples(env, q, c, Math.round(p.samples ?? 12)) : 1;
       let out = env.gl.pass(BMC, {
