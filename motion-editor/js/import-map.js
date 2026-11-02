@@ -179,7 +179,7 @@ export function looksFromTools(tools, strength = 100) {
           p.diffusionRadius = Math.max(p.diffusionRadius, 2.29 * v[0]);
           p.diffusionThreshold = clampN(78.75 + 0.625 * ((v[3] ?? 75) - 75) - 8.1 * (v[4] || 0), 0, 100);
           p.exposure += v[5] || 0;
-        } else if (v[0] < 2) { p.exposure += (v[5] || 0) * 0.5; p.diffusion = Math.max(p.diffusion, (v[0] || 0) * 40); p.diffusionRadius = Math.max(p.diffusionRadius, 30); }
+        } else if (v[0] < 2) p.exposure += (v[5] || 0) * 0.5; // Diffusion tão pequeno só levanta os realces no Looks (sem glow)
         break;
       // Chromatic Aberration: [Red/Cyan, Green/Magenta, Blue/Yellow]
       case 'chab': p.chroma += (Math.abs(v[0] || 0) + Math.abs(v[1] || 0) * 0.7 + Math.abs(v[2] || 0) * 0.7) * 4; break;
@@ -205,8 +205,8 @@ export function looksFromTools(tools, strength = 100) {
       // Haze/Flare (manual: Spillage, Softness, …, Exposure, …, cor): luz que vaza dentro da lente + leve névoa
       case 'haze':
         p.hazeSpill = clampN(v[0] ?? 50, 0, 100); p.hazeSoftness = clampN(v[1] ?? 60, 0, 100);
-        p.hazeExposure = clampN(v[3] ?? -1, -10, 4); p.hazeTint = [v[8] ?? 1, v[9] ?? 1, v[10] ?? 1, 1];
-        p.fade += (v[2] || 0) * 0.08;
+        // Haze/Flare (nomes dos .rgx): [Spillage, Softness, Reach, Exposure, Reflection Exposure, Reflection, Matte Box Size, Matte Box Shade, Tint RGB]
+        p.hazeExposure = clampN(v[3] ?? -1, -10, 4); p.hazeTint = [v[8] ?? 1, v[9] ?? 1, v[10] ?? 1, 1]; p.hazeReach = clampN(v[2] ?? 50, 0, 100);
         break;
       // Anamorphic Flare (manual: Size, Boost, Threshold, …, cor)
       // Anamorphic Flare (Looks3.aex): [Size, Threshold, Threshold Softness, Boost, Reflection, Reflection Boost, …]

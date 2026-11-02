@@ -74,7 +74,7 @@ test('CC: Looks decodificado e Gradiente de 4 cores', () => {
   assert.deepEqual(parsed.effects.filter((e) => /^MB/.test(e.matchName)).map((e) => e.name), ['Magic Bullet Looks', 'Looks 3', 'Magic Bullet Looks 2', 'Looks']);
   const looks = preset.effects.filter((e) => e.type === 'looks');
   assert.deepEqual(looks.map((l) => l.params.strength), [50, 100, 75, 90]);
-  assert.ok(looks[0].params.mojo > 0 && looks[0].params.vignette > 0 && looks[0].params.diffusion > 0);
+  assert.ok(looks[0].params.mojo > 0 && looks[0].params.vignette > 0 && looks[0].params.optDensity > 0);
   const g = preset.effects.find((e) => e.type === 'fourColor').params;
   assert.equal(g.mode, 7); // Soft Light
   assert.equal(g.opacity, 5);

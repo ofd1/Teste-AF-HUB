@@ -282,16 +282,26 @@ void main() {
   vec2 q = cu * fill / max(f, 0.05) + 0.5;
   gl_FragColor = (q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) ? vec4(0.0) : texture2D(u_tex, fromContent(q));
 }`);
-// Haze/Flare (Looks): luz que "vaza" dentro da lente — brilho largo dos realces, mais forte perto das bordas (spillage)
+// Haze/Flare (Looks): a luz das faixas laterais do quadro (Spillage = largura de cada faixa) reflete para dentro
+// da imagem (Reach = até onde vai), espalhada na vertical (Softness) — o véu leitoso das lentes antigas.
+// u_tex2 = imagem reduzida e borrada na vertical (as faixas são lidas dela).
 const HAZE = frag(`
-uniform sampler2D u_tex2; uniform float u_exp, u_spill; uniform vec3 u_tintc;
+uniform sampler2D u_tex2; uniform float u_exp, u_spill, u_reach; uniform vec3 u_tintc;
+vec3 strip(float x0, float x1, float y) {
+  vec3 acc = vec3(0.0);
+  for (int i = 0; i < 6; i++) { float x = mix(x0, x1, (float(i) + 0.5) / 6.0); acc += texture2D(u_tex2, fromContent(vec2(x, y))).rgb; }
+  return acc / 6.0;
+}
 void main() {
   vec4 a = texture2D(u_tex, v_uv);
-  vec3 h = texture2D(u_tex2, v_uv).rgb;
-  vec2 cu = contentUV(v_uv) - 0.5;
-  float edge = mix(1.0, smoothstep(0.1, 0.75, length(cu) * 1.4), 1.0 - u_spill);
-  vec3 o = a.rgb + h * u_tintc * u_exp * edge * (1.0 - a.rgb * 0.5);
-  gl_FragColor = vec4(min(o, vec3(a.a)), a.a);
+  vec2 c = contentUV(v_uv);
+  vec3 L = strip(0.0, u_spill, c.y), R = strip(1.0 - u_spill, 1.0, c.y);
+  L = pow(L, vec3(2.2)); R = pow(R, vec3(2.2));
+  float wl = exp(-c.x / max(u_reach, 0.01)), wr = exp(-(1.0 - c.x) / max(u_reach, 0.01));
+  vec3 h = (L * wl + R * wr) * u_tintc * u_exp;
+  vec3 lin = pow(a.rgb / max(a.a, 1e-4), vec3(2.2));
+  vec3 o = pow(lin + h * (1.0 - min(lin, 1.0)), vec3(1.0 / 2.2));
+  gl_FragColor = vec4(clamp(o, 0.0, 1.0) * a.a, a.a);
 }`);
 const RADIAL_SPLIT = frag(`
 uniform float u_amt;
@@ -318,7 +328,7 @@ const EFFECTS = [
       num('diffusion', 'Difusão (glow) %', 0, 0, 300), num('diffusionRadius', 'Raio da difusão', 60, 1, 600), num('diffusionThreshold', 'Limiar da difusão %', 60, 0, 100),
       num('chroma', 'Aberração cromática', 0, 0, 50, 0.1),
       num('anamSize', 'Anamorphic Flare – tamanho', 0, 0, 1000), num('anamBoost', 'Anamorphic Flare – força', 1, 0, 5, 0.01), num('anamThreshold', 'Anamorphic Flare – limiar %', 70, 0, 100), adv(col('anamColor', 'Anamorphic Flare – cor', [0.35, 0.6, 1, 1])),
-      num('hazeExposure', 'Haze/Flare – exposição (stops, -99 = desligado)', -99, -99, 4, 0.05), num('hazeSoftness', 'Haze/Flare – suavidade %', 60, 0, 100), num('hazeSpill', 'Haze/Flare – spillage %', 50, 0, 100), adv(col('hazeTint', 'Haze/Flare – cor', [1, 0.92, 0.82, 1])),
+      num('hazeExposure', 'Haze/Flare – exposição (stops, -99 = desligado)', -99, -99, 4, 0.05), num('hazeSoftness', 'Haze/Flare – suavidade %', 60, 0, 100), num('hazeSpill', 'Haze/Flare – spillage %', 50, 0, 100), num('hazeReach', 'Haze/Flare – reach %', 50, 0, 100), adv(col('hazeTint', 'Haze/Flare – cor', [1, 0.92, 0.82, 1])),
       adv(num('lensDistort', 'Lens Distortion (+ barril / − almofada)', 0, -100, 100, 0.5)), adv(num('lensFlatten', 'Lens Distortion – flatten %', 0, 0, 100)),
       num('spotExposure', 'Spot Exposure (luz)', 0, -4, 4, 0.01), col('spotColor', 'Spot – cor da luz', [1, 1, 1, 1]), pos('spotCenter', 'Spot – centro', [0.5, 0.5]),
       num('spotSize', 'Spot – raio %', 50, 0, 400), num('spotSoft', 'Spot – spread %', 50, 0, 400), adv(num('spotAspect', 'Spot – proporção', 1, 0.1, 4, 0.01)), adv(bool('spotInvert', 'Spot – inverter', false)),
@@ -376,10 +386,9 @@ const EFFECTS = [
         out = gl.pass(SCREEN_ADD, { u_tex: out, u_tex2: b, u_amount: (p.diffusion / 100) * s });
       }
       if ((p.hazeExposure ?? -99) > -20 && s > 0) {
-        // brilho largo dos realces (como os reflexos internos de lentes antigas)
-        const hi = gl.pass(ANAM_HI, { u_tex: out, u_thr: 0.45, u_soft: 0.4 });
-        const big = gl.blur(hi, Math.max(2, (10 + (p.hazeSoftness ?? 60) * 1.4) * env.scale * (Math.max(env.w, env.h) / 1920)));
-        out = gl.pass(HAZE, { u_tex: out, u_tex2: big, u_exp: Math.pow(2, p.hazeExposure) * s, u_spill: (p.hazeSpill ?? 50) / 100, u_tintc: rgb(p.hazeTint || [1, 0.92, 0.82, 1]) });
+        const small = gl.copy(out, 96, Math.max(16, Math.round(96 * out.h / out.w)));
+        const soft = gl.blur(small, Math.max(0.5, ((p.hazeSoftness ?? 60) / 100) * small.h * 0.5 + 1), 3);
+        out = gl.pass(HAZE, { u_tex: out, u_tex2: soft, u_exp: Math.pow(2, p.hazeExposure) * 0.4 * s, u_spill: Math.max(0.01, (p.hazeSpill ?? 16) / 100), u_reach: Math.max(0.02, (p.hazeReach ?? 50) / 100 * 0.5), u_tintc: rgb(p.hazeTint || [1, 0.92, 0.82, 1]) });
       }
       if ((p.anamSize || 0) > 0 && s > 0) {
         const hi = gl.pass(ANAM_HI, { u_tex: out, u_thr: (p.anamThreshold ?? 70) / 100, u_soft: 0.15 });
