@@ -196,9 +196,11 @@ void main() {
   vec3 sc = r * r * (3.0 - 2.0 * r);
   r = mix(r, sc, u_punch);
   r = mix(vec3(luma(r)), r, 1.0 + u_punch * 0.25);
+  // Bleach It (Mojo II): tira a cor e dá um pouco de contraste prateado, SEM afundar a imagem
   float bl = luma(r);
-  vec3 ov = mix(2.0 * r * bl, 1.0 - 2.0 * (1.0 - r) * (1.0 - bl), step(0.5, bl));
-  r = mix(r, mix(ov, vec3(bl), 0.4), u_bleach);
+  vec3 ds = mix(r, vec3(bl), 0.75);
+  vec3 bs = ds * ds * (3.0 - 2.0 * ds);
+  r = mix(r, mix(ds, bs, 0.3), u_bleach);
   // contraste, saturação, curva, haze/fade
   // Contraste do Looks: curva de filme (S) em torno do pivô, não uma reta que estoura pretos/brancos
   vec3 cx = clamp(r, 0.0, 1.0);
@@ -289,7 +291,7 @@ void main() {
 const BLEND_OPTIONS = ['Nenhum', 'Normal', 'Adicionar', 'Multiplicar', 'Tela', 'Sobrepor', 'Luz suave', 'Luz direta', 'Subexpor cor', 'Superexpor cor', 'Escurecer', 'Clarear', 'Diferença', 'Exclusão'];
 export const WARP_STYLES = ['Arco', 'Arco inferior', 'Arco superior', 'Arqueado', 'Bojo', 'Concha inferior', 'Concha superior', 'Bandeira', 'Onda', 'Peixe', 'Elevar', 'Olho de peixe', 'Inflar', 'Torcer', 'Comprimir'] // mesma ordem do AE;
 
-export default [
+const EFFECTS = [
   {
     type: 'looks', label: 'Looks (CC completo)', category: 'Cor', plugin: 'Magic Bullet Looks',
     description: 'Colorista (3 vias + HSL por cor), Mojo II (teal & orange, Punch, Bleach), curvas, temperatura, haze, vinheta, difusão e aberração. Presets com Magic Bullet Looks são convertidos para cá.',
@@ -432,3 +434,41 @@ export default [
   },
 ];
 
+// Ajustes do Looks com os mesmos nomes e a mesma ordem das ferramentas do Magic Bullet Looks
+// (Subject → Matte → Lens → Camera → Post), para mexer como no MBL do After Effects.
+const MBL = [
+  ['strength', 'Strength (força do Look) %'],
+  ['exposure', 'Subject · Exposure (stops)'], ['spotExposure', 'Subject · Spot Exposure (stops)'], ['spotColor', 'Subject · Spot Exposure – Color Balance'], ['spotCenter', 'Subject · Spot Exposure – Center'],
+  ['spotSize', 'Subject · Spot Exposure – Radius %'], ['spotSoft', 'Subject · Spot Exposure – Spread %'], ['spotAspect', 'Subject · Spot Exposure – Aspect'], ['spotInvert', 'Subject · Spot Exposure – Invert'],
+  ['lkContrast', 'Subject · Contrast'], ['lkPivot', 'Subject · Contrast – Pivot'], ['lkComp', 'Subject · Contrast – Exposure Compensation'],
+  ['gradTwoPoint', 'Subject · Grad Exposure (ligar)'], ['gradExposure', 'Subject · Grad Exposure (stops)'], ['gradP1', 'Subject · Grad Exposure – X1/Y1'], ['gradP2', 'Subject · Grad Exposure – X2/Y2'],
+  ['gradSoft', 'Subject · Grad Exposure – Falloff'], ['gradColor', 'Subject · Grad Exposure – Color Balance'],
+  ['hazeExposure', 'Matte · Haze/Flare – Exposure (−99 = off)'], ['hazeSoftness', 'Matte · Haze/Flare – Softness %'], ['hazeSpill', 'Matte · Haze/Flare – Spillage %'], ['hazeTint', 'Matte · Haze/Flare – Color'],
+  ['diffusion', 'Matte · Diffusion – Glow %'], ['diffusionRadius', 'Matte · Diffusion – Size'], ['diffusionThreshold', 'Matte · Diffusion – Highlights %'],
+  ['filter', 'Lens · Warming/Cooling – Color'], ['filterDensity', 'Lens · Warming/Cooling – Strength %'],
+  ['optDensity', 'Lens · Optical Diffusion – Density %'], ['optSize', 'Lens · Optical Diffusion – Size'], ['optHighlights', 'Lens · Optical Diffusion – Highlights Only %'], ['optGlow', 'Lens · Optical Diffusion – Glow %'],
+  ['vignette', 'Lens · Lens Vignette – Amount %'], ['vignetteSize', 'Lens · Lens Vignette – Size %'],
+  ['chroma', 'Lens · Chromatic Aberration'], ['lensDistort', 'Lens · Lens Distortion'], ['lensFlatten', 'Lens · Lens Distortion – Flatten %'],
+  ['edgeBlur', 'Lens · Edge Softness – Blur'], ['edgeSize', 'Lens · Edge Softness – Radius %'], ['edgeSoft', 'Lens · Edge Softness – Spread %'], ['edgeCenter', 'Lens · Edge Softness – Center'], ['edgeAspect', 'Lens · Edge Softness – Aspect'],
+  ['anamSize', 'Lens · Anamorphic Flare – Size'], ['anamBoost', 'Lens · Anamorphic Flare – Boost'], ['anamThreshold', 'Lens · Anamorphic Flare – Threshold %'], ['anamColor', 'Lens · Anamorphic Flare – Color'],
+  ['temperature', 'Camera · Color Temperature'], ['tint', 'Camera · Tint'],
+  ['mojo', 'Post · Mojo II – Mojo %'], ['mojoCool', 'Post · Mojo II – Cool It %'], ['mojoSkin', 'Post · Mojo II – Warm Skin %'],
+  ['punch', 'Post · Mojo II – Punch It %'], ['bleach', 'Post · Mojo II – Bleach It %'], ['fade', 'Post · Mojo II – Fade It %'],
+  ['saturation', 'Post · Hue/Saturation – Saturation %'], ['hue', 'Post · Hue/Saturation – Hue'], ['contrast', 'Post · Contrast (curva S)'],
+  ['liftR', 'Post · Colorista – Shadows R'], ['liftG', 'Post · Colorista – Shadows G'], ['liftB', 'Post · Colorista – Shadows B'],
+  ['gammaR', 'Post · Colorista – Midtones R'], ['gammaG', 'Post · Colorista – Midtones G'], ['gammaB', 'Post · Colorista – Midtones B'],
+  ['gainR', 'Post · Colorista – Highlights R'], ['gainG', 'Post · Colorista – Highlights G'], ['gainB', 'Post · Colorista – Highlights B'],
+];
+{
+  const looks = EFFECTS.find((e) => e.type === 'looks');
+  const byKey = new Map(looks.params.map((p) => [p.key, p]));
+  const ordered = MBL.filter(([k]) => byKey.has(k)).map(([k, label]) => ({ ...byKey.get(k), label }));
+  const used = new Set(MBL.map(([k]) => k));
+  const rest = looks.params.filter((p) => !used.has(p.key)).map((p) => ({ ...p, label: p.key.startsWith('hsl') ? `Post · Colorista ${p.label}` : p.key.startsWith('curve') ? `Post · Curves – ${p.label.replace('Curva ', '')}` : p.label }));
+  looks.params = [...ordered, ...rest];
+  // as ferramentas que o MBL deixa sempre visíveis
+  for (const p of looks.params) if (['strength', 'exposure', 'lkContrast', 'mojo', 'punch', 'bleach', 'fade', 'saturation', 'temperature', 'tint', 'diffusion', 'vignette', 'chroma'].includes(p.key)) delete p.advanced;
+  looks.description = 'Recriação do Magic Bullet Looks: ajustes com os mesmos nomes das ferramentas do MBL (Subject, Matte, Lens, Camera, Post). Presets .ffx com Looks preenchem tudo sozinhos.';
+}
+
+export default EFFECTS;

@@ -49,7 +49,7 @@ export function looksFromTools(tools, strength = 100) {
         if (Math.min(v[0], v[1], v[2]) < 0.995) { p.filter = [v[0], v[1], v[2], 1]; p.filterDensity = 100; } else { ignored.push('fltr (neutro)'); continue; }
         break;
       case 'vign': p.vignette = Math.max(p.vignette, (v[5] || 0) * 0.8); p.vignetteSize = clampN(60 - ((v[2] || 1) - 1) * 50, 15, 85); break;
-      case 'lenv': p.vignette = Math.max(p.vignette, (v[0] || 0) * 0.6); break;
+      case 'lenv': p.vignette = Math.max(p.vignette, (v[0] || 0) * 0.35); break; // Lens Vignette do Looks é sutil (Vampy 50 quase não aparece)
       // Optical Diffusion (manual do Looks): Density, Size, Falloff, Glow, Highlights Only, Luster, Color…
       case 'odif': p.optDensity = clampN(Math.max(p.optDensity, v[0] || 0), 0, 100); p.optSize = clampN(v[1] ?? 50, 1, 500); p.optGlow += v[3] || 0; p.optHighlights = clampN(v[4] ?? 50, 0, 100); break;
       case 'diff':
@@ -100,8 +100,8 @@ export function looksFromTools(tools, strength = 100) {
         // curva: [força, …, (36) canal, (37) nº de pontos, depois pares (entrada, ajuste)]
         // v[0] = força da curva (0..1): os ajustes dos pontos são escalados por ela
         const n = Math.min(4, Math.round(v[37] || 0)), k = v[0] > 0 && v[0] <= 1 ? v[0] : 1;
-        // o Looks guarda o quanto o ponto fica ABAIXO da diagonal (positivo = escurece): 0,255 → 0,13 na Vampy CC (CC escura)
-        for (let i = 0; i < n; i++) curve.push([v[38 + i * 2], -(v[39 + i * 2] || 0) * k]);
+        // ajuste do ponto acima da diagonal (positivo = clareia): Vampy CC levanta as sombras (pretos "lavados", ~14% no AE)
+        for (let i = 0; i < n; i++) curve.push([v[38 + i * 2], (v[39 + i * 2] || 0) * k]);
         break;
       }
       case 'cmix': if ((v[0] ?? 100) > 0) p.saturation *= (v[1] ?? 100) / 100; break;
