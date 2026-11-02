@@ -733,10 +733,24 @@ async function showAccount() {
   if (r === 'out') { logout(); location.reload(); }
 }
 
+function showApps() {
+  const base = new URL('downloads/', location.href).href;
+  modal('Baixar o MotionFrame', `
+    <p><b>💻 Windows (.exe)</b> — o editor completo num programa. Abre numa janela própria (usa o Edge/Chrome do PC, com aceleração da placa de vídeo) e funciona sem internet.</p>
+    <p><a class="btn primary" href="${base}MotionFrame.exe" download>Baixar MotionFrame.exe</a></p>
+    <p class="muted small">O Windows pode avisar “aplicativo não reconhecido” (o programa não tem assinatura paga): clique em <i>Mais informações → Executar assim mesmo</i>. Deixe a janela preta aberta enquanto usa; feche-a para sair. O PC tem um código de aparelho próprio: peça um token para ele em 🔑 Conta e acesso.</p>
+    <p><b>🤖 Android (.apk)</b></p>
+    <p><a class="btn primary" href="${base}MotionFrame.apk" download>Baixar MotionFrame.apk</a></p>
+    <p class="muted small">Ao abrir o .apk, o Android pede para permitir “instalar apps desta fonte”. O app instalado também tem código de aparelho próprio.</p>
+    <p><b>🍎 iPhone</b> — use pelo Safari: toque em Compartilhar → <i>Adicionar à Tela de Início</i> (vira um app em tela cheia). Um .ipa instalável exige conta de desenvolvedor da Apple (veja “IPA” na ajuda).</p>`,
+  [{ label: 'Fechar', value: null }]);
+}
+
 async function showMenu() {
   const res = await modal('Menu', `<div class="menu-list">
     <button data-m="home">⌂ Meus projetos</button>
     <button data-m="account">🔑 Conta e acesso</button>
+    <button data-m="apps">⬇ Baixar o app (PC Windows / Android)</button>
     <button data-m="help">❓ Como usar (passo a passo)</button>
     <button data-m="new">✚ Nova composição (projeto)</button>
     <button data-m="open">📂 Abrir projeto (.json)</button>
@@ -758,6 +772,7 @@ async function showMenu() {
   if (res === 'ffx') commands['import-ffx']();
   if (res === 'aep') openAEPFlow();
   if (res === 'account') showAccount();
+  if (res === 'apps') showApps();
   if (res === 'relink') relinkAEMedia();
   if (res === 'relinksub') relinkAEMedia({ substitute: true });
   if (res === 'about') {

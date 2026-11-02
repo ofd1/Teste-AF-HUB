@@ -505,3 +505,5 @@ body.preview-max .max-ctl { top: max(8px, env(safe-area-inset-top)); }
 .kfnav .exprbtn { font-family: monospace; font-weight: 700; opacity: .55; }
 .kfnav .exprbtn.on { opacity: 1; color: #ff7a59; border-color: #ff7a59; }
 .prop-row.has-expr .plabel { color: #ff7a59; }
+a.btn { display: inline-block; padding: 9px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); text-decoration: none; }
+a.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
