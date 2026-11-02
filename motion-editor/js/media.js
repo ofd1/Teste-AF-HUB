@@ -403,3 +403,25 @@ export function detectFps(src) {
     setTimeout(() => { if (times.length < 12) done(); }, 2500);
   });
 }
+
+/**
+ * A mídia do tempo t já está no quadro certo? (imagens carregadas, vídeos parados no quadro pedido ou com cache
+ * decodificado). Só quadros "certos" entram no cache de RAM da prévia — nunca um quadro com vídeo ainda buscando.
+ */
+export function mediaReady(project, t, playing = false) {
+  const fps = project.fps || 30;
+  for (const l of flatLayers(project.layers)) {
+    if (!l.visible || t < l.inPoint || t >= l.outPoint || !l.props?.src) continue;
+    if (l.type === 'image') { const im = images.get(l.props.src); if (!im || !im.complete || !im.naturalWidth) return false; }
+    else if (l.type === 'video') {
+      if (cacheReady(l)) continue;
+      if (exportBusy) return false;
+      const e = videos.get(l.id), fr = e?.frame;
+      if (!e || !fr || e.a.readyState < 2 || e.a.seeking) return false;
+      const tol = playing ? 0.5 / fps : 0.02;
+      if (Math.abs(e.a.currentTime - fr.a) > tol && !(e.a.duration && fr.a >= e.a.duration - 0.01)) return false;
+      if (!playing && fr.b !== null && (!e.b || e.b.readyState < 2 || e.b.seeking || Math.abs(e.b.currentTime - fr.b) > tol)) return false;
+    }
+  }
+  return true;
+}

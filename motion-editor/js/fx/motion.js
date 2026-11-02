@@ -21,7 +21,7 @@ uniform vec3 u_col; uniform float u_amt;
 void main() { vec4 c = texture2D(u_tex, v_uv); vec3 u = c.rgb / max(c.a, 1e-4); vec3 t = u_col * (0.35 + luma(u) * 1.1); gl_FragColor = vec4(mix(u, t, u_amt * 0.6) * c.a, c.a); }`);
 
 /** Camadas que ocupam o quadro todo: tremores espelham as bordas; textos/formas recebem margem transparente. */
-const FULL = new Set(['video', 'adjustment', 'image', 'solid']);
+const FULL = new Set(['video', 'adjustment', 'image', 'solid', 'group']); // pré-composição também (no AE ela tem o tamanho da comp)
 const isFull = (layer) => !layer || FULL.has(layer.type);
 
 const BMC = frag(`

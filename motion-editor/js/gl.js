@@ -197,9 +197,22 @@ export class GLEngine {
   releaseAll() {
     this.pool.push(...this.live);
     this.live = [];
-    if (this.pool.length > 40) {
-      const gl = this.gl;
-      for (const t of this.pool.splice(0, this.pool.length - 40)) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); }
+  }
+
+  /**
+   * Limite de memória das texturas livres (por bytes, não por quantidade): em 16 bits cada textura 1080×1920
+   * ocupa ~17 MB e as 4K ~66 MB — 40 delas passavam de 1 GB. Libera as mais antigas além do limite.
+   */
+  trimPool() {
+    const budget = this.poolBudget || (this.poolBudget = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)) ? 160e6 : 480e6);
+    const bytes = (t) => t.w * t.h * (t.u8 ? 4 : 8);
+    let total = this.pool.reduce((s, t) => s + bytes(t), 0);
+    if (total <= budget && this.pool.length <= 48) return;
+    const gl = this.gl;
+    while (this.pool.length && (total > budget * 0.75 || this.pool.length > 48)) {
+      const t = this.pool.shift();
+      total -= bytes(t);
+      gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo);
     }
   }
 

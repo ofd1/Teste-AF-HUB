@@ -5,10 +5,10 @@ import { parseFFX } from './ffx.js';
 import { ffxToPreset } from './presets.js';
 import { TopazPanel } from './topaz-panel.js';
 import { setBgListener, ensureBgModel, bgStatus } from './bgremove.js';
-import { setGLLostListener } from './gl.js';
+import { setGLLostListener, glLost } from './gl.js';
 import { createEffectInstance } from './presets.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
-import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, detectFps } from './media.js';
+import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, detectFps, mediaReady } from './media.js';
 import { loadAudio, playAudio, stopAudio, detectBeats } from './audio.js';
 import { valueAt, setValue, setKey } from './anim.js';
 import { Timeline } from './timeline.js';
@@ -42,19 +42,76 @@ const timecode = document.getElementById('timecode');
 const ctx = view.getContext('2d');
 const octx = overlay.getContext('2d');
 let dirty = true;
-// "Auto": nítido (resolução cheia) parado, ½ tocando para manter a fluidez
-const curQuality = () => (qualitySel.value === 'auto' ? (store.playing ? 0.5 : 1) : parseFloat(qualitySel.value));
+// "Auto": nítido (resolução cheia) parado; tocando, a resolução se adapta ao que o aparelho aguenta
+// (mede o tempo de cada quadro: se passar do tempo do fps, reduz; se sobrar folga, aumenta)
+const PLAY_STEPS = [0.33, 0.4, 0.5, 0.6, 0.75, 0.9, 1];
+let playStep = 4, renderMs = 0, fastFrames = 0;
+const curQuality = () => (qualitySel.value === 'auto' ? (store.playing ? PLAY_STEPS[playStep] : 1) : parseFloat(qualitySel.value));
+function adaptQuality(ms) {
+  if (!store.playing || qualitySel.value !== 'auto') return;
+  renderMs = renderMs ? renderMs * 0.8 + ms * 0.2 : ms;
+  const budget = 1000 / Math.min(60, store.project.fps || 30);
+  if (renderMs > budget * 1.15 && playStep > 0) { playStep--; renderMs = 0; fastFrames = 0; }
+  else if (renderMs < budget * 0.45) { if (++fastFrames > 45 && playStep < PLAY_STEPS.length - 1) { playStep++; fastFrames = 0; renderMs = 0; } }
+  else fastFrames = 0;
+}
 let quality = curQuality();
 setMediaListener(() => { dirty = true; });
-setBgListener(() => { dirty = true; });
-setGLLostListener(() => { dirty = true; if (!setGLLostListener.warned) { setGLLostListener.warned = true; toast('A GPU do aparelho reiniciou; o app recuperou a prévia.', 'warn', 3500); } });
+setBgListener(() => { dirty = true; frameCacheClear(); });
+
+// ---- Renderização estilo After Effects:
+// 1) o quadro é desenhado num buffer fora da tela e só aparece pronto (nunca pisca preto nem mostra quadro pela metade);
+//    se a GPU cair no meio, a tela continua com o último quadro bom e o quadro é refeito;
+// 2) cache de RAM (como o RAM Preview / barra verde do AE): quadros já renderizados ficam guardados e tocam
+//    na velocidade real sem renderizar de novo, até você mudar algo no projeto.
+const IOS_M = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const FRAME_CACHE_BUDGET = IOS_M ? 90e6 : Math.min(1500e6, ((navigator.deviceMemory || 8) * 1e9) / 6);
+const frameCache = new Map(); // chave → { c: canvas, bytes }
+let frameCacheBytes = 0;
+const backBuf = document.createElement('canvas');
+const backCtx = backBuf.getContext('2d');
+function frameCacheClear() { frameCache.clear(); frameCacheBytes = 0; }
+function frameCachePut(key, src) {
+  const bytes = src.width * src.height * 4;
+  if (bytes * 3 > FRAME_CACHE_BUDGET) return;
+  let e = frameCache.get(key);
+  if (!e) {
+    // reaproveita o canvas do quadro mais antigo quando o cache enche (sem criar/destruir canvases sem parar)
+    let reuse = null;
+    while (frameCacheBytes + bytes > FRAME_CACHE_BUDGET && frameCache.size) {
+      const [k0, old] = frameCache.entries().next().value;
+      frameCache.delete(k0); frameCacheBytes -= old.bytes;
+      if (!reuse && old.c.width === src.width && old.c.height === src.height) reuse = old.c;
+      else { old.c.width = old.c.height = 1; }
+    }
+    const c = reuse || document.createElement('canvas');
+    c.width = src.width; c.height = src.height;
+    e = { c, bytes };
+    frameCacheBytes += bytes;
+  } else frameCache.delete(key);
+  e.c.getContext('2d').drawImage(src, 0, 0);
+  frameCache.set(key, e);
+}
+function frameCacheGet(key) {
+  const e = frameCache.get(key);
+  if (!e) return null;
+  frameCache.delete(key); frameCache.set(key, e); // mais recente
+  return e.c;
+}
+let glLosses = 0, lastEdit = 0, hqMs = 0, hqTimer = 0;
+setGLLostListener(() => { glLosses++; dirty = true; frameCacheClear(); if (!setGLLostListener.warned) { setGLLostListener.warned = true; toast('A GPU do aparelho reiniciou; o app recuperou a prévia.', 'warn', 3500); } });
 // primeira vez no app: mostra o passo a passo
 setTimeout(() => { try { if (!localStorage.getItem('motionframe.helpSeen')) { localStorage.setItem('motionframe.helpSeen', '1'); showHelp(); } } catch { /* sem armazenamento */ } }, 900);
 
 function layoutCanvas() {
   const { width, height } = store.project;
-  view.width = Math.round(width * quality);
-  view.height = Math.round(height * quality);
+  // só redimensiona se mudou (mudar width/height apaga o canvas → piscava preto)
+  const vw = Math.round(width * quality), vh = Math.round(height * quality);
+  if (view.width !== vw || view.height !== vh) {
+    const keep = view.width > 1 && view.height > 1 ? (() => { const c = document.createElement('canvas'); c.width = view.width; c.height = view.height; c.getContext('2d').drawImage(view, 0, 0); return c; })() : null;
+    view.width = vw; view.height = vh;
+    if (keep) ctx.drawImage(keep, 0, 0, vw, vh); // mantém o quadro anterior (ampliado) até o novo ficar pronto
+  }
   const r = stage.getBoundingClientRect();
   const s = Math.min((r.width - 16) / width, (r.height - 16) / height);
   const cssW = Math.max(40, width * s), cssH = Math.max(40, height * s);
@@ -113,7 +170,33 @@ function loop(now) {
   if ((dirty || store.playing) && !store.exporting) {
     prepare(store.project, store.time, { playing: store.playing });
     if (curQuality() !== quality) { quality = curQuality(); layoutCanvas(); }
-    renderFrame(ctx, viewProject(), store.time, quality, { hq: !store.playing });
+    const fps = store.project.fps || 30, fi = Math.round(store.time * fps + 1e-6);
+    // Resolução adaptativa (como no AE): parado, enquanto você arrasta/mexe num projeto pesado, o quadro sai em
+    // rascunho; quando para de mexer, sai o quadro nítido (e vai para o cache).
+    const interacting = performance.now() - lastEdit < 380;
+    const draftK = !store.playing && qualitySel.value === 'auto' && interacting && hqMs > 140 ? Math.max(0.3, Math.min(0.8, Math.sqrt(90 / hqMs))) : 1;
+    const key = `${fi}|${quality}|${store.playing ? 'p' : 'hq'}`;
+    const cached = (store.playing && frameCacheGet(`${fi}|${quality}|hq`)) || frameCacheGet(key);
+    if (cached) {
+      ctx.drawImage(cached, 0, 0, view.width, view.height);
+    } else {
+      const r0 = performance.now(), lost0 = glLosses;
+      const bw = Math.max(1, Math.round(view.width * draftK)), bh = Math.max(1, Math.round(view.height * draftK));
+      if (backBuf.width !== bw || backBuf.height !== bh) { backBuf.width = bw; backBuf.height = bh; }
+      let ok = true;
+      const tt = store.playing ? fi / fps : store.time;
+      try { renderFrame(backCtx, viewProject(), tt, quality * draftK, { hq: !store.playing && draftK === 1 }); } catch (e) { ok = false; console.warn('quadro falhou', e); }
+      const ms = performance.now() - r0;
+      if (ok && glLosses === lost0 && !glLost()) {
+        ctx.drawImage(backBuf, 0, 0, view.width, view.height);
+        if (draftK < 1) { clearTimeout(hqTimer); hqTimer = setTimeout(() => { dirty = true; }, 400); }
+        else {
+          if (!store.playing) hqMs = hqMs ? hqMs * 0.5 + ms * 0.5 : ms;
+          if (mediaReady(viewProject(), tt, store.playing)) frameCachePut(key, backBuf);
+        }
+        adaptQuality(ms);
+      } else setTimeout(() => { dirty = true; }, 60); // GPU caiu: mantém o último quadro bom e refaz este
+    }
     drawOverlay();
     timecode.textContent = formatTime(store.time, store.project.fps).slice(1);
     dirty = false;
@@ -126,8 +209,11 @@ requestAnimationFrame(loop);
 const cachePill = document.createElement('div');
 cachePill.className = 'cache-pill';
 stage.appendChild(cachePill);
+let lastCacheSt = null;
 setCacheListener(() => {
   const st = cacheStatus();
+  if (lastCacheSt != null && st == null) frameCacheClear(); // cache do Twixtor ficou pronto: quadros interpolados mudam
+  lastCacheSt = st;
   cachePill.textContent = st == null ? '' : `Preparando quadros… ${st}%`;
   cachePill.classList.toggle('show', st != null);
   dirty = true;
@@ -140,6 +226,8 @@ function scheduleCaches() {
 
 store.on((kind) => {
   dirty = true;
+  if (kind !== 'time' && kind !== 'selection' && kind !== 'keys') frameCacheClear();
+  if (kind !== 'selection' && !store.playing) lastEdit = performance.now();
   if (kind === 'structure' || kind === 'change') scheduleCaches();
   if (kind === 'structure' || kind === 'change') autosave();
   if (kind === 'selection' || kind === 'structure') { renderToolbar(); onSelectionChanged(); updateTitle(); }

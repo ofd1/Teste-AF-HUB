@@ -14,9 +14,29 @@ let snapshotCanvas = null;
 let project = null; // projeto em renderização (para tamanho de camadas de ajuste)
 let renderOpts = { final: false }; // final=true na exportação (quadros em resolução total)
 
+// Memória: as telas de cada camada ficam guardadas para o próximo quadro, mas só até um limite. As que não
+// foram usadas no quadro atual são liberadas quando o total passa disso (antes ficavam para sempre: projetos
+// com dezenas de camadas 4K passavam de 2 GB e o navegador travava no PC e no celular).
+const IOS_R = typeof navigator !== 'undefined' && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)));
+const CANVAS_BUDGET = IOS_R ? 120e6 : 400e6;
+let frameNo = 0;
+function trimCanvases() {
+  let total = 0;
+  for (const c of contentCanvases.values()) total += c.width * c.height * 4;
+  if (total <= CANVAS_BUDGET) return;
+  const old = [...contentCanvases.entries()].filter(([, c]) => c._used !== frameNo).sort((a, b) => (a[1]._used || 0) - (b[1]._used || 0));
+  for (const [id, c] of old) {
+    if (total <= CANVAS_BUDGET * 0.7) break;
+    total -= c.width * c.height * 4;
+    c.width = 0; c.height = 0; // devolve a memória na hora
+    contentCanvases.delete(id);
+  }
+}
+
 function poolCanvas(id, w, h) {
   let c = contentCanvases.get(id);
   if (!c) { c = makeCanvas(w, h); contentCanvases.set(id, c); }
+  c._used = frameNo;
   if (c.width !== Math.ceil(w) || c.height !== Math.ceil(h)) { c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); }
   return c;
 }
@@ -284,7 +304,22 @@ function applyParents(c, layer, t, scale) {
 }
 
 /** Renderiza conteúdo + efeitos. O resultado deve ser desenhado imediatamente (canvas WebGL é reutilizado). */
-function renderLayerImage(layer, t, scale, extra) {
+/**
+ * Resolução útil da camada: se ela aparece encolhida (ex.: vídeo 4K a 28% numa composição 1080), não adianta
+ * desenhá-la e processar os efeitos no tamanho original — só gasta memória e trava. k ≤ 1 (com 15% de folga).
+ */
+function layerResK(layer, t) {
+  if (layer.type === 'adjustment' || layer.type === 'audio') return 1;
+  const m = layerTransform(layer, t);
+  let s = Math.max(Math.abs(m.sx), Math.abs(m.sy));
+  let p = layer.parent ? layerIndex.get(layer.parent) : null;
+  for (let i = 0; p && i < 8; i++) { const pm = layerTransform(p, t); s *= Math.max(Math.abs(pm.sx), Math.abs(pm.sy)); p = p.parent ? layerIndex.get(p.parent) : null; }
+  if (!(s > 0) || s >= 0.87) return 1;
+  return Math.max(0.05, Math.min(1, s * 1.15));
+}
+
+function renderLayerImage(layer, t, scale0, extra) {
+  const resK0 = layerResK(layer, t);
   const lt = layerTime(layer, t);
   const { w, h } = contentSize(layer);
   const active = layer.effects.filter((fx) => fx.enabled && EFFECT_MAP[fx.type]?.render);
@@ -298,7 +333,21 @@ function renderLayerImage(layer, t, scale, extra) {
   });
   let pad = 2 + (layer.type === 'text' && layer.props.animators?.length ? animatorPad(layer.props) : 0);
   for (const { def, p } of evaluated) pad += def.pad ? Math.max(0, def.pad(p, { w, h, layer })) : 0;
-  pad = Number.isFinite(pad) ? Math.ceil(Math.min(pad * scale, 2048)) : 2; // nunca NaN (deixava a camada preta)
+  if (!Number.isFinite(pad)) pad = 2; // nunca NaN (deixava a camada preta)
+  // Orçamento de pixels por camada (como o AE baixa a resolução da prévia): uma textura de 4000×5000 derruba a GPU
+  // e deixa o preview preto. Se a camada + margem passar do limite, ela é processada numa resolução menor e
+  // ampliada na hora de compor (o mesmo k do layerResK).
+  const gmax = Math.min(getGL()?.maxSize || 4096, renderOpts.final ? 8192 : 4096);
+  const budget = renderOpts.final ? (IOS_R ? 9e6 : 24e6) : (IOS_R ? 3.2e6 : 7e6);
+  let scale = scale0 * resK0;
+  for (let i = 0; i < 4; i++) {
+    const pp = Math.min(pad * scale, 2048), Wt = w * scale + pp * 2, Ht = h * scale + pp * 2;
+    const f = Math.min(1, Math.sqrt(budget / Math.max(1, Wt * Ht)), gmax / Math.max(1, Wt, Ht));
+    if (f > 0.995) break;
+    scale *= f * 0.98;
+  }
+  const kAll = scale / (scale0 || 1);
+  pad = Math.ceil(Math.min(pad * scale, 2048));
 
   let W = Math.ceil(w * scale + pad * 2), H = Math.ceil(h * scale + pad * 2);
   if (!Number.isFinite(W) || !Number.isFinite(H) || W < 1 || H < 1) { W = Math.max(1, Math.ceil(w * scale) || 1); H = Math.max(1, Math.ceil(h * scale) || 1); }
@@ -330,7 +379,7 @@ function renderLayerImage(layer, t, scale, extra) {
       cx.drawImage(paint(`${layer.id}#b`, vf.b), 0, 0);
       cx.globalAlpha = 1;
     }
-    return { src: canvas, sw: W, sh: H, pad, w, h };
+    return { src: canvas, sw: W, sh: H, pad, w, h, k: kAll };
   }
 
   let tex = gl.upload(canvas);
@@ -363,10 +412,10 @@ function renderLayerImage(layer, t, scale, extra) {
       if (op < 99.95 && tex !== input) tex = gl.mix(input, tex, Math.max(0, op) / 100);
     } catch (e) { console.warn('efeito falhou', def.type, e); }
   }
-  if (gl.gl.isContextLost()) return { src: canvas, sw: W, sh: H, pad, w, h }; // GPU caiu: mostra sem efeitos em vez de preto
+  if (gl.gl.isContextLost()) return { src: canvas, sw: W, sh: H, pad, w, h, k: kAll }; // GPU caiu: mostra sem efeitos em vez de preto
   const out = gl.toCanvas(tex);
   gl.releaseAll();
-  return { src: out, sw: tex.w, sh: tex.h, pad, w, h };
+  return { src: out, sw: tex.w, sh: tex.h, pad, w, h, k: kAll };
 }
 
 function drawLayerImage(ctx, img, m, scale, alpha = 1) {
@@ -374,8 +423,9 @@ function drawLayerImage(ctx, img, m, scale, alpha = 1) {
   ctx.globalAlpha = m.opacity * alpha;
   ctx.translate(m.x * scale, m.y * scale);
   ctx.rotate((m.rot * Math.PI) / 180);
-  ctx.scale(m.sx, m.sy);
-  ctx.drawImage(img.src, 0, 0, img.sw, img.sh, -(img.w / 2 + m.anchor[0]) * scale - img.pad, -(img.h / 2 + m.anchor[1]) * scale - img.pad, img.sw, img.sh);
+  const k = img.k || 1; // camada desenhada em resolução reduzida: amplia de volta na hora de compor
+  ctx.scale(m.sx / k, m.sy / k);
+  ctx.drawImage(img.src, 0, 0, img.sw, img.sh, -(img.w / 2 + m.anchor[0]) * scale * k - img.pad, -(img.h / 2 + m.anchor[1]) * scale * k - img.pad, img.sw, img.sh);
   ctx.restore();
 }
 
@@ -420,7 +470,8 @@ function drawTimeSlices(ctx, layer, t, scale, extra, p, m, fps) {
       const st = 1 + (p.stretch / 100) * f;
       if (vertical) { ctx.translate(0, (h * scale) / 2 + off); ctx.scale(1, st); ctx.translate(0, -(h * scale) / 2); }
       else { ctx.translate((w * scale) / 2 + off, 0); ctx.scale(st, 1); ctx.translate(-(w * scale) / 2, 0); }
-      ctx.drawImage(img.src, 0, 0, img.sw, img.sh, -img.pad, -img.pad, img.sw, img.sh);
+      const kk = img.k || 1;
+      ctx.drawImage(img.src, 0, 0, img.sw, img.sh, -img.pad / kk, -img.pad / kk, img.sw / kk, img.sh / kk);
       ctx.restore();
     }
   }
@@ -521,6 +572,7 @@ function drawLayerList(ctx, layers, t, scale, fps, onAdjust) {
 
 export function renderFrame(ctx, proj, t, scale = 1, opts = {}) {
   project = proj;
+  frameNo++;
   renderOpts = { final: !!opts.final, hq: !!opts.hq };
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -544,6 +596,8 @@ export function renderFrame(ctx, proj, t, scale = 1, opts = {}) {
     }
   });
   ctx.restore();
+  trimCanvases();
+  getGL()?.trimPool?.();
 }
 
 export function toLayerSpace(layer, t, x, y) {
