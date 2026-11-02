@@ -25,6 +25,7 @@ import { putMedia, getMedia, pruneMedia } from './idb.js';
 import { saveFile, registerServiceWorker } from './platform.js';
 import { getGL } from './gl.js';
 import { trackPoint, applyTrack } from './tracker.js';
+import { calibrateFromImage, CALIB_LABEL } from './calibrate.js';
 
 const store = new Store();
 const AUTOSAVE_KEY = 'motionframe.autosave.v2';
@@ -397,7 +398,7 @@ function renderToolbar() {
       ...(t === 'video' ? [['speed', '⏱', 'Velocidade', true], ['topaz', '✨', 'Topaz', true]] : []),
       ...(t === 'video' || t === 'audio' ? [['sound', '🔊', 'Som']] : []),
       ...(t === 'video' || t === 'image' ? [['bg-remove', '✂︎', 'Tirar fundo']] : []),
-      ['props', '☰', 'Propriedades'], ['keys', '📈', 'Keyframes / gráfico'],
+      ['calibrate', '🎯', 'Calibrar CC'], ['props', '☰', 'Propriedades'], ['keys', '📈', 'Keyframes / gráfico'],
       ['split', '✂', 'Dividir'], ['dup', '⧉', 'Duplicar'],
       t === 'group' ? ['ungroup', '⊟', 'Desagrupar'] : ['group', '⊞', 'Agrupar'],
       ['up', '▲', 'Subir'], ['down', '▼', 'Descer'],
@@ -747,6 +748,23 @@ const commands = {
       await ensureBgModel(1);
       toast(bgStatus(1) === 'ready' ? 'Fundo removido ✓ Ajuste em Efeitos › Remover fundo.' : 'Não foi possível carregar o removedor de fundo neste aparelho.', bgStatus(1) === 'ready' ? 'ok' : 'error', 4000);
     }
+  },
+  calibrate: async () => {
+    const l = store.layer();
+    if (!l) { toast('Selecione a camada que tem o CC (ex.: a camada de ajuste).', 'warn'); return; }
+    const ok = await modal('Calibrar CC com print do After Effects', `<p>Escolha um <b>print do mesmo quadro</b> com o CC aplicado no After Effects (ou de um edit com esse CC).</p>
+      <p class="muted small">O app compara com o quadro atual da prévia e cria um ajuste “${escapeHtml(CALIB_LABEL)}” no fim da lista de efeitos, acertando pretos, meios-tons, brancos, cor e saturação. Funciona com qualquer CC importado. Quanto mais parecido o quadro, mais exato.</p>`,
+      [{ label: 'Cancelar', value: false }, { label: 'Escolher print', primary: true, value: true }]);
+    if (!ok) return;
+    const [file] = await pickFiles('image/*', false);
+    if (!file) return;
+    try {
+      const was = store.exporting; store.exporting = true;
+      await prepare(store.project, store.time, { exact: true });
+      const r = await calibrateFromImage(store, l, file, async (c) => renderFrame(c.getContext('2d'), store.project, store.time, c.width / store.project.width, { final: true }));
+      store.exporting = was;
+      toast(`CC calibrado ✓ (saturação ${Math.round(r.params.saturation)}%). Ajuste fino em Efeitos › ${CALIB_LABEL}.`, 'ok', 4500);
+    } catch (e) { console.error(e); toast('Não foi possível ler o print.', 'error'); }
   },
   sound: () => { openSheet('props'); setTimeout(() => document.querySelector('#propsPanel [data-section="sound"]')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 120); },
 };
