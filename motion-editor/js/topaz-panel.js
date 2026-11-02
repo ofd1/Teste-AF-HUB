@@ -5,7 +5,19 @@ import { TOPAZ_MODELS, TOPAZ_KEYS } from './fx/topaz.js';
 import { stabilizeLayer } from './stabilize.js';
 import { valueAt } from './anim.js';
 import { escapeHtml } from './util.js';
-import { toast } from './ui.js';
+import { toast, pickFiles } from './ui.js';
+
+/** Preset salvo pelo Topaz Video (.json em …\\Topaz Video AI\\presets): aprimoramento + interpolação. */
+export function topazPresetToSettings(json) {
+  const st = json?.settings || {};
+  const e = st.enhance || {}, sm = st.slowmo || {};
+  if (!e.model && !sm.model) throw new Error('não parece um preset do Topaz Video');
+  return {
+    name: json.name || 'Topaz',
+    enhance: e.active ? { revertCompression: e.compress ?? 0, recoverDetails: e.detail ?? 0, sharpen: e.sharpen ?? 0, reduceNoise: e.denoise ?? 0, dehalo: e.dehalo ?? 0, antialiasDeblur: e.deblur ?? 0, addNoise: e.addNoise ?? 0, recoverOriginal: e.recoverOriginalDetailValue ?? 0, aiSmooth: 0, focusFix: ({ Off: 1, Normal: 2, Strong: 3 })[e.focusFixLevel] || 1, model: e.model } : null,
+    dedupe: !!(sm.active && sm.duplicate), slowmo: sm.active ? Math.max(1, sm.factor || 1) : 1, interp: !!sm.active,
+  };
+}
 
 const LABELS = {
   revertCompression: ['Fix compression', 'Tira blocos e borrões de compressão (vídeos do TikTok/IG/WhatsApp).'],
@@ -47,6 +59,7 @@ export class TopazPanel {
       <div class="tz-head">✨ <b>Topaz</b> · ${escapeHtml(l.name)} <span class="muted small">(recriação em GPU com os controles do Topaz Video AI)</span></div>
 
       <section class="tz-sec">
+        <button class="wide" data-tz="importPreset">⤒ Importar preset do Topaz (.json)</button>
         <label class="tz-title"><span class="switch"><input type="checkbox" data-tz="enh" ${tz?.enabled ? 'checked' : ''}><i></i></span> <b>Aprimoramento</b> <span class="muted small">— upscale/limpeza</span></label>
         ${tz ? `
           <label class="row"><span>Upscale (detalhe)</span><select data-tz="upscale">${['Desligado', '2×', '4×', '8×'].map((n, i) => `<option value="${i + 1}" ${(pv('upscale') || 2) === i + 1 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
@@ -105,6 +118,23 @@ export class TopazPanel {
       if (e.target.checked) toast('Aprimoramento ligado. Compare com “Ver original”.', 'ok', 2500);
     });
     q('upscale')?.addEventListener('change', (e) => { const tz = this.ensureTopaz(); tz.params.upscale.value = +e.target.value; tz.params.upscale.keys = []; store.commit(); });
+    q('importPreset')?.addEventListener('click', async () => {
+      const [f] = await pickFiles('.json,application/json', false);
+      if (!f) return;
+      try {
+        const cfg = topazPresetToSettings(JSON.parse(await f.text()));
+        if (cfg.enhance) {
+          const tz = this.ensureTopaz();
+          tz.enabled = true;
+          tz.params.model.value = 1; tz.params.model.keys = []; // valores exatos do preset (modo manual)
+          for (const k of [...TOPAZ_KEYS, 'focusFix']) if (cfg.enhance[k] !== undefined && tz.params[k]) { tz.params[k].value = cfg.enhance[k]; tz.params[k].keys = []; }
+        }
+        l.props.dedupe = cfg.dedupe;
+        if (cfg.interp) l.props.interpolate = true;
+        store.commit();
+        toast(`Preset do Topaz “${cfg.name}” aplicado${cfg.enhance ? ` (modelo ${cfg.enhance.model})` : ''}${cfg.dedupe ? ' · substituir quadros duplicados' : ''}.`, 'ok', 4000);
+      } catch (e) { toast(`Não deu para ler o preset: ${e.message}`, 'error'); }
+    });
     q('focus')?.addEventListener('change', (e) => { const tz = this.ensureTopaz(); tz.params.focusFix.value = +e.target.value; tz.params.focusFix.keys = []; store.commit(); });
     q('model')?.addEventListener('change', (e) => { const tz = this.ensureTopaz(); tz.params.model.value = +e.target.value; tz.params.model.keys = []; store.commit(); });
     q('manual')?.addEventListener('click', () => {
