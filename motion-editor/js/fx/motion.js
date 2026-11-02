@@ -223,6 +223,9 @@ export default [
       bool('slide', 'Slide', true), num('slideAmt', 'Slide Amount %', 50, 0, 300), sel('slideDir', 'Slide Direction', ['Todas', 'Horizontal', 'Vertical', 'Ângulo'], 1), ang('slideAngle', 'Slide – ângulo (AE)', 0),
       num('slideRgb', 'Slide RGB Split', 10, 0, 100), num('slideBlur', 'Slide Motion Blur %', 100, 0, 200),
       bool('time', 'Time (pulo de quadro)', false), num('timeAmt', 'Time Amount %', 50, 0, 200),
+      // controles extras do Twitch (nomes e opções tirados do twitch.aex)
+      sel('border', 'Border', ['Mirror', 'Tile', 'Ignore', 'Expand'], 1), sel('lightMode', 'Light Behaviour', ['Brighter', 'Darker', 'Both'], 1),
+      num('blurBoost', 'Blur Boost %', 100, 0, 400), pos('scaleOrigin', 'Scale Origin', [0.5, 0.5]), sel('timeDir', 'Time Direction', ['Forward Only', 'Backward Only', 'Ambos'], 3),
     ],
     pad: (p, { layer, w, h } = {}) => (isFull(layer) ? 0 : (p.slide ? ((p.slideAmt || 0) / 100) * Math.max(w || 0, h || 0) * 0.35 : 0) + (p.scale ? (Math.max(w || 0, h || 0) * (p.scaleAmt || 0)) / 400 : 0)),
     // Time: o tranco mostra um quadro de outro momento (como o Twitch Time)
@@ -231,7 +234,9 @@ export default [
       const e = twitchEnv(t, p, 6);
       if (e <= 0.01) return t;
       const j = Math.floor(t * 24);
-      return t + (hash1(j * 5.7 + (p.seed || 0)) - 0.5) * 2 * e * ((p.timeAmt || 0) / 100) * 0.6;
+      let d = (hash1(j * 5.7 + (p.seed || 0)) - 0.5) * 2;
+      if (p.timeDir === 1) d = Math.abs(d); else if (p.timeDir === 2) d = -Math.abs(d);
+      return t + d * e * ((p.timeAmt || 0) / 100) * 0.6;
     },
     render: (src, p, env) => {
       const { gl } = env;
@@ -252,20 +257,22 @@ export default [
       if (moving || c.s > 1.0005 || Math.abs(c.dx) + Math.abs(c.dy) > 0.5) {
         const n = moving && (p.slideBlur ?? 100) > 0 ? blurSamples(env, q, c, 12) : 1;
         out = gl.pass(BMC, {
-          u_tex: src, u_c: cuv(env, [0.5, 0.5]), u_s0: q.s, u_s1: c.s, u_r0: 0, u_r1: 0,
-          u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: n, u_jit: jitterFor(env, q, c, n), u_wrap: isFull(env.layer) ? [3, 3] : [1, 1],
+          u_tex: src, u_c: cuv(env, p.scaleOrigin || [0.5, 0.5]), u_s0: q.s, u_s1: c.s, u_r0: 0, u_r1: 0,
+          u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: n, u_jit: jitterFor(env, q, c, n),
+          // Border: Mirror (espelha), Tile (repete), Ignore (transparente), Expand (espelha)
+          u_wrap: isFull(env.layer) ? (({ 1: [3, 3], 2: [2, 2], 3: [1, 1], 4: [3, 3] })[p.border || 1] || [3, 3]) : [1, 1],
         });
         if (n > 1) out = smoothMotion(env, out, q, c, n);
       }
       const eb = p.blur ? twitchEnv(env.t, p, 1) : 0;
-      if (eb > 0.01) out = gl.blur(out, eb * ((p.blurAmt || 0) / 100) * 55 * env.scale * (L / 1920)); // blur do Twitch é bem forte no plugin
+      if (eb > 0.01) out = gl.blur(out, eb * ((p.blurAmt || 0) / 100) * ((p.blurBoost ?? 100) / 100) * 55 * env.scale * (L / 1920)); // blur do Twitch é bem forte no plugin
       const ec = p.color ? twitchEnv(env.t, p, 2) : 0;
       const el = p.light ? twitchEnv(env.t, p, 3) : 0;
       const rgbK = c.el * ((p.slideRgb || 0) / 10);
       if (ec > 0.01 || el > 0.01 || rgbK > 0.01) {
         const [ux, uy] = twitchDir(env.t, p);
         const off = (ec * ((p.colorAmt || 0) / 100) * 18 + rgbK * 6) * env.scale;
-        out = gl.pass(TWITCH, { u_tex: out, u_off: [(ux * off) / env.W, (uy * off) / env.H], u_light: el * ((p.lightAmt || 0) / 100) * 1.2 });
+        out = gl.pass(TWITCH, { u_tex: out, u_off: [(ux * off) / env.W, (uy * off) / env.H], u_light: el * ((p.lightAmt || 0) / 100) * 1.2 * (p.lightMode === 2 ? -1 : p.lightMode === 3 ? (hash1(Math.floor(env.t * 24) * 9.1 + (p.seed || 0)) < 0.5 ? -1 : 1) : 1) });
         if (ec > 0.01) out = gl.pass(COLORIZE, { u_tex: out, u_col: rgb(p.colorize || [1, 0.64, 0, 1]), u_amt: Math.min(1, ec * ((p.colorAmt || 0) / 100)) });
       }
       return out;

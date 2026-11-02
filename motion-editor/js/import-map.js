@@ -196,6 +196,7 @@ export const IMPORT_RULES = [
       blurAmt: { n: ['blur amount'] }, colorAmt: { n: ['color amount'] }, colorize: { n: ['colorize'] }, lightAmt: { n: ['light amount'] },
       scaleAmt: { n: ['scale amount'] }, slideAmt: { n: ['slide amount'] }, slideAngle: { n: ['slide direction'] },
       slideRgb: { n: ['slide rgb split'] }, slideBlur: { n: ['slide motion blur'] }, timeAmt: { n: ['time amount'] },
+      border: { n: ['border'] }, lightMode: { n: ['light behaviour'] }, blurBoost: { n: ['blur boost'] }, scaleOrigin: { n: ['scale origin'] }, timeDir: { n: ['time direction'] },
     },
     // Slide Direction do Twitch é um ÂNGULO (pode ser animado: -67°, -192°, -540°…), não um menu
     post: (p) => { p.slideDir = p.slideAngle !== undefined ? 4 : 1; } },
