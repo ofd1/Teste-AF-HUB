@@ -193,14 +193,15 @@ void main() {
   vec3 warmH = r * mix(vec3(1.0), vec3(1.07, 1.01, 0.88), hiW);
   r = mix(r, cool, u_mojo * u_cool);
   r = mix(r, warmH, u_mojo * (0.6 + 0.4 * skin) * u_skin);
-  r = mix(vec3(luma(r)), r, 1.0 + u_mojo * 0.18 * (0.5 + skin));
+  // Mojo II: pele quente e viva, FUNDO esfriado e com menos cor (o “blockbuster”); com Mojo 100 o fundo fica quase sem cor
+  r = mix(vec3(luma(r)), r, 1.0 - u_mojo * 0.72 * (1.0 - skin * 0.6));
   // Punch (curva S + saturação) e Bleach (bleach bypass)
   vec3 sc = r * r * (3.0 - 2.0 * r);
   r = mix(r, sc, u_punch);
   r = mix(vec3(luma(r)), r, 1.0 + u_punch * 0.25);
   // Bleach It (Mojo II): tira a cor e dá um pouco de contraste prateado, SEM afundar a imagem
   float bl = luma(r);
-  vec3 ds = mix(r, vec3(bl), 0.75);
+  vec3 ds = mix(r, vec3(bl), 0.85);
   vec3 bs = ds * ds * (3.0 - 2.0 * ds);
   r = mix(r, mix(ds, bs, 0.3), u_bleach);
   // contraste, saturação, curva, haze/fade
@@ -234,7 +235,8 @@ const OPTDIFF = frag(`
 uniform sampler2D u_tex2; uniform float u_dens, u_hl, u_glow;
 void main() {
   vec4 c = texture2D(u_tex, v_uv), b = texture2D(u_tex2, v_uv);
-  float w = u_dens * mix(1.0, smoothstep(0.35, 0.95, luma(b.rgb)), u_hl);
+  // Optical Diffusion do Looks espalha luz também nas sombras (visual “leitoso”, pretos lavados — ZAZ Dark)
+  float w = min(1.0, u_dens * 1.5) * mix(1.0, smoothstep(0.2, 0.9, luma(b.rgb)), u_hl * 0.6);
   vec3 lifted = max(c.rgb, mix(c.rgb, b.rgb, 0.85));      // a difusão clareia, nunca escurece os detalhes
   vec3 o = mix(c.rgb, lifted, w) + b.rgb * u_glow * smoothstep(0.5, 1.0, luma(b.rgb));
   gl_FragColor = vec4(min(o, vec3(c.a)), c.a);

@@ -80,7 +80,7 @@ export function looksFromTools(tools, strength = 100) {
           if (v[6] > 0) p.mojoSkin = clampN(50 + v[6], 0, 100);
           p.exposure += (v[7] || 0) * k;
           p.temperature += (v[8] || 0) * 0.8 * k;
-          p.tint += (v[9] || 0) * 0.5 * k;
+          p.tint -= (v[9] || 0) * 0.5 * k; // Green/Magenta positivo deixa esverdeado no AE (ZAZ Dark: cinza-esverdeado)
           p.mojoTint = (v[1] || 0) * k;
         }
         break;
