@@ -161,6 +161,7 @@ export class Inspector {
     let inputs;
     switch (d.kind) {
       case 'point': inputs = `<input type="number" inputmode="decimal" data-i="0" data-fid="${fid}_0" step="${d.step || 1}"><input type="number" inputmode="decimal" data-i="1" data-fid="${fid}_1" step="${d.step || 1}">`; break;
+      case 'point3': inputs = [0, 1, 2].map((i) => `<input type="number" inputmode="decimal" data-i="${i}" data-fid="${fid}_${i}" step="0.01">`).join(''); break;
       case 'pos': inputs = `<input type="number" inputmode="decimal" data-i="0" data-fid="${fid}_0" step="1" title="X %"><input type="number" inputmode="decimal" data-i="1" data-fid="${fid}_1" step="1" title="Y %">`; break;
       case 'color': inputs = '<input type="color" data-i="c">'; break;
       case 'bool': inputs = '<label class="switch"><input type="checkbox" data-i="b"><i></i></label>'; break;
@@ -256,6 +257,7 @@ export class Inspector {
     if (!prop) return;
     const read = () => {
       const cur = valueAt(prop, store.time);
+      if (kind === 'point3') return [0, 1, 2].map((i) => { const v = parseFloat(row.querySelector(`[data-i="${i}"]`).value); return Number.isFinite(v) ? v : cur[i]; });
       if (kind === 'point') return [0, 1].map((i) => { const v = parseFloat(row.querySelector(`[data-i="${i}"]`).value); return Number.isFinite(v) ? v : cur[i]; });
       if (kind === 'pos') return [0, 1].map((i) => { const v = parseFloat(row.querySelector(`[data-i="${i}"]`).value); return Number.isFinite(v) ? v / 100 : cur[i]; });
       if (kind === 'color') return hexToRgba(row.querySelector('[data-i="c"]').value, cur?.[3] ?? 1);
@@ -316,6 +318,7 @@ export class Inspector {
         if (el && document.activeElement !== el) el.value = val;
       };
       if (kind === 'point') { set('[data-i="0"]', round(v[0])); set('[data-i="1"]', round(v[1])); }
+      if (kind === 'point3') [0, 1, 2].forEach((i) => set(`[data-i="${i}"]`, round(v[i])));
       else if (kind === 'pos') { set('[data-i="0"]', round(v[0] * 100)); set('[data-i="1"]', round(v[1] * 100)); }
       else if (kind === 'color') set('[data-i="c"]', rgbaToHex(v));
       else if (kind === 'bool') { const el = row.querySelector('[data-i="b"]'); if (el) el.checked = !!v; }

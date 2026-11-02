@@ -29,6 +29,7 @@ export function looksFromTools(tools, strength = 100) {
     vignette: 0, vignetteSize: 50, diffusion: 0, diffusionRadius: 60, diffusionThreshold: 60, chroma: 0,
     spotExposure: 0, spotColor: [1, 1, 1, 1], spotCenter: [0.5, 0.5], spotSize: 50, spotSoft: 50, spotAspect: 1, spotInvert: false,
     optDensity: 0, optSize: 50, optHighlights: 50, optGlow: 0, edgeCenter: [0.5, 0.5], edgeAspect: 1,
+    mixR: [1, 0, 0], mixG: [0, 1, 0], mixB: [0, 0, 1], mixAmt: 0,
     gradExposure: 0, gradAngle: 0, gradOffset: 0, gradSoft: 0.5, gradColor: [1, 1, 1, 1],
     edgeBlur: 0, edgeSize: 100, edgeSoft: 50,
     anamSize: 0, anamBoost: 1, anamThreshold: 70, hazeExposure: -99, hazeSoftness: 60, hazeSpill: 50, lensDistort: 0, lensFlatten: 0,
@@ -114,18 +115,64 @@ export function looksFromTools(tools, strength = 100) {
         break;
       }
       case 'crv2': {
-        // curva: [força, …, (36) canal, (37) nº de pontos, depois pares (entrada, ajuste)]
-        // v[0] = força da curva (0..1): os ajustes dos pontos são escalados por ela
-        const n = Math.min(4, Math.round(v[37] || 0)), k = v[0] > 0 && v[0] <= 1 ? v[0] : 1;
-        // ajuste do ponto acima da diagonal (positivo = clareia): Vampy CC levanta as sombras (pretos "lavados", ~14% no AE)
-        for (let i = 0; i < n; i++) curve.push([v[38 + i * 2], (v[39 + i * 2] || 0) * k]);
+        // Curves (ordem dos Looks do MBL): por canal (1 = RGB, 2 = R, 3 = G, 4 = B): Contrast, Shadows, Midtones,
+        // Highlights, Point 1-5; depois Gamma Space (36) e os pontos livres (37 = quantidade, 38… pares entrada/ajuste)
+        p.contrast += (v[0] || 0) * 35;
+        const ch = ['', 'R', 'G', 'B'];
+        for (let c = 0; c < 4; c++) {
+          const b = c * 9, sh = v[b + 1] || 0, mi = v[b + 2] || 0, hi = v[b + 3] || 0;
+          const keys = c === 0 ? ['R', 'G', 'B'] : [ch[c]];
+          for (const k of keys) { p[`lift${k}`] += sh * 0.25; p[`gamma${k}`] *= 1 + mi * 0.6; p[`gain${k}`] *= 1 + hi * 0.35; }
+          if (c > 0 && v[b] && v[b] !== 0) for (const k of keys) p[`gain${k}`] *= 1 + v[b] * 0.1;
+        }
+        const n = Math.min(4, Math.round(v[37] || 0));
+        for (let i = 0; i < n; i++) curve.push([v[38 + i * 2], v[39 + i * 2] || 0]);
+        if (!n) for (let i = 0; i < 5; i++) if (Math.abs(v[4 + i] || 0) > 1e-4) curve.push([(i + 1) / 6, v[4 + i]]);
         break;
       }
-      case 'cmix': if ((v[0] ?? 100) > 0) p.saturation *= (v[1] ?? 100) / 100; break;
-      case 'duto': p.mojo = Math.max(p.mojo, (v[3] || 0) * 2); break;
+      // Channel Mixer: [Normalize, Strength, Monochrome, —, RGB R/G/B (pesos do mono), Red R/G/B, Green R/G/B, Blue R/G/B]
+      case 'cmix': {
+        const norm = (v[0] ?? 100) / 100;
+        const row = (a, b, c, def) => { let r = [v[a] ?? def[0], v[b] ?? def[1], v[c] ?? def[2]]; const s = r[0] + r[1] + r[2]; if (Math.abs(s) > 0.1) r = r.map((x) => x * (1 - norm) + (x / s) * norm); return r; };
+        if (v[2] >= 0.5) { const w = row(4, 5, 6, [0.213, 0.715, 0.072]); p.mixR = w; p.mixG = w.slice(); p.mixB = w.slice(); }
+        else { p.mixR = row(7, 8, 9, [1, 0, 0]); p.mixG = row(10, 11, 12, [0, 1, 0]); p.mixB = row(13, 14, 15, [0, 0, 1]); }
+        p.mixAmt = clampN((v[1] ?? 100) / 100, 0, 1);
+        break;
+      }
+      // Saturation: [Saturation %, Exposure Compensation]
+      case 'satu': p.saturation *= (v[0] ?? 100) / 100; p.exposure += v[1] || 0; break;
+      // Warm/Cool: [Warm/Cool (−1..1), Tint, Exposure Compensation]
+      case 'wmcl': p.temperature += (v[0] || 0) * 60; p.tint += (v[1] || 0) * 60; p.exposure += v[2] || 0; break;
+      // Shadows/Highlights: [Shadows 0..1 (abre as sombras), Highlights −1..0 (segura os realces)]
+      case 'shad': for (const k of ['R', 'G', 'B']) { p[`lift${k}`] += (v[0] || 0) * 0.12; p[`gain${k}`] *= 1 + (v[1] || 0) * 0.15; } break;
+      // HSL Colors: [Master Hue, Master Sat, Master Lum, Hue R..M, Sat R..M, Lum R..M]
+      case 'rhsl':
+        p.hue += v[0] || 0; p.saturation *= 1 + (v[1] || 0) / 100; p.exposure += (v[2] || 0) / 100;
+        HSL.forEach((k, i) => { p[`hsl${k}H`] += v[3 + i] || 0; p[`hsl${k}S`] += v[11 + i] || 0; p[`hsl${k}L`] += v[19 + i] || 0; });
+        break;
+      // 4-Way Color: [Exposure, Contrast, Strength, Highlight RGB+Sat, Midtone RGB+Sat, Shadow RGB+Sat, Master RGB+Sat, …] (cores: 0,5 = neutro)
+      case '4way': {
+        const k = (v[2] ?? 100) / 100, o = (i) => ((v[i] ?? 0.5) - 0.5) * 2 * k;
+        p.exposure += (v[0] || 0) * k; p.contrast += (v[1] || 0) * k;
+        ['R', 'G', 'B'].forEach((c, i) => {
+          p[`gain${c}`] *= 1 + o(3 + i) * 0.5 + o(15 + i) * 0.5;
+          p[`gamma${c}`] *= 1 + o(7 + i) * 0.6;
+          p[`lift${c}`] += o(11 + i) * 0.25;
+        });
+        p.saturation *= 1 + (((v[6] ?? 100) + (v[10] ?? 100) + (v[14] ?? 100)) / 3 / 100 - 1) * k * 0.7 + ((v[18] ?? 100) / 100 - 1) * k;
+        break;
+      }
+
+      // Duotone: [Highlight RGB, Highlight Tint, Shadow RGB, Shadow Tint, Balance]
+      case 'duto': ['R', 'G', 'B'].forEach((c, i) => { p[`gain${c}`] *= 1 + ((v[i] ?? 1) - 1) * ((v[3] || 0) / 100) * 0.6; p[`lift${c}`] += ((v[4 + i] ?? 1) - 1) * ((v[7] || 0) / 100) * 0.25; }); break;
       // Two Strip (Technicolor de 2 tiras): laranja/ciano forte, pele quente — não dessatura
       case '2stp': p.mojo = Math.max(p.mojo, (v[0] || 0) * 0.6); p.mojoSkin = Math.max(p.mojoSkin, 70); p.saturation *= 1 + (v[0] || 0) / 500; break;
-      case 'logc': p.fade += 8; p.contrast -= 8; break;
+      // S Curve: [Contrast (1 = neutro), Midpoint, Brightness (0,5 = neutro), Black Point, White Point, Log]
+      case 'logc':
+        p.contrast += clampN(((v[0] ?? 1) - 1) * 25, -60, 80);
+        p.exposure += Math.log2(Math.max(0.05, (v[2] ?? 0.5) / 0.5)) * 0.5;
+        p.fade += (v[3] || 0) * 60;
+        break;
       case 'spex':
         // Spot Exposure (Looks3.aex): [Stops, Center X, Center Y, Radius, Spread, Falloff, Strength, R, G, B, Aspect, Invert]
         p.spotExposure += (v[0] || 0) * ((v[6] ?? 100) / 100);

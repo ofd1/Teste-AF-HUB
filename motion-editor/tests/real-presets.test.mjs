@@ -116,8 +116,9 @@ test('Looks: Colorista HSL por cor, temperatura e curvas vêm do arquivo', () =>
   assert.equal(sn[0].hslBlueS, -50);
   assert.equal(sn[0].hslPurpleH, 50);
   assert.equal(sn[0].temperature, -15);
-  assert.equal(Math.round(sn[1].saturation), 28); // Colorista Saturation 40% × Channel Mix 70%
+  assert.equal(Math.round(sn[1].saturation), 40); // Colorista Saturation 40%
+  assert.equal(sn[1].mixAmt, 0.7); // Channel Mixer com Strength 70%
   const ftb = load('CC (Color Correction)/FTB AEP CC.ffx').preset.effects.filter((e) => e.type === 'looks').map((e) => e.params);
-  assert.deepEqual([ftb[1].curve1x, ftb[1].curve1y].map((v) => +v.toFixed(3)), [0.292, 0.06]); // ajuste do ponto × força da curva (0.92)
+  assert.deepEqual([ftb[1].curve1x, ftb[1].curve1y].map((v) => +v.toFixed(3)), [0.292, 0.065]); // ponto livre da curva (entrada, ajuste)
   assert.ok(ftb[0].mojo > 30 && ftb[0].bleach > 70) // Mojo 36 + Bleach It 85;
 });
