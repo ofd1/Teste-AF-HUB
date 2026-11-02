@@ -49,6 +49,13 @@ export const LAYER_FACTORIES = {
   adjustment: (p) => baseLayer(p, 'adjustment', 'Ajuste', {}),
   // Null (como no After Effects): invisível, serve de "pai" para outras camadas
   null: (p) => baseLayer(p, 'null', 'Null', { width: 100, height: 100 }),
+  // Câmera (como a do AE): dois nós (aponta para o Ponto de Interesse), zoom em px e profundidade de campo
+  camera: (p) => {
+    const l = baseLayer(p, 'camera', 'Câmera', { twoNode: true, dof: false });
+    const zoom = Math.round((p.width * 50) / 36);
+    Object.assign(l.transform, { posZ: anim(-zoom), poi: anim([p.width / 2, p.height / 2]), poiZ: anim(0), rotX: anim(0), rotY: anim(0), zoom: anim(zoom), focusDist: anim(zoom), aperture: anim(25), blurLevel: anim(100) });
+    return l;
+  },
   // Camada de formas (Shape Layer do AE): retângulos, elipses, estrelas e caminhos com preenchimento/contorno
   shape: (p, shapes = []) => baseLayer(p, 'shape', 'Formas', { width: p.width, height: p.height, shapes }),
 };

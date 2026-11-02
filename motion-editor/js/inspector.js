@@ -1,9 +1,12 @@
 // Painéis de propriedades (mode 'props') e de efeitos (mode 'effects').
-import { valueAt, isAnimated, setValue, toggleKey, toggleStopwatch, keyIndexAt, prevKeyTime, nextKeyTime } from './anim.js';
+import { valueAt, isAnimated, setValue, toggleKey, toggleStopwatch, keyIndexAt, prevKeyTime, nextKeyTime, anim } from './anim.js';
+import { setThreeD, cameraMove } from './three-d.js';
+import { reparent } from './renderer.js';
 import { resolveProp } from './state.js';
 import { getEffectDef } from './effects.js';
 import { escapeHtml, hexToRgba, rgbaToHex, deepClone, uid } from './util.js';
-import { toast } from './ui.js';
+import { toast, modal } from './ui.js';
+import { exprError, EXPR_PRESETS } from './expr.js';
 
 /**
  * Campo numérico arrastável (como no After Effects): segurar e arrastar para os lados muda o valor;
@@ -52,6 +55,21 @@ const TRANSFORM_DEFS = [
   { key: 'opacity', label: 'Opacidade %', kind: 'number', min: 0, max: 100, step: 1 },
   { key: 'anchor', label: 'Ancoragem', kind: 'point', step: 1 },
 ];
+const T3D = { posZ: { key: 'posZ', label: 'Posição Z', kind: 'number', step: 1 }, rotX: { key: 'rotX', label: 'Rotação X', kind: 'angle' }, rotY: { key: 'rotY', label: 'Rotação Y', kind: 'angle' } };
+const CAM_DEFS = [
+  { key: 'position', label: 'Posição', kind: 'point', step: 1 }, T3D.posZ,
+  { key: 'poi', label: 'Ponto de interesse', kind: 'point', step: 1 }, { key: 'poiZ', label: 'Ponto de interesse Z', kind: 'number', step: 1 },
+  T3D.rotX, T3D.rotY, { key: 'rotation', label: 'Rotação Z (roll)', kind: 'angle' },
+  { key: 'zoom', label: 'Zoom (px)', kind: 'number', step: 1, min: 50, max: 10000 },
+  { key: 'focusDist', label: 'Distância de foco', kind: 'number', step: 1 }, { key: 'aperture', label: 'Abertura (desfoque)', kind: 'number', step: 1, min: 0, max: 500 },
+];
+/** Propriedades de transformação mostradas para a camada (3D ganha Z e rotações X/Y, como no AE). */
+function transformDefs(layer) {
+  if (layer.type === 'camera') return CAM_DEFS.filter((d) => layer.transform[d.key]);
+  if (!layer.threeD) return TRANSFORM_DEFS;
+  const [pos, sc, rot, op, anc] = TRANSFORM_DEFS;
+  return [pos, T3D.posZ, sc, T3D.rotX, T3D.rotY, { ...rot, label: 'Rotação Z' }, op, anc];
+}
 
 // modos de mesclagem na ordem do After Effects (os que o navegador desenha de verdade)
 const BLENDS = {
@@ -66,7 +84,7 @@ const OP_STYLES = [
   ['blink', '◌ Piscar'], ['strobe', '▦ Strobe'], ['pulse', '◍ Pulsar'], ['flicker', '✳ Cintilar'], ['clear', '✕ Limpar'],
 ];
 const FONTS = ['Inter, system-ui, sans-serif', 'Impact, "Arial Black", sans-serif', '"Arial Black", sans-serif', 'Georgia, serif', '"Courier New", monospace', '"Trebuchet MS", sans-serif', '"Brush Script MT", cursive'];
-const TYPE_NAMES = { text: 'Texto', rect: 'Retângulo', ellipse: 'Elipse', solid: 'Sólido', image: 'Imagem', video: 'Vídeo', audio: 'Áudio', adjustment: 'Camada de ajuste' };
+const TYPE_NAMES = { camera: 'Câmera', null: 'Null', group: 'Pré-composição', shape: 'Formas', text: 'Texto', rect: 'Retângulo', ellipse: 'Elipse', solid: 'Sólido', image: 'Imagem', video: 'Vídeo', audio: 'Áudio', adjustment: 'Camada de ajuste' };
 
 // área de transferência de efeitos (vale entre camadas e entre projetos neste aparelho)
 let clipboard = null;
@@ -177,12 +195,27 @@ export class Inspector {
       case 'adjustment':
         rows.push('<div class="note">Efeitos desta camada são aplicados em tudo que está abaixo dela (como no After Effects).</div>');
         break;
+      case 'camera':
+        rows.push(f('Dois nós (aponta p/ o Ponto de interesse)', `<label class="switch"><input type="checkbox" data-prop="twoNode" ${p.twoNode !== false ? 'checked' : ''}><i></i></label>`));
+        rows.push(f('Profundidade de campo (DOF)', `<label class="switch"><input type="checkbox" data-prop="dof" ${p.dof ? 'checked' : ''}><i></i></label>`));
+        rows.push('<div class="note">A câmera só enxerga camadas 3D (ligue “Camada 3D” nelas). Movimentos prontos a partir do playhead:</div>');
+        rows.push(`<div class="cam-moves">${[['push', 'Push-in'], ['pull', 'Pull-out'], ['orbit', 'Órbita'], ['dolly', 'Dolly lateral'], ['crane', 'Grua (sobe)'], ['roll', 'Roll']].map(([k, l]) => `<button data-cammove="${k}">${l}</button>`).join('')}</div>`);
+        rows.push(f('Duração do movimento (s)', `<input type="number" class="num" data-camdur min="0.1" max="30" step="0.1" value="${this.camDur ?? 2}">`));
+        break;
       default:
         rows.push(f('Largura', num('width', 1, 1)), f('Altura', num('height', 1, 1)));
         if ('fill' in p) rows.push(f('Cor', color('fill')));
         if (layer.type === 'rect') rows.push(f('Raio', num('radius', 1, 0)));
         if ('strokeWidth' in p) rows.push(f('Contorno', num('strokeWidth', 0.5, 0)), f('Cor contorno', color('strokeColor')));
     }
+    if (layer.type !== 'audio') {
+      // Pai (pick-whip do AE): a camada passa a seguir posição/rotação/escala de outra (ex.: um Null)
+      const desc = (l) => { const out = new Set(); const walk = (id) => { for (const o of this.store.layers) if (o.parent === id && !out.has(o.id)) { out.add(o.id); walk(o.id); } }; walk(l.id); return out; };
+      const bad = desc(layer);
+      const opts = this.store.layers.filter((o) => o !== layer && !bad.has(o.id) && o.type !== 'audio');
+      rows.push(f('Pai (parent)', `<select data-parent><option value="">Nenhum</option>${opts.map((o) => `<option value="${o.id}" ${layer.parent === o.id ? 'selected' : ''}>${escapeHtml(o.name)}</option>`).join('')}</select>`));
+    }
+    if (!['audio', 'adjustment', 'camera'].includes(layer.type)) rows.push(f('Camada 3D (câmera)', `<label class="switch"><input type="checkbox" data-three ${layer.threeD ? 'checked' : ''}><i></i></label>`));
     rows.push(f('Entrada (s)', `<input type="number" inputmode="decimal" data-layer="inPoint" step="0.01" value="${layer.inPoint.toFixed(2)}">`));
     rows.push(f('Saída (s)', `<input type="number" inputmode="decimal" data-layer="outPoint" step="0.01" value="${layer.outPoint.toFixed(2)}">`));
     let html = this.section('layer', TYPE_NAMES[layer.type] || 'Camada', rows.join(''));
@@ -205,7 +238,7 @@ export class Inspector {
         f('Duração do estilo (s)', `<input type="number" class="num" data-opdur min="0.05" max="10" step="0.05" value="${this.opDur ?? 0.4}">`),
         `<div class="op-styles">${OP_STYLES.map(([k, l]) => `<button data-opstyle="${k}">${l}</button>`).join('')}</div>`,
       ].join(''));
-      html += this.section('transform', 'Transformar', TRANSFORM_DEFS.map((d) => this.propRow(`transform.${d.key}`, d)).join(''));
+      html += this.section('transform', layer.threeD ? 'Transformar (3D)' : 'Transformar', transformDefs(layer).filter((d) => layer.transform[d.key]).map((d) => this.propRow(`transform.${d.key}`, d)).join(''));
     }
     return html;
   }
@@ -241,6 +274,27 @@ export class Inspector {
       ${cards.join('') || '<div class="empty-note">Nenhum efeito nesta camada ainda. Toque em “＋ Adicionar efeito” ou aplique um preset.</div>'}`;
   }
 
+  /** Editor de expressão da propriedade (como o Alt+clique no cronômetro do AE), com atalhos prontos. */
+  async editExpr(prop, label) {
+    const cur = prop.expr || '';
+    const v = await modal(`Expressão — ${escapeHtml(label)}`, `
+      <p class="muted small">Funciona como no After Effects (subconjunto seguro): <code>wiggle(freq, amp)</code>, <code>loopOut("cycle" | "pingpong" | "offset" | "continue")</code>, <code>loopIn()</code>, <code>time</code>, <code>value</code>, <code>linear()</code>, <code>ease()</code>, <code>Math.sin()</code>… Por segurança, código que não estiver nessa lista não é executado.</p>
+      <textarea data-f="e" rows="4" style="width:100%;font-family:monospace" spellcheck="false" autocapitalize="off">${escapeHtml(cur)}</textarea>
+      <p class="expr-err small" style="color:var(--err);min-height:1.2em"></p>
+      <div class="op-styles">${EXPR_PRESETS.map(([e, l]) => `<button data-e="${escapeHtml(e)}">${escapeHtml(l)}</button>`).join('')}</div>`,
+    [{ label: 'Cancelar', value: null }, ...(cur ? [{ label: 'Remover', value: () => ({ remove: true }) }] : []), { label: 'Aplicar', primary: true, value: (w) => ({ e: w.querySelector('[data-f="e"]').value.trim() }) }],
+    { onMount: (w) => {
+      const ta = w.querySelector('[data-f="e"]'), er = w.querySelector('.expr-err');
+      const check = () => { er.textContent = ta.value.trim() ? exprError(ta.value) || '' : ''; };
+      ta.addEventListener('input', check); check();
+      w.querySelectorAll('[data-e]').forEach((b) => b.addEventListener('click', () => { ta.value = b.dataset.e; check(); }));
+    } });
+    if (!v) return;
+    if (v.remove || !v.e) { delete prop.expr; delete prop.exprOn; }
+    else { prop.expr = v.e; prop.exprOn = true; }
+    this.store.commit();
+  }
+
   propRow(path, d) {
     const fid = path.replace(/[^a-z0-9]/gi, '_');
     let inputs;
@@ -261,7 +315,7 @@ export class Inspector {
     return `<div class="prop-row" data-path="${path}" data-kind="${d.kind}">
       <span class="plabel" data-pact="scrub">${escapeHtml(d.label)}</span>
       <span class="pinputs">${inputs}</span>
-      ${d.kind === 'text' ? '' : `<span class="kfnav"><button data-pact="prev" aria-label="Keyframe anterior">‹</button><button data-pact="key" class="kbtn" aria-label="Keyframe">◆</button><button data-pact="next" aria-label="Próximo keyframe">›</button></span>`}
+      ${d.kind === 'text' ? '' : `<span class="kfnav"><button data-pact="prev" aria-label="Keyframe anterior">‹</button><button data-pact="key" class="kbtn" aria-label="Keyframe">◆</button><button data-pact="next" aria-label="Próximo keyframe">›</button><button data-pact="expr" class="exprbtn" aria-label="Expressão" title="Expressão (wiggle, loopOut…)">=</button></span>`}
     </div>`;
   }
 
@@ -302,6 +356,22 @@ export class Inspector {
     root.querySelectorAll('[data-opstyle]').forEach((b) => b.addEventListener('click', () => {
       applyOpacityStyle(layer, b.dataset.opstyle, this.opDur ?? 0.4, store.project.fps);
       store.commit();
+    }));
+    root.querySelector('[data-parent]')?.addEventListener('change', (e) => {
+      const np = store.layers.find((o) => o.id === e.target.value) || null;
+      for (const o of new Set([layer, ...(store.selectedLayers?.() || [])])) if (o !== np) reparent(o, np, store.project, store.time);
+      store.commit('structure');
+    });
+    root.querySelector('[data-three]')?.addEventListener('change', (e) => {
+      const on = e.target.checked;
+      for (const o of new Set([layer, ...(store.selectedLayers?.() || [])])) if (!['audio', 'adjustment', 'camera'].includes(o.type)) setThreeD(o, on, anim);
+      store.commit('structure');
+    });
+    root.querySelector('[data-camdur]')?.addEventListener('change', (e) => { this.camDur = Math.max(0.1, +e.target.value || 2); });
+    root.querySelectorAll('[data-cammove]').forEach((b) => b.addEventListener('click', () => {
+      const P = store.project;
+      cameraMove(layer, b.dataset.cammove, Math.max(layer.inPoint, store.time), this.camDur ?? 2, P.width, P.height, (t, v) => ({ t, v, ease: 'bezier', outInf: 0.75, inInf: 0.75 }));
+      store.commit('structure');
     }));
     root.querySelectorAll('[data-layer]').forEach((el) => {
       const k = el.dataset.layer;
@@ -431,6 +501,12 @@ export class Inspector {
           };
           el.onpointerup = () => { el.onpointermove = null; if (moved) store.commit(); };
         });
+        return;
+      }
+      if (act === 'expr') {
+        el.classList.toggle('on', !!prop.expr && prop.exprOn !== false);
+        row.classList.toggle('has-expr', !!prop.expr && prop.exprOn !== false);
+        el.addEventListener('click', () => this.editExpr(prop, row.querySelector('.plabel')?.textContent || ''));
         return;
       }
       el.addEventListener('click', () => {

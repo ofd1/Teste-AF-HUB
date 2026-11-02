@@ -7,10 +7,10 @@ import { animProps } from './keyframes.js';
 import { peaks } from './audio.js';
 import { escapeHtml, formatTime } from './util.js';
 
-const TRANSFORM_LABELS = { position: 'Posição', scale: 'Escala', rotation: 'Rotação', opacity: 'Opacidade', anchor: 'Ponto de ancoragem' };
-const ICONS = { text: 'T', rect: '▭', ellipse: '◯', solid: '■', image: '▣', video: '▶', audio: '♪', adjustment: '◐' };
+const TRANSFORM_LABELS = { position: 'Posição', scale: 'Escala', rotation: 'Rotação', opacity: 'Opacidade', anchor: 'Ponto de ancoragem', posZ: 'Posição Z', rotX: 'Rotação X', rotY: 'Rotação Y', poi: 'Ponto de interesse', poiZ: 'Ponto de interesse Z', zoom: 'Zoom', focusDist: 'Distância de foco', aperture: 'Abertura', blurLevel: 'Nível de desfoque' };
+const ICONS = { camera: '🎥', null: '✛', text: 'T', rect: '▭', ellipse: '◯', solid: '■', image: '▣', video: '▶', audio: '♪', adjustment: '◐' };
 // cores de rótulo no estilo AE
-const LABELS = { text: '#b53838', rect: '#c9b85a', ellipse: '#c9b85a', solid: '#8f8f8f', image: '#7086c4', video: '#4f9b95', audio: '#b98a4f', adjustment: '#8b84c2' };
+const LABELS = { camera: '#a8a8a8', null: '#c97a3a', text: '#b53838', rect: '#c9b85a', ellipse: '#c9b85a', solid: '#8f8f8f', image: '#7086c4', video: '#4f9b95', audio: '#b98a4f', adjustment: '#8b84c2' };
 
 export class Timeline {
   constructor(root, store, hooks = {}) {

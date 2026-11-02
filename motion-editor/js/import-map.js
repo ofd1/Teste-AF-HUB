@@ -537,6 +537,7 @@ export const IMPORT_RULES = [
     map: { amount: { n: ['amount'] }, center: { n: ['center'] }, wrapX: { n: ['wrap x'], conv: (v) => Math.min(3, Math.max(1, v)) }, wrapY: { n: ['wrap y'], conv: (v) => Math.min(3, Math.max(1, v)) } } },
   { vendor: 'Sapphire', plugin: 'S_TimeWarpRGB', to: 'timeWarpRGB', test: /s_timewarprgb/i, map: { red: { n: ['red shift frames'] }, blue: { n: ['blue shift frames'] } } },
   { vendor: 'Sapphire', plugin: 'S_Invert', to: 'invert', test: /\bs_invert\b/i },
+  { vendor: 'Cycore (CC)', plugin: 'CC Wide Time', to: 'wideTime', test: /cc wide ?time/i, map: { forward: { n: ['forward steps'] }, backward: { n: ['backward steps'] }, nativeBlur: { n: ['native motion blur'], conv: (v) => !!v } } },
   { vendor: 'Cycore (CC)', plugin: 'CC Ball Action', to: 'ballAction', test: /cc ball action/i,
     map: { scatter: { n: ['scatter'] }, spacing: { n: ['grid spacing'] }, size: { n: ['ball size'] }, rotation: { n: ['rotation'] }, twist: { n: ['twist angle'] }, seed: { n: ['instability state'] } } },
   { vendor: 'Sapphire', plugin: 'S_Distort', to: 'turbulentDisplace', test: /s_distort|s_warp/i },

@@ -55,6 +55,25 @@ void main() {
   gl_FragColor = acc / n;
 }`);
 
+// Inclinação 3D da câmera (tilt X/Y em perspectiva): cada pixel vira um raio que é girado e volta ao plano da imagem
+const PERSP = frag(`
+uniform vec2 u_ang; uniform float u_f; uniform vec2 u_wrapP;
+float wr(float v, float m) { if (m > 2.5) { float k = mod(v, 2.0); return k > 1.0 ? 2.0 - k : k; } if (m > 1.5) return fract(v); return v; }
+void main() {
+  vec2 cu = contentUV(v_uv);
+  vec2 sz = u_rect.zw * u_size;
+  vec3 d = vec3((cu - 0.5) * sz, u_f);
+  float cx = cos(u_ang.x), sx = sin(u_ang.x), cy = cos(u_ang.y), sy = sin(u_ang.y);
+  d = vec3(d.x, cx * d.y - sx * d.z, sx * d.y + cx * d.z);   // gira em X
+  d = vec3(cy * d.x + sy * d.z, d.y, -sy * d.x + cy * d.z);  // gira em Y
+  if (d.z <= 1.0) { gl_FragColor = vec4(0.0); return; }
+  vec2 q = d.xy * (u_f / d.z) / sz + 0.5;
+  if ((u_wrapP.x < 1.5 && (q.x < 0.0 || q.x > 1.0)) || (u_wrapP.y < 1.5 && (q.y < 0.0 || q.y > 1.0))) { gl_FragColor = vec4(0.0); return; }
+  vec2 e = u_texel / u_rect.zw;
+  q = clamp(vec2(wr(q.x, u_wrapP.x), wr(q.y, u_wrapP.y)), e, 1.0 - e);
+  gl_FragColor = texture2D(u_tex, fromContent(q));
+}`);
+
 /**
  * Amostras de motion blur pela distância percorrida (px na tela): ~1 amostra a cada 2,5 px — sem "fantasmas"
  * nem degraus quando o tremor é grande.
@@ -139,6 +158,7 @@ export default [
       num('stillness', 'Stillness (pausas entre trancos)', 0, 0, 0.95, 0.01), num('twitchFreq', 'Twitch Frequency (rajadas/s)', 2, 0.1, 20, 0.1),
       num('drift', 'Drift (deriva lenta)', 0, 0, 2, 0.01), num('rgbShake', 'RGB separado (px)', 0, 0, 100),
       // modo S_Shake exato (definição tirada do sapphire_ae.dll): Style Normal/Twitchy/Jumpy, Tilt e Z × Amplitude
+      num('tilt', 'Inclinação 3D (tilt X/Y, °)', 0, 0, 45, 0.5), num('focal', 'Lente da inclinação (px)', 1500, 200, 6000, 10),
       bool('sapphire', 'Modo S_Shake (Sapphire)', false), sel('style', 'S_Shake – Style', ['Normal', 'Twitchy', 'Jumpy'], 1), num('centerBias', 'S_Shake – Center Bias', 0, 0, 1, 0.01),
     ],
     pad: (p, { layer, w, h } = {}) => (isFull(layer) ? 0 : p.amount * 1.3 + (Math.max(w || 0, h || 0) * (p.zoom + p.rotation)) / 100),
@@ -191,6 +211,13 @@ export default [
         u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: n, u_jit: jitterFor(env, q, c, n), u_wrap: isFull(env.layer) ? [p.wrap ?? 3, p.wrap ?? 3] : [1, 1],
       });
       if (moving) out = smoothMotion(env, out, q, c, n);
+      if (p.tilt > 0) {
+        // tremor de câmera 3D: a imagem inclina em perspectiva (X e Y), com bordas espelhadas
+        const ft = env.t * p.frequency * freqMul, kk = env0(env.t) * burst(env.t);
+        const ax = rad(wig(ft * 0.8, p.seed + 71) * p.tilt * kk), ay = rad(wig(ft * 0.8, p.seed + 89) * p.tilt * kk);
+        const wm = isFull(env.layer) ? [p.wrap ?? 3, p.wrap ?? 3] : [1, 1];
+        out = env.gl.pass(PERSP, { u_tex: out, u_ang: [ax, ay], u_f: (p.focal || 1500) * env.scale, u_wrapP: wm });
+      }
       if (p.rgbShake > 0) {
         const k = Math.min(1, Math.hypot(c.dx - q.dx, c.dy - q.dy) / Math.max(1, p.amount));
         out = env.gl.pass(TWITCH, { u_tex: out, u_off: [(p.rgbShake * k * env.scale) / env.W, 0], u_light: 0 });

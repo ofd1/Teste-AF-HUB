@@ -453,7 +453,7 @@ input[type="number"], input[type="text"], input[type="search"], select, textarea
 .lib-empty { line-height: 1.5; }
 
 /* Mesclagem e opacidade: estilos de um toque */
-.op-styles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
+.cam-moves, .op-styles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
 .op-styles button { padding: 8px 4px; font-size: 12px; border-radius: 8px; background: var(--panel-2, #2a2a2e); border: 1px solid var(--line, #3a3a40); color: inherit; }
 .op-styles button:active { background: var(--accent, #2d8cff); }
 
@@ -500,3 +500,8 @@ body.preview-max .max-ctl { top: max(8px, env(safe-area-inset-top)); }
 .trk-target { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trk-analyze button { flex: 1; padding: 5px 0; }
 .trk-status { padding: 6px 10px 10px; min-height: 2.4em; }
+
+/* expressões (botão = ao lado dos keyframes) */
+.kfnav .exprbtn { font-family: monospace; font-weight: 700; opacity: .55; }
+.kfnav .exprbtn.on { opacity: 1; color: #ff7a59; border-color: #ff7a59; }
+.prop-row.has-expr .plabel { color: #ff7a59; }

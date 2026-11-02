@@ -1,3 +1,4 @@
+import { exprWorks } from './expr.js';
 // Leitor de projetos do After Effects (.aep): pastas, composições, camadas (tempo, tipo, transformação com
 // keyframes, efeitos), sólidos e arquivos de mídia (caminho original). Formato RIFX ("Egg!").
 // Estrutura conferida com projetos reais e com a documentação dos parsers abertos (aep_parser / aftereffects-aep-parser).
@@ -241,11 +242,14 @@ function propOf(l, mn) { return l.properties.find((p) => p.matchName === mn && (
 /** Propriedade do AE (valor fixo ou keyframes) → propriedade animada do MotionFrame. */
 function toAnim(p, fix, fallback, t0) {
   if (!p) return anim(fallback);
+  let a;
   if (p.keyframes?.length) {
-    const keys = p.keyframes.map((kf, i, a) => ({ t: +(t0 + kf.t).toFixed(4), v: fix(kf.v), ...ffxEase(kf, a[i + 1]) }));
-    return anim(keys[0].v, keys);
-  }
-  return anim(p.value?.length ? fix(p.value) : fallback);
+    const keys = p.keyframes.map((kf, i, arr) => ({ t: +(t0 + kf.t).toFixed(4), v: fix(kf.v), ...ffxEase(kf, arr[i + 1]) }));
+    a = anim(keys[0].v, keys);
+  } else a = anim(p.value?.length ? fix(p.value) : fallback);
+  // expressões comuns (wiggle, loopOut, time…) passam a funcionar; as que dependem de outras camadas ficam de fora
+  if (p.expression && exprWorks(p.expression, a.value)) a.expr = p.expression;
+  return a;
 }
 
 /** Posição com dimensões separadas (Position_0 / Position_1) → uma posição [x, y] com keyframes combinados. */
@@ -318,10 +322,64 @@ function convTextAnimators(list, t0) {
   return out;
 }
 
+/** Camada 3D do AE: Z da posição, Orientação e Rotação X/Y. */
+function apply3D(layer, l, t0) {
+  const tr = layer.transform;
+  layer.threeD = true;
+  const pos = propOf(l, 'ADBE Position'), pz = propOf(l, 'ADBE Position_2');
+  tr.posZ = pz?.keyframes?.length && !pos?.keyframes?.length ? toAnim(pz, (v) => v[0] || 0, 0, t0) : toAnim(pos, (v) => v[2] || 0, 0, t0);
+  tr.rotX = toAnim(propOf(l, 'ADBE Rotate X'), (v) => v[0] || 0, 0, t0);
+  tr.rotY = toAnim(propOf(l, 'ADBE Rotate Y'), (v) => v[0] || 0, 0, t0);
+  const o = propOf(l, 'ADBE Orientation');
+  if (o) tr.orientation = toAnim(o, (v) => [v[0] || 0, v[1] || 0, v[2] || 0], [0, 0, 0], t0);
+}
+
+/** Câmera do AE: posição xyz, Ponto de Interesse (= "Anchor Point" da câmera), rotações e opções (zoom, DOF). */
+function convCamera(l, comp, proj, offset) {
+  const t0 = offset + l.startTime;
+  const cam = LAYER_FACTORIES.camera(proj);
+  cam.name = l.name || 'Câmera';
+  cam.inPoint = Math.max(0, +(offset + l.inPoint).toFixed(4));
+  cam.outPoint = Math.min(proj.duration, +(offset + l.outPoint).toFixed(4));
+  if (cam.outPoint <= cam.inPoint) return null;
+  cam.visible = l.enabled !== false;
+  const tr = cam.transform, W = comp.width, H = comp.height, z0 = -(W * 50) / 36;
+  const pos = propOf(l, 'ADBE Position'), p0 = propOf(l, 'ADBE Position_0'), p1 = propOf(l, 'ADBE Position_1'), p2 = propOf(l, 'ADBE Position_2');
+  const separated = (p0?.keyframes?.length || p1?.keyframes?.length || p2?.keyframes?.length) && !pos?.keyframes?.length;
+  tr.position = separated ? mergedPosition(p0, p1, pos?.value?.length ? [pos.value[0], pos.value[1]] : [W / 2, H / 2], t0)
+    : toAnim(pos, (v) => [v[0] ?? W / 2, v[1] ?? H / 2], [W / 2, H / 2], t0);
+  tr.posZ = separated && p2 ? toAnim(p2, (v) => v[0] ?? z0, pos?.value?.[2] ?? z0, t0) : toAnim(pos, (v) => v[2] ?? z0, z0, t0);
+  const poi = propOf(l, 'ADBE Anchor Point');
+  tr.poi = toAnim(poi, (v) => [v[0] ?? W / 2, v[1] ?? H / 2], [W / 2, H / 2], t0);
+  tr.poiZ = toAnim(poi, (v) => v[2] ?? 0, 0, t0);
+  cam.props.twoNode = !!poi; // sem Ponto de Interesse salvo = câmera de um nó
+  tr.rotX = toAnim(propOf(l, 'ADBE Rotate X'), (v) => v[0] || 0, 0, t0);
+  tr.rotY = toAnim(propOf(l, 'ADBE Rotate Y'), (v) => v[0] || 0, 0, t0);
+  tr.rotation = toAnim(propOf(l, 'ADBE Rotate Z'), (v) => v[0] || 0, 0, t0);
+  const o = propOf(l, 'ADBE Orientation');
+  if (o) tr.orientation = toAnim(o, (v) => [v[0] || 0, v[1] || 0, v[2] || 0], [0, 0, 0], t0);
+  const zoom = propOf(l, 'ADBE Camera Zoom');
+  if (zoom) tr.zoom = toAnim(zoom, (v) => v[0] || -z0, -z0, t0);
+  const fd = propOf(l, 'ADBE Camera Focus Distance');
+  if (fd) tr.focusDist = toAnim(fd, (v) => v[0] || -z0, -z0, t0);
+  const ap = propOf(l, 'ADBE Camera Aperture');
+  if (ap) tr.aperture = toAnim(ap, (v) => v[0] ?? 25, 25, t0);
+  const dof = propOf(l, 'ADBE Camera Depth of Field');
+  cam.props.dof = !!(dof && (dof.value?.[0] ?? 0));
+  cam._aeId = l.id; cam._aeParent = l.parentId || 0;
+  return cam;
+}
+
 function buildLayers(parsed, comp, proj, ctx, offset = 0, depth = 0) {
   const out = [];
   for (const l of comp.layers) {
-    if (l.camera || l.layerType === 1 || l.layerType === 2 || l.guide) continue; // câmeras, luzes e guias não aparecem no render
+    if (l.camera) continue; // câmeras de vista internas do AE (Front, Left, Top…): não fazem parte do render
+    if (l.layerType === 2) { // câmera do AE → câmera 3D do MotionFrame
+      const cam = convCamera(l, comp, proj, offset);
+      if (cam) out.push(cam);
+      continue;
+    }
+    if (l.layerType === 1 || l.guide) continue; // luzes e guias não aparecem no render
     const src = parsed.byId.get(l.sourceId);
     const W = src?.width || comp.width, H = src?.height || comp.height;
     let layer;
@@ -380,6 +438,7 @@ function buildLayers(parsed, comp, proj, ctx, offset = 0, depth = 0) {
     if (layer.type === 'text') layer.transform.anchor = toAnim(propOf(l, 'ADBE Anchor Point'), (v) => [v[0] || 0, v[1] || 0], [0, 0], offset + l.startTime);
     // máscaras da camada (caminho em px da camada; no .aep podem vir normalizadas 0..1)
     if (l.masks?.length) layer.masks = l.masks.map((mk) => convMask(mk, W, H, offset + l.startTime)).filter(Boolean);
+    if (l.threeD) apply3D(layer, l, offset + l.startTime);
     layer._aeId = l.id; layer._aeParent = l.parentId || 0;
     if (l.trackMatte) layer.trackMatte = l.trackMatte;
     // efeitos (mesma conversão dos presets .ffx: Sapphire, BCC, Looks, Twitch, Deep Glow…)

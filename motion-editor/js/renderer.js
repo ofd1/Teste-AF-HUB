@@ -1,12 +1,13 @@
 // Composição dos quadros: conteúdo das camadas (Canvas 2D) → efeitos (WebGL) → transformações,
 // motion blur, echo e camadas de ajuste.
-import { valueAt } from './anim.js';
+import { valueAt, exprContext } from './anim.js';
 import { drawAnimatedText, animatorPad } from './textanim.js';
 import { EFFECT_MAP, makeCanvas } from './effects.js';
 import { getGL } from './gl.js';
 import { getImage, videoFrames } from './media.js';
 import { computeFlow, interpWithFlow, interpBidirectional, flowMotionBlur } from './flow.js';
 import { layerTime, vectorBlur, sourceRate } from './timing.js';
+import { localMatrix, cameraFor, apply as apply3, mul as mul4, invert as inv4, dofBlur } from './three-d.js';
 
 const contentCanvases = new Map();
 let accumCanvas = null;
@@ -49,7 +50,7 @@ const fontOf = (p) => `${p.italic ? 'italic ' : ''}${p.fontWeight || 400} ${p.fo
 
 export function contentSize(layer, proj = project) {
   const p = layer.props;
-  if (layer.type === 'adjustment' || layer.type === 'group') return { w: proj?.width || 1080, h: proj?.height || 1920 };
+  if (layer.type === 'adjustment' || layer.type === 'group' || layer.type === 'camera') return { w: proj?.width || 1080, h: proj?.height || 1920 };
   if (layer.type === 'text') {
     const ctx = textCtx();
     ctx.font = fontOf(p);
@@ -500,11 +501,35 @@ function drawChannelTime(ctx, layer, t, scale, extra, img, m, p, fps) {
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.drawImage(chA, 0, 0); ctx.restore();
 }
 
+/** CC Wide Time: média de quadros da camada de (t − passos atrás) a (t + passos à frente). */
+let wtA = null;
+function drawWideTime(ctx, layer, t, scale, extra, img, m, p, fps) {
+  const W = ctx.canvas.width, H = ctx.canvas.height, tf = ctx.getTransform();
+  if (!wtA) wtA = makeCanvas(W, H);
+  if (wtA.width !== W || wtA.height !== H) { wtA.width = W; wtA.height = H; }
+  const a = wtA.getContext('2d');
+  a.setTransform(1, 0, 0, 1, 0, 0); a.globalCompositeOperation = 'source-over'; a.clearRect(0, 0, W, H);
+  const sub = p.nativeBlur ? 2 : 1, st = Math.max(0.1, p.stepSize || 1) / sub;
+  const back = Math.round((p.backward || 0) * sub), fwd = Math.round((p.forward || 0) * sub);
+  const offs = [0];
+  for (let k = 1; k <= Math.max(back, fwd); k++) { if (k <= back) offs.push(-k * st); if (k <= fwd) offs.push(k * st); }
+  const list = offs.slice(0, 40);
+  a.globalCompositeOperation = 'lighter';
+  for (const o of list) {
+    const tc = Math.max(layer.inPoint, Math.min(layer.outPoint - 1e-4, t + o / fps));
+    const im = o === 0 ? img : renderLayerImage(layer, tc, scale, { ...extra, offTime: true });
+    a.setTransform(tf);
+    drawLayerImage(a, im, o === 0 ? m : layerTransform(layer, tc), scale, 1 / list.length);
+  }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.drawImage(wtA, 0, 0); ctx.restore();
+}
+
 function findFx(layer, type) {
   return layer.effects.find((fx) => fx.enabled && fx.type === type) || null;
 }
 
 export function renderLayer(ctx, layer, t, scale, extra, fps = 30) {
+  if (layer.threeD && cam3d) { ctx.save(); ctx.globalCompositeOperation = layer.blend || 'source-over'; render3D(ctx, layer, t, scale, extra); ctx.restore(); return; }
   const m = layerTransform(layer, t);
   const echo = findFx(layer, 'echo');
   const mb = findFx(layer, 'motionBlur');
@@ -550,7 +575,9 @@ export function renderLayer(ctx, layer, t, scale, extra, fps = 30) {
       ctx.drawImage(accumCanvas, 0, 0);
     } else {
       const cw = layer.effects.find((fx) => fx.enabled && EFFECT_MAP[fx.type]?.channelTime);
-      if (cw) drawChannelTime(ctx, layer, t, scale, extra, img, m, evalParams(cw, layerTime(layer, t)), fps);
+      const wt = findFx(layer, 'wideTime');
+      if (wt) drawWideTime(ctx, layer, t, scale, extra, img, m, evalParams(wt, layerTime(layer, t)), fps);
+      else if (cw) drawChannelTime(ctx, layer, t, scale, extra, img, m, evalParams(cw, layerTime(layer, t)), fps);
       else drawLayerImage(ctx, img, m, scale);
     }
   }
@@ -583,12 +610,104 @@ function renderWithMatte(ctx, l, matte, t, scale, fps) {
 }
 
 /** Desenha uma lista de camadas (de baixo para cima), com Null, Track Matte e parentesco. */
-function drawLayerList(ctx, layers, t, scale, fps, onAdjust) {
-  for (let i = layers.length - 1; i >= 0; i--) {
+// ---------------------------------------------------------------- 3D (camadas 3D + câmera, como no AE)
+let cam3d = null; // câmera da composição que está sendo desenhada (null = nenhuma camada 3D)
+
+/** Matriz de mundo (conteúdo da camada → composição em 3D), incluindo a cadeia de pais. */
+function worldMatrix(layer, t) {
+  let M = localMatrix(layer, layerTransform(layer, t), contentSize(layer), layerTime(layer, t));
+  let p = layer.parent ? layerIndex.get(layer.parent) : null;
+  for (let i = 0; p && i < 12; i++) {
+    M = mul4(localMatrix(p, layerTransform(p, t), contentSize(p), layerTime(p, t)), M);
+    p = p.parent ? layerIndex.get(p.parent) : null;
+  }
+  return M;
+}
+function parentWorld(layer, t) {
+  const p = layer.parent ? layerIndex.get(layer.parent) : null;
+  return p ? worldMatrix(p, t) : null;
+}
+const isActive = (l, t) => l.visible && t >= l.inPoint && t < l.outPoint;
+function setupCamera(layers, t, W, H) {
+  if (!layers.some((l) => l.threeD && isActive(l, t))) return null;
+  const cam = layers.find((l) => l.type === 'camera' && isActive(l, t)) || null;
+  return cameraFor(cam, W, H, cam ? layerTime(cam, t) : t, cam ? parentWorld(cam, t) : null);
+}
+/** Distância da camada à câmera (para desenhar de trás para frente). */
+function depthOf(l, t) {
+  const { w, h } = contentSize(l), m = layerTransform(l, t);
+  const c = apply3(cam3d.view, apply3(worldMatrix(l, t), [w / 2 + m.anchor[0], h / 2 + m.anchor[1], 0]));
+  return c[2];
+}
+
+let src3d = null;
+/** Desenha uma camada 3D em perspectiva pela câmera ativa (WebGL; sem WebGL, desenha em 2D). */
+function render3D(ctx, layer, t, scale, extra) {
+  const m = layerTransform(layer, t);
+  if (m.opacity <= 0.001) return;
+  const img = renderLayerImage(layer, t, scale, extra);
+  const gl = getGL();
+  if (!gl) { drawLayerImage(ctx, img, m, scale); return; }
+  const k = img.k || 1, s = scale * k;
+  const x0 = -img.pad / s, y0 = -img.pad / s, x1 = (img.sw - img.pad) / s, y1 = (img.sh - img.pad) / s;
+  const Mw = worldMatrix(layer, t);
+  const cs = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map((p) => apply3(cam3d.view, apply3(Mw, p)));
+  const near = 1;
+  if (cs.every((c) => c[2] < near)) return; // atrás da câmera
+  const tf = ctx.getTransform(), CW = ctx.canvas.width, CH = ctx.canvas.height;
+  const f = 1e6, A = (f + near) / (f - near), B = (-2 * f * near) / (f - near);
+  const verts = cs.map(([X, Y, Z]) => {
+    const sxZ = ((cam3d.W / 2) * Z + X * cam3d.zoom) * scale, syZ = ((cam3d.H / 2) * Z + Y * cam3d.zoom) * scale; // px do canvas (× Z)
+    const px = tf.a * sxZ + tf.c * syZ + tf.e * Z, py = tf.b * sxZ + tf.d * syZ + tf.f * Z;
+    return [(2 * px) / CW - Z, (2 * py) / CH - Z, A * Z + B, Z];
+  });
+  if (!src3d) src3d = makeCanvas(2, 2);
+  if (src3d.width !== img.sw || src3d.height !== img.sh) { src3d.width = img.sw; src3d.height = img.sh; }
+  const sc = src3d.getContext('2d');
+  sc.clearRect(0, 0, img.sw, img.sh);
+  sc.drawImage(img.src, 0, 0, img.sw, img.sh, 0, 0, img.sw, img.sh);
+  let tex = gl.upload(src3d);
+  // profundidade de campo da câmera: desfoque pela distância do centro da camada ao plano de foco
+  const zc = (cs[0][2] + cs[1][2] + cs[2][2] + cs[3][2]) / 4;
+  const db = dofBlur(cam3d, zc);
+  if (db > 0.3) tex = gl.blur(tex, db * s);
+  const out = gl.quad3d(tex, verts, [[0, 0], [1, 0], [1, 1], [0, 1]], CW, CH);
+  const c = gl.toCanvas(out);
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = m.opacity;
+  ctx.drawImage(c, 0, 0, out.w, out.h, 0, 0, CW, CH);
+  ctx.restore();
+  gl.releaseAll();
+}
+
+function drawLayerList(ctx, layers, t, scale, fps, onAdjust, compW = project?.width || 1080, compH = project?.height || 1920) {
+  const prevCam = cam3d;
+  cam3d = setupCamera(layers, t, compW, compH);
+  // ordem de desenho: de baixo para cima; camadas 3D seguidas são ordenadas pela distância à câmera (como no AE)
+  const order = [];
+  for (let i = layers.length - 1; i >= 0; i--) order.push(i);
+  if (cam3d) {
+    for (let a = 0; a < order.length;) {
+      if (!layers[order[a]].threeD) { a++; continue; }
+      let b = a;
+      while (b < order.length && layers[order[b]].threeD) b++;
+      const run = order.slice(a, b).map((i) => [i, isActive(layers[i], t) ? depthOf(layers[i], t) : 0]).sort((x, y) => y[1] - x[1]).map((x) => x[0]);
+      order.splice(a, b - a, ...run);
+      a = b;
+    }
+  }
+  try {
+    for (const i of order) drawListItem(ctx, layers, i, t, scale, fps, onAdjust);
+  } finally { cam3d = prevCam; }
+}
+
+function drawListItem(ctx, layers, i, t, scale, fps, onAdjust) {
+  {
     const l = layers[i];
-    if (!l.visible || l.type === 'audio' || l.type === 'null' || t < l.inPoint || t >= l.outPoint) continue;
-    if (l.type === 'adjustment') { if (onAdjust) onAdjust(l); continue; }
-    if (l.trackMatte && layers[i - 1]) { renderWithMatte(ctx, l, layers[i - 1], t, scale, fps); continue; }
+    if (!l.visible || l.type === 'audio' || l.type === 'null' || l.type === 'camera' || t < l.inPoint || t >= l.outPoint) return;
+    if (l.type === 'adjustment') { if (onAdjust) onAdjust(l); return; }
+    if (l.trackMatte && layers[i - 1]) { renderWithMatte(ctx, l, layers[i - 1], t, scale, fps); return; }
     ctx.save();
     renderLayer(ctx, l, t, scale, null, fps);
     ctx.restore();
@@ -597,6 +716,7 @@ function drawLayerList(ctx, layers, t, scale, fps, onAdjust) {
 
 export function renderFrame(ctx, proj, t, scale = 1, opts = {}) {
   project = proj;
+  exprContext.fps = proj.fps || 30; exprContext.W = proj.width; exprContext.H = proj.height;
   frameNo++;
   renderOpts = { final: !!opts.final, hq: !!opts.hq };
   ctx.save();
@@ -637,7 +757,7 @@ export function toLayerSpace(layer, t, x, y) {
 export function hitTest(proj, t, x, y) {
   project = proj;
   for (const l of proj.layers) {
-    if (!l.visible || l.locked || l.type === 'audio' || l.type === 'adjustment' || t < l.inPoint || t >= l.outPoint) continue;
+    if (!l.visible || l.locked || l.type === 'audio' || l.type === 'adjustment' || l.type === 'camera' || t < l.inPoint || t >= l.outPoint) continue;
     const { w, h } = contentSize(l, proj);
     const p = toLayerSpace(l, t, x, y);
     if (Math.abs(p.x) <= w / 2 && Math.abs(p.y) <= h / 2) return l;
@@ -657,3 +777,28 @@ export function layerCorners(layer, t, proj = project) {
 }
 
 export function forgetLayer(id) { contentCanvases.delete(id); }
+
+/**
+ * Pick-whip (Pai) do AE: troca o pai da camada sem ela sair do lugar — posição (inclusive keyframes), rotação e
+ * escala são convertidas para o espaço do novo pai.
+ */
+export function reparent(layer, newParent, proj, t) {
+  project = proj;
+  indexLayers(proj.layers);
+  const oldP = layer.parent ? layerIndex.get(layer.parent) : null;
+  const conv = (tt, p) => {
+    let w = [p[0], p[1], 0];
+    if (oldP) w = apply3(worldMatrix(oldP, tt), w);
+    if (newParent) w = apply3(inv4(worldMatrix(newParent, tt)), w);
+    return [Math.round(w[0] * 100) / 100, Math.round(w[1] * 100) / 100];
+  };
+  const chain = (P, tt) => { let r = 0, s = 1; for (let i = 0; P && i < 12; i++) { const m = layerTransform(P, tt); r += m.rot; s *= m.sx; P = P.parent ? layerIndex.get(P.parent) : null; } return { r, s }; };
+  const tr = layer.transform;
+  if (tr.position.keys?.length) for (const k of tr.position.keys) k.v = conv(k.t, k.v);
+  tr.position.value = conv(t, tr.position.value);
+  const a = chain(oldP, t), b = chain(newParent, t);
+  const dr = a.r - b.r, ks = b.s ? a.s / b.s : 1;
+  if (Math.abs(dr) > 1e-6) { if (tr.rotation.keys?.length) for (const k of tr.rotation.keys) k.v += dr; tr.rotation.value += dr; }
+  if (Math.abs(ks - 1) > 1e-6) { const f = (v) => v.map((x) => Math.round(x * ks * 100) / 100); if (tr.scale.keys?.length) for (const k of tr.scale.keys) k.v = f(k.v); tr.scale.value = f(tr.scale.value); }
+  layer.parent = newParent ? newParent.id : null;
+}

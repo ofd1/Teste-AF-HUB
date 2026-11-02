@@ -8,15 +8,17 @@ import { setBgListener, ensureBgModel, bgStatus } from './bgremove.js';
 import { setGLLostListener, glLost } from './gl.js';
 import { createEffectInstance } from './presets.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
-import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, detectFps, mediaReady } from './media.js';
+import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, detectFps, mediaReady, framesDrawable } from './media.js';
 import { loadAudio, playAudio, stopAudio, detectBeats } from './audio.js';
-import { valueAt, setValue, setKey } from './anim.js';
+import { valueAt, setValue, setKey, anim } from './anim.js';
+import { setThreeD } from './three-d.js';
 import { Timeline } from './timeline.js';
 import { Inspector } from './inspector.js';
 import { Library } from './library.js';
 import { FxBrowser } from './fx-browser.js';
 import { KeyTools } from './keytools.js';
-import { deleteKeys } from './keyframes.js';
+import { deleteKeys, animProps } from './keyframes.js';
+import { sourceTime } from './timing.js';
 import { exportDialog } from './exporter.js';
 import { getEffectDef } from './effects.js';
 import { modal, toast, pickFiles, storage } from './ui.js';
@@ -97,7 +99,7 @@ function frameCacheGet(key) {
   frameCache.delete(key); frameCache.set(key, e); // mais recente
   return e.c;
 }
-let glLosses = 0, lastEdit = 0, hqMs = 0, hqTimer = 0;
+let glLosses = 0, lastEdit = 0, hqMs = 0, hqTimer = 0, holdSince = 0;
 setGLLostListener(() => { glLosses++; dirty = true; frameCacheClear(); if (!setGLLostListener.warned) { setGLLostListener.warned = true; toast('A GPU do aparelho reiniciou; o app recuperou a prévia.', 'warn', 3500); } });
 // primeira vez no app: mostra o passo a passo
 setTimeout(() => { try { if (!localStorage.getItem('motionframe.helpSeen')) { localStorage.setItem('motionframe.helpSeen', '1'); showHelp(); } } catch { /* sem armazenamento */ } }, 900);
@@ -177,9 +179,16 @@ function loop(now) {
     const draftK = !store.playing && qualitySel.value === 'auto' && interacting && hqMs > 140 ? Math.max(0.3, Math.min(0.8, Math.sqrt(90 / hqMs))) : 1;
     const key = `${fi}|${quality}|${store.playing ? 'p' : 'hq'}`;
     const cached = (store.playing && frameCacheGet(`${fi}|${quality}|hq`)) || frameCacheGet(key);
+    const tq = store.playing ? fi / fps : store.time;
+    const hold = !cached && !framesDrawable(viewProject(), tq) && performance.now() - (holdSince ||= performance.now()) < 900;
     if (cached) {
+      holdSince = 0;
       ctx.drawImage(cached, 0, 0, view.width, view.height);
+    } else if (hold) {
+      // vídeo ainda buscando/decodificando: segura o último quadro bom (como o AE) — nunca pisca preto
+      requestAnimationFrame(() => { dirty = true; });
     } else {
+      holdSince = 0;
       const r0 = performance.now(), lost0 = glLosses;
       const bw = Math.max(1, Math.round(view.width * draftK)), bh = Math.max(1, Math.round(view.height * draftK));
       if (backBuf.width !== bw || backBuf.height !== bh) { backBuf.width = bw; backBuf.height = bh; }
@@ -470,6 +479,7 @@ async function addBeatMarkers(layer) {
 const ADD_ITEMS = [
   ['media', '🎞', 'Vídeo / Imagem'], ['audio', '♪', 'Áudio / Música'], ['text', 'T', 'Texto'], ['adjustment', '◐', 'Camada de ajuste'],
   ['rect', '▭', 'Retângulo'], ['ellipse', '◯', 'Elipse'], ['solid', '■', 'Sólido / cor'],
+  ['camera', '🎥', 'Câmera 3D'], ['null', '✛', 'Null (pai/controle)'],
 ];
 const addMenu = document.getElementById('addMenu');
 addMenu.innerHTML = `<div class="add-grid">${ADD_ITEMS.map(([k, i, l]) => `<button data-add="${k}"><span class="ai">${i}</span>${l}</button>`).join('')}</div>
@@ -495,7 +505,7 @@ function renderToolbar() {
     ? [
       ['deselect', '✕', 'Limpar seleção'], ['sep'],
       ['group', '⊞', `Pré-compor (${many})`, true], ['props', '☰', `Ajustar ${many} juntas`, true], ['presets', '★', 'Preset em todas'], ['effects', '✦', 'Efeitos'],
-      ['dup', '⧉', 'Duplicar'], ['del', '🗑', `Excluir ${many}`],
+      ['sequence', '⇶', 'Sequenciar'], ['dup', '⧉', 'Duplicar'], ['del', '🗑', `Excluir ${many}`],
     ]
     : layer
     ? [
@@ -503,7 +513,7 @@ function renderToolbar() {
       ['deselect', '✕', 'Fechar'], ['sep'],
       ...(t === 'group' ? [['open-group', '📂', 'Abrir grupo', true]] : []),
       ['effects', '✦', 'Efeitos', true], ['presets', '★', 'Presets'],
-      ...(t === 'video' ? [['speed', '⏱', 'Velocidade', true], ['topaz', '✨', 'Topaz', true]] : []),
+      ...(t === 'video' ? [['speed', '⏱', 'Velocidade', true], ['topaz', '✨', 'Topaz', true], ['freeze', '❄', 'Congelar quadro'], ['time-reverse', '⇆', 'Inverter (reverse)']] : []),
       ...(t === 'video' || t === 'audio' ? [['sound', '🔊', 'Som']] : []),
       ...(t === 'video' || t === 'image' ? [['bg-remove', '✂︎', 'Tirar fundo']] : []),
       ['calibrate', '🎯', 'Calibrar CC'], ['props', '☰', 'Propriedades'], ['keys', '📈', 'Keyframes / gráfico'],
@@ -532,6 +542,21 @@ function addLayer(type) {
   const l = LAYER_FACTORIES[type](store.project);
   l.inPoint = 0;
   l.outPoint = store.project.duration;
+  if (type === 'camera') {
+    // a câmera só enxerga camadas 3D (como no AE): oferece transformar as camadas visuais em 3D
+    const visual = store.layers.filter((x) => !['audio', 'adjustment', 'camera', 'null'].includes(x.type));
+    const flat = visual.filter((x) => !x.threeD);
+    store.addLayer(l);
+    if (flat.length) {
+      modal('Câmera 3D', `<p>A câmera só afeta <b>camadas 3D</b>. Transformar as ${flat.length} camada(s) desta composição em 3D agora?</p><p class="muted small">Dá para ligar/desligar depois em cada camada (“Camada 3D”). Use Posição Z para dar profundidade (parallax).</p>`,
+        [{ label: 'Agora não', value: false }, { label: 'Tornar 3D', primary: true, value: true }]).then((ok) => {
+        if (!ok) return;
+        for (const x of flat) setThreeD(x, true, anim);
+        store.commit('structure');
+      });
+    }
+    return;
+  }
   store.addLayer(l);
 }
 
@@ -837,6 +862,48 @@ function deleteSelection() {
 }
 
 const frame = () => 1 / store.project.fps;
+// ------------------------------------------------------------------ assistentes do AE
+/** Move a camada no tempo (entrada, saída e keyframes juntos), como arrastar o clipe na timeline. */
+function shiftLayer(l, delta) {
+  l.inPoint = +(l.inPoint + delta).toFixed(5); l.outPoint = +(l.outPoint + delta).toFixed(5);
+  for (const { prop } of animProps(l)) for (const k of prop.keys || []) k.t = +(k.t + delta).toFixed(5);
+}
+/** Keyframe Assistant › Sequence Layers: coloca as camadas selecionadas uma depois da outra (sobreposição opcional). */
+async function sequenceLayers() {
+  const sel = store.selectedLayers();
+  if (sel.length < 2) { toast('Selecione 2 ou mais camadas (Shift/Ctrl+clique ou toque longo).', 'warn'); return; }
+  const v = await modal('Sequenciar camadas', `<p class="muted small">Como o “Sequence Layers” do AE: na ordem da timeline (de cima para baixo), cada camada começa quando a anterior termina.</p>
+    <label class="row"><span>Sobreposição (s)</span><input type="number" data-f="ov" value="0" step="0.05" min="0"></label>`,
+  [{ label: 'Cancelar', value: null }, { label: 'Sequenciar', primary: true, value: (w) => Math.max(0, +w.querySelector('[data-f="ov"]').value || 0) }]);
+  if (v == null) return;
+  const order = store.layers.filter((l) => sel.includes(l));
+  let t = Math.min(...order.map((l) => l.inPoint));
+  for (const l of order) { shiftLayer(l, t - l.inPoint); t = l.outPoint - v; }
+  store.commit('structure');
+  toast(`${order.length} camadas em sequência.`, 'ok');
+}
+/** Layer › Time › Freeze Frame: congela o quadro do playhead (Time Remap com valor fixo). */
+function freezeFrame(l) {
+  if (!l || l.type !== 'video') return;
+  l.effects = l.effects.filter((fx) => fx.type !== 'timeRemap' && fx.type !== 'twixtor');
+  const fx = createEffectInstance('timeRemap');
+  fx.params.time = { value: +sourceTime(l, Math.max(l.inPoint, Math.min(store.time, l.outPoint))).toFixed(4), keys: [] };
+  l.effects.unshift(fx);
+  store.commit('structure');
+  toast('Quadro congelado (Time Remap). Para voltar, remova o efeito Time Remap.', 'ok', 3500);
+}
+/** Layer › Time › Time-Reverse Layer: toca a camada de trás para frente (Time Remap do fim ao começo). */
+function timeReverse(l) {
+  if (!l || l.type !== 'video') return;
+  l.effects = l.effects.filter((fx) => fx.type !== 'timeRemap');
+  const fx = createEffectInstance('timeRemap');
+  const a = +sourceTime(l, l.inPoint).toFixed(4), b = +sourceTime(l, l.outPoint).toFixed(4);
+  fx.params.time = { value: b, keys: [{ t: l.inPoint, v: b, ease: 'linear' }, { t: l.outPoint, v: a, ease: 'linear' }] };
+  l.effects.unshift(fx);
+  store.commit('structure');
+  toast('Camada invertida (reverse).', 'ok');
+}
+
 const commands = {
   menu: showMenu,
   new: () => createProjectFlow(),
@@ -886,6 +953,9 @@ const commands = {
   'toggle-visible': () => { const l = store.layer(); if (l) { l.visible = !l.visible; store.commit(); } },
   del: deleteSelection,
   group: groupLayers,
+  sequence: () => sequenceLayers(),
+  freeze: () => freezeFrame(store.layer()),
+  'time-reverse': () => timeReverse(store.layer()),
   ungroup: ungroupLayer,
   home: () => goHome(),
   'open-group': () => { const l = store.layer(); if (l?.type === 'group' && store.openGroup(l.id)) { updateTitle(); toast(`Dentro de “${l.name}”. Toque em ◀ Sair do grupo para voltar.`, 'info', 3000); } },

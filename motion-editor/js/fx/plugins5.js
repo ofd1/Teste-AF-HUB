@@ -1,6 +1,6 @@
 // Efeitos encontrados nos projetos do usuário que ainda faltavam: Bevel Alpha, Crop Edges, Color Key,
 // Change To Color (AE), CC Ball Action, S_WarpFishEye e S_TimeWarpRGB (Sapphire).
-import { frag, num, ang, sel, col, pos, rgb, rad, hash1 } from './common.js';
+import { frag, num, ang, bool, sel, col, pos, rgb, rad, hash1 } from './common.js';
 
 // Bevel Alpha (AE): chanfro nas bordas do alfa, iluminado por uma luz direcional
 const BEVEL = frag(`
@@ -189,5 +189,11 @@ export default [
     description: 'Cada canal de cor mostra um momento diferente: vermelho atrasado/adiantado, verde no tempo atual, azul em outro tempo — rastro colorido em movimento.',
     params: [num('red', 'Red Shift Frames', -2, -100, 100, 0.1), num('blue', 'Blue Shift Frames', 2, -100, 100, 0.1)],
     channelTime: true, temporal: 'channelTime',
+  },
+  {
+    type: 'wideTime', label: 'CC Wide Time', category: 'Tempo', plugin: 'CC Wide Time',
+    description: 'Mistura vários quadros da própria camada (para trás e para frente no tempo): rastro/eco suave em movimento, como o CC Wide Time.',
+    params: [num('forward', 'Forward Steps', 3, 0, 30, 1), num('backward', 'Backward Steps', 3, 0, 30, 1), num('stepSize', 'Distância entre passos (quadros)', 1, 0.1, 10, 0.1), bool('nativeBlur', 'Native Motion Blur (mais amostras)', false)],
+    temporal: 'wideTime',
   },
 ];

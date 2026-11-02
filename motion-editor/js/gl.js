@@ -358,6 +358,42 @@ export class GLEngine {
     return target;
   }
 
+  /**
+   * Desenha a textura num quadrilátero em perspectiva (camada 3D vista pela câmera). verts = 4 cantos em
+   * coordenadas de recorte (x, y, z, w) na ordem do contorno; uvs = coordenadas de textura de cada canto.
+   */
+  quad3d(src, verts, uvs, w, h) {
+    const gl = this.gl;
+    if (!this.q3) {
+      const vs = 'attribute vec4 a_clip; attribute vec2 a_uv; varying vec2 v_uv; void main() { v_uv = a_uv; gl_Position = a_clip; }';
+      const fs = 'precision highp float; uniform sampler2D u_tex; varying vec2 v_uv; void main() { gl_FragColor = texture2D(u_tex, v_uv); }';
+      const sh = (type, src0) => { const x = gl.createShader(type); gl.shaderSource(x, src0); gl.compileShader(x); return x; };
+      const prog = gl.createProgram();
+      gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
+      gl.bindAttribLocation(prog, 0, 'a_clip'); gl.bindAttribLocation(prog, 1, 'a_uv');
+      gl.linkProgram(prog);
+      this.q3 = { prog, buf: gl.createBuffer(), loc: gl.getUniformLocation(prog, 'u_tex') };
+    }
+    const order = [0, 1, 2, 0, 2, 3];
+    const data = new Float32Array(order.flatMap((i) => [...verts[i], ...uvs[i]]));
+    const target = this.acquire(w, h);
+    gl.useProgram(this.q3.prog);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+    gl.viewport(0, 0, target.w, target.h);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, src.tex); gl.uniform1i(this.q3.loc, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.q3.buf);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 24, 16);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.disableVertexAttribArray(1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quad);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    return target;
+  }
+
   copy(src, w, h, alpha = 1) { return this.pass(COPY, { u_tex: src, u_alpha: alpha }, w, h); }
 
   /** Desfoque gaussiano separável (sigma em px). dims: 1 ambos, 2 horizontal, 3 vertical. */

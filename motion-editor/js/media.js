@@ -425,3 +425,23 @@ export function mediaReady(project, t, playing = false) {
   }
   return true;
 }
+
+/**
+ * Dá para desenhar o quadro agora sem buracos? (todos os vídeos ativos com quadro decodificado e sem busca em
+ * andamento, imagens carregadas). Se não der, a prévia segura o último quadro bom em vez de piscar preto.
+ */
+export function framesDrawable(project, t) {
+  for (const l of flatLayers(project.layers)) {
+    if (!l.visible || t < l.inPoint || t >= l.outPoint || !l.props?.src) continue;
+    if (l.type === 'image') { const im = images.get(l.props.src); if (im && !im.complete) return false; }
+    else if (l.type === 'video') {
+      if (cacheReady(l)) continue;
+      const e = videos.get(l.id);
+      if (!e) return false;
+      if ((e.a.readyState < 2 || e.a.seeking) && !e.last) return false;
+      if (e.a.seeking || e.a.readyState < 2) return false;
+      if (e.frame?.b != null && e.b && (e.b.readyState < 2 || e.b.seeking)) return false;
+    }
+  }
+  return true;
+}

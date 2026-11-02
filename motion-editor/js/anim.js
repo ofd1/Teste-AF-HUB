@@ -1,3 +1,4 @@
+import { evalExpr } from './expr.js';
 // Propriedades animáveis, keyframes e easing.
 // AnimProp = { value, keys: [{ t, v, ease }] }  — ease = interpolação de saída do keyframe.
 
@@ -99,7 +100,17 @@ function lerp(a, b, f) {
   return f < 1 ? a : b; // booleanos, strings, selects
 }
 
+// contexto das expressões (fps e tamanho da composição) — o renderizador atualiza a cada quadro
+export const exprContext = { fps: 30, W: 1080, H: 1920 };
+
+/** Valor no tempo t; com expressão (p.expr), o resultado da expressão (wiggle, loopOut…). */
 export function valueAt(p, t) {
+  if (p && typeof p === 'object' && p.expr && p.exprOn !== false) return evalExpr(p, t, (tt) => rawValueAt(p, tt), exprContext);
+  return rawValueAt(p, t);
+}
+
+/** Valor só dos keyframes (o "value" de uma expressão). */
+export function rawValueAt(p, t) {
   if (!p || typeof p !== 'object' || !('value' in p)) return p;
   const keys = p.keys;
   if (!keys || !keys.length) return p.value;
