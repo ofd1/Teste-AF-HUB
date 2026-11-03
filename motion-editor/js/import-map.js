@@ -467,6 +467,8 @@ export const IMPORT_RULES = [
     post: (p, raw) => { const a = raw('amplitude') ?? 1, l = raw('rand luma amp') ?? 0.5, c = raw('rand color amp') ?? 0; p.amount = a * l * 100; p.colorAmount = l > 0 ? Math.min(100, (c / l) * 100) : 0; } },
   { vendor: 'BCC', plugin: 'BCC Directional Blur', to: 'dirBlur', test: /bcc.*(directional|motion).*blur/i,
     map: { length: { i: 2, n: ['blur amount'], conv: (v) => v }, angle: { i: 3, n: ['angle'] } } },
+  { vendor: 'BCC', plugin: 'BCC Brightness-Contrast', to: 'brightnessContrast', test: /bcc.*bright(ness)?[- ]?contrast/i,
+    map: { brightness: { n: ['brightness'] }, contrast: { n: ['contrast'] } } },
   { vendor: 'BCC', plugin: 'BCC Unsharp Mask', to: 'sharpen', test: /bcc.*(unsharp|sharpen)/i,
     // BCC Unsharp Mask: Amount em múltiplos (1 = 100%); Radius em px (desfoque grande = contraste local)
     map: { radius: { n: ['radius'], conv: (v) => v * 0.5 }, amount: { n: ['amount'], conv: (v) => (v <= 20 ? v * 15 : v) }, threshold: { n: ['threshold'] } } },
@@ -527,7 +529,12 @@ export const IMPORT_RULES = [
   { vendor: 'Sapphire', plugin: 'S_Feedback', to: 'feedback', test: /s_feedback/i, map: { zoom: { n: ['zoom', 'scale'] }, rotate: { n: ['rotate'] }, count: { n: ['iterations', 'repeats'] } } },
   { vendor: 'Sapphire', plugin: 'S_Glow', to: 'deepGlow', test: /s_glow/i,
     // S_Glow (sapphire_ae.dll): Brightness 2 = padrão, Width 0,4 (¼ da largura do quadro), Threshold 0,5, Combine Screen
-    map: { radius: { n: ['width'], conv: (v) => (v < 5 ? v * 500 : v) }, exposure: { n: ['brightness'], conv: (v) => v * 0.6 }, threshold: { n: ['threshold'], conv: pct }, tint: { n: ['color'] } }, set: { useTint: false } },
+    map: { radius: { n: ['width'], conv: (v) => (v < 5 ? v * 500 : v) }, exposure: { n: ['brightness'], conv: (v) => v * 0.6 }, threshold: { n: ['threshold'], conv: pct }, tint: { n: ['color'] } }, set: { useTint: false },
+    // Color do S_Glow MULTIPLICA o brilho do glow: cor escura = glow fraco (e tingido); branca = glow normal
+    post: (p) => {
+      const c = p.tint || [1, 1, 1, 1], l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+      if (l < 0.97) { p.exposure *= Math.max(0.05, l); p.useTint = Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]) > 0.04; p.tint = [c[0] / Math.max(l, 0.05), c[1] / Math.max(l, 0.05), c[2] / Math.max(l, 0.05), 1].map((x, i) => (i < 3 ? Math.min(1, x * 0.6) : 1)); }
+    } },
   { vendor: 'Sapphire', plugin: 'S_ZoomBlur', to: 'radialBlur', test: /s_zoomblur|s_blurzoom|s_radialblur/i, set: { mode: 1 },
     map: { amount: { n: ['zoom amount', 'blur amount', 'amount', 'length'], conv: (v) => (v <= 2 ? v * 100 : v) }, center: { n: ['center', 'center xy'] } } },
   { vendor: 'Sapphire', plugin: 'S_Blur', to: 'blur', test: /s_blur/i, map: { radius: { n: ['width', 'blur amount'], conv: (v) => (v < 5 ? v * 100 : v) } } },

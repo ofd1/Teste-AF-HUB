@@ -62,6 +62,11 @@ export const BUILTIN_PRESETS = [
   { name: 'Blur in', category: 'Transições', transform: { opacity: { mode: 'abs', keys: [k(0, 0, 'easeOut'), k(0.4, 100)] } }, effects: [{ type: 'blur', params: { radius: { keys: [k(0, 80, 'easeOut'), k(0.5, 0)] } } }] },
   { name: 'Wipe linear', category: 'Transições', effects: [{ type: 'linearWipe', params: { completion: { keys: [kv(0, 100), kv(0.5, 0)] }, feather: 120 } }] },
   { name: 'Dissolver em blocos', category: 'Transições', effects: [{ type: 'blockDissolve', params: { completion: { keys: [k(0, 100, 'linear'), k(0.5, 0)] }, block: 40 } }] },
+  // ---- Zooms com motion blur (estilo S_BlurMoCurves dos packs de edit): Z Dist < 1 aproxima, > 1 afasta
+  { name: 'Zoom out → in (motion blur)', category: 'Transições', anchorStart: true, duration: 2, effects: [{ type: 'blurMoCurves', params: { zDist: { keys: [{ t: 0, v: 0.62, ease: 'bezier', outInf: 0.07, inInf: 0.07, bzv: [1.75, 1.85] }, { t: 2, v: 0.62, ease: 'bezier', outInf: 0.17, inInf: 0.25 }] }, shutter: 1, samples: 24, wrap: 3, wrapY: 3 } }] },
+  { name: 'Zoom in → out (motion blur)', category: 'Transições', anchorStart: true, duration: 2.2, effects: [{ type: 'blurMoCurves', params: { zDist: { keys: [{ t: 0, v: 1, ease: 'bezier', outInf: 0.05, inInf: 0.33, bz: [1.6, 1] }, { t: 1.1, v: 0.7, ease: 'bezier', outInf: 0.68, inInf: 0.7 }, { t: 2.2, v: 1.04, ease: 'bezier', outInf: 0.17, inInf: 0.07, bz: [0, 0.5] }] }, shutter: 1, samples: 24, wrap: 3, wrapY: 3 } }] },
+  { name: 'Reverse com zoom out (rápido)', category: 'Velocity', anchorStart: true, duration: 2.8, effects: [{ type: 'blurMoCurves', params: { zDist: { keys: [{ t: 0, v: 0.1, ease: 'bezier', outInf: 0.02, inInf: 0.33, bz: [1.6, 1] }, { t: 2.2, v: 1, ease: 'bezier', outInf: 1, inInf: 0.89 }, { t: 2.8, v: 0.1, ease: 'bezier', outInf: 0.17, inInf: 0.07, bz: [0, -0.6] }] }, shutter: 1.5, samples: 24, wrap: 3, wrapY: 3 } }] },
+  { name: 'Velocity → reverse (rápido-lento-volta)', category: 'Velocity', anchorStart: true, duration: 2.9, effects: [{ type: 'twixtor', params: { speed: { keys: [{ t: 0, v: 500, ease: 'bezier', outInf: 0.02, inInf: 0.17 }, { t: 1.45, v: 20, ease: 'bezier', outInf: 0.8, inInf: 0.81 }, { t: 2.9, v: -400, ease: 'bezier', outInf: 0.17, inInf: 0.02 }] }, motionBlur: 80 } }] },
   // ---- Velocity
   { name: 'Velocity rampa (rápido-lento-rápido)', category: 'Velocity', effects: [{ type: 'twixtor', params: { speed: { keys: [kv(0, 250), kv(0.6, 15), kv(1.4, 15), kv(2, 250)] } } }] },
   { name: 'Slow motion 30%', category: 'Velocity', effects: [{ type: 'twixtor', params: { speed: 30 } }] },
@@ -121,6 +126,15 @@ const TRANSFORM_MAP = {
   'ADBE Opacity': { prop: 'opacity', mode: 'abs' },
 };
 
+/** Converte as alças em valor (bzvRaw, unidade do AE) para a unidade do parâmetro do MotionFrame. */
+export function withBzv(key, conv) {
+  if (!key.bzvRaw) return key;
+  const h = key.bzvRaw.map((x) => conv(x));
+  delete key.bzvRaw;
+  if (h.every((x) => typeof x === 'number' && Number.isFinite(x)) && typeof key.v === 'number') key.bzv = h;
+  return key;
+}
+
 export function ffxEase(kf, next) {
   if (kf.interp === 3) return { ease: 'hold' };
   if (kf.interp === 2) {
@@ -133,6 +147,10 @@ export function ffxEase(kf, next) {
         const y1 = (kf.outSpeed * (kf.outInf ?? 0.333) * dt) / dv, y2 = 1 - (next.inSpeed * (next.inInf ?? 0.333) * dt) / dv;
         const lim = (y) => Math.max(-8, Math.min(9, y));
         if (Math.abs(y1) > 1e-4 || Math.abs(y2 - 1) > 1e-4) e.bz = [lim(y1), lim(y2)];
+      } else if (dt > 0 && (Math.abs(kf.outSpeed) > 1e-6 || Math.abs(next.inSpeed) > 1e-6)) {
+        // dois keyframes com o MESMO valor mas com velocidade: a curva sai e volta (ex.: "zoom out then in" do Omar FX).
+        // Guarda a altura das alças em valor (na unidade do AE; quem converte o parâmetro converte as alças também)
+        e.bzvRaw = [kf.v[0] + kf.outSpeed * (kf.outInf ?? 0.333) * dt, next.v[0] - next.inSpeed * (next.inInf ?? 0.333) * dt];
       }
     }
     return e;
@@ -166,7 +184,7 @@ function convertValue(raw, kind, conv) {
 
 function convertProp(src, kind, conv) {
   if (src.keyframes?.length) {
-    const keys = src.keyframes.map((kf, i, a) => ({ t: kf.t, v: convertValue(kf.v, kind, conv), ...ffxEase(kf, a[i + 1]) })).filter((x) => x.v !== undefined);
+    const keys = src.keyframes.map((kf, i, a) => withBzv({ t: kf.t, v: convertValue(kf.v, kind, conv), ...ffxEase(kf, a[i + 1]) }, (h) => convertValue([h], kind, conv))).filter((x) => x.v !== undefined);
     return keys.length ? { keys } : undefined;
   }
   return convertValue(src.value, kind, conv);

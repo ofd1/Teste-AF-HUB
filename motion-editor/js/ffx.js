@@ -135,9 +135,19 @@ function walk(children, ctx, group = null) {
         break;
       }
       case 'tdbs': {
-        const prop = parseProperty(c, pending || '?', null, ctx);
+        // preset de UMA propriedade de um efeito (ex.: só o "Speed %" do Twixtor, só o "Z Dist" do S_BlurMoCurves):
+        // o caminho (tdsp) diz qual efeito e qual parâmetro → vira o efeito com essa propriedade animada
+        const tp = ctx.targetPath || [];
+        const paramMn = !pending && tp.length && /-\d{4}$/.test(tp[tp.length - 1]) ? tp[tp.length - 1] : null;
+        const fxMn = paramMn ? tp[tp.length - 2] : null;
+        const prop = parseProperty(c, pending || paramMn || '?', null, ctx);
         prop.groupPath = ctx.groupPath.slice();
-        ctx.result.properties.push(prop);
+        if (paramMn && fxMn && !STRUCTURAL.has(fxMn)) {
+          prop.index = paramIndex(paramMn);
+          let fx = ctx.result.effects.find((e) => e.matchName === fxMn && e.fromProperty);
+          if (!fx) { fx = { matchName: fxMn, name: fxMn, params: [], fromProperty: true }; ctx.result.effects.push(fx); }
+          fx.params.push(prop);
+        } else ctx.result.properties.push(prop);
         break;
       }
       default:

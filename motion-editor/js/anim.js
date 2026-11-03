@@ -92,6 +92,16 @@ function easeFn(key, next) {
   return curves[e] || curves.linear;
 }
 
+/** Bézier do AE no próprio valor (alças com altura em valor): permite curvas entre keyframes iguais. */
+function bezierValue(a, b, x) {
+  const o = clamp01(a.outInf ?? 0.333), i = clamp01(b.inInf ?? 0.333);
+  const bx = (s) => 3 * (1 - s) * (1 - s) * s * o + 3 * (1 - s) * s * s * (1 - i) + s * s * s;
+  let lo = 0, hi = 1, s = x;
+  for (let k = 0; k < 30; k++) { s = (lo + hi) / 2; if (bx(s) < x) lo = s; else hi = s; }
+  const [h1, h2] = a.bzv, u = 1 - s;
+  return u * u * u * a.v + 3 * u * u * s * h1 + 3 * u * s * s * h2 + s * s * s * b.v;
+}
+
 function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
 function lerp(a, b, f) {
@@ -122,6 +132,7 @@ export function rawValueAt(p, t) {
     if (t >= a.t && t < b.t) {
       if (a.ease === 'hold') return a.v;
       const span = b.t - a.t || 1e-9;
+      if (a.ease === 'bezier' && Array.isArray(a.bzv) && typeof a.v === 'number') return bezierValue(a, b, (t - a.t) / span);
       const f = easeFn(a, b)((t - a.t) / span);
       return lerp(a.v, b.v, f);
     }

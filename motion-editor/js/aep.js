@@ -1,4 +1,5 @@
 import { exprWorks } from './expr.js';
+import { withBzv } from './presets.js';
 // Leitor de projetos do After Effects (.aep): pastas, composições, camadas (tempo, tipo, transformação com
 // keyframes, efeitos), sólidos e arquivos de mídia (caminho original). Formato RIFX ("Egg!").
 // Estrutura conferida com projetos reais e com a documentação dos parsers abertos (aep_parser / aftereffects-aep-parser).
@@ -244,7 +245,7 @@ function toAnim(p, fix, fallback, t0) {
   if (!p) return anim(fallback);
   let a;
   if (p.keyframes?.length) {
-    const keys = p.keyframes.map((kf, i, arr) => ({ t: +(t0 + kf.t).toFixed(4), v: fix(kf.v), ...ffxEase(kf, arr[i + 1]) }));
+    const keys = p.keyframes.map((kf, i, arr) => withBzv({ t: +(t0 + kf.t).toFixed(4), v: fix(kf.v), ...ffxEase(kf, arr[i + 1]) }, (h) => { const r = fix([h]); return Array.isArray(r) ? NaN : r; }));
     a = anim(keys[0].v, keys);
   } else a = anim(p.value?.length ? fix(p.value) : fallback);
   // expressões comuns (wiggle, loopOut, time…) passam a funcionar; as que dependem de outras camadas ficam de fora
