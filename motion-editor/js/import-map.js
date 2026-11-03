@@ -183,7 +183,9 @@ export function looksFromTools(tools, strength = 100) {
         break;
       // Chromatic Aberration: [Red/Cyan, Green/Magenta, Blue/Yellow]
       case 'chab': p.chroma += (Math.abs(v[0] || 0) + Math.abs(v[1] || 0) * 0.7 + Math.abs(v[2] || 0) * 0.7) * 4; break;
-      case 'husa': p.hue += v[0] || 0; p.saturation *= (v[1] ?? 100) / 100; break;
+      // Hue/Saturation (Looks): [Hue, Saturation %, pesos de luma]. Trabalha em luz linear: tirar saturação ali apaga
+      // menos a cor visível do que no espaço da tela, por isso a redução é suavizada
+      case 'husa': { const f = (v[1] ?? 100) / 100; p.hue += v[0] || 0; p.saturation *= f < 1 ? 1 - (1 - f) * 0.7 : f; break; }
       case 'mjo2':
         // Mojo II (ordem real, tirada do Looks3.aex): [Mojo, Tint, Punch, Bleach, Fade, Blue Squeeze, Skin Squeeze,
         // Exposure, Cool/Warm, Green/Magenta, Skin Yellow/Pink, Strength]
@@ -197,7 +199,7 @@ export function looksFromTools(tools, strength = 100) {
           if (v[5] > 0) p.mojoCool = clampN(50 + v[5], 0, 100);
           if (v[6] > 0) p.mojoSkin = clampN(50 + v[6], 0, 100);
           p.exposure += (v[7] || 0) * k;
-          p.temperature += (v[8] || 0) * 0.8 * k;
+          p.temperature -= (v[8] || 0) * 0.35 * k; // Cool/Warm do Mojo II: negativo = quente (como o Warm/Cool do Looks)
           p.tint -= (v[9] || 0) * 0.5 * k; // Green/Magenta positivo deixa esverdeado no AE (ZAZ Dark: cinza-esverdeado)
           p.mojoTint = (v[1] || 0) * k;
         }
@@ -298,7 +300,9 @@ export function looksFromTools(tools, strength = 100) {
       case 'duto': ['R', 'G', 'B'].forEach((c, i) => { p[`gain${c}`] *= 1 + ((v[i] ?? 1) - 1) * ((v[3] || 0) / 100) * 0.6; p[`lift${c}`] += ((v[4 + i] ?? 1) - 1) * ((v[7] || 0) / 100) * 0.25; }); break;
       // Two Strip (Technicolor de 2 tiras): laranja/ciano forte, pele quente — não dessatura
       // Two Strip (Technicolor de 2 tiras): laranja/ciano forte, pele quente (mantido: mais perto dos prints de referência)
-      case '2stp': p.mojo = Math.max(p.mojo, (v[0] || 0) * 0.6); p.mojoSkin = Math.max(p.mojoSkin, 70); p.saturation *= 1 + (v[0] || 0) / 500; p.exposure += v[1] || 0; break;
+      // Two Strip (Technicolor de 2 tiras): [Strength %, Exposure]. Só existem os registros vermelho e verde: o azul vira
+      // a média de verde+azul → pele rosada/natural, azuis e verdes viram ciano (não é um Mojo laranja)
+      case '2stp': p.twoStrip = clampN((p.twoStrip || 0) + (v[0] || 0), 0, 100); p.exposure += v[1] || 0; break;
       // S Curve: [Contrast (1 = neutro), Midpoint, Brightness (0,5 = neutro), Black Point, White Point, Log]
       case 'logc':
         p.contrast += clampN(((v[0] ?? 1) - 1) * 25, -60, 80);
@@ -545,7 +549,7 @@ export const IMPORT_RULES = [
 
   // BCC (Boris Continuum)
   { vendor: 'BCC', plugin: 'BCC Glow / Film Glow', to: 'deepGlow', test: /bcc.*glow/i, map: { radius: { n: ['glow radius', 'radius'] }, exposure: { n: ['glow intensity', 'intensity'], conv: (v) => (v > 10 ? v / 40 : v) }, threshold: { n: ['glow threshold', 'threshold'] }, tint: { n: ['glow color'] } },
-    post: (p, raw) => { p.useTint = (raw('glow desaturation') ?? 100) < 60; } }, // BCC Film Glow: Intensity 15 ≈ brilho suave; Desaturation 100 = glow branco
+    post: (p, raw) => { p.useTint = (raw('glow desaturation') ?? 100) < 60; p.knee = 70; } }, // BCC Film Glow (limiar bem suave, sem recorte): Intensity 15 ≈ brilho suave; Desaturation 100 = glow branco
   { vendor: 'BCC', plugin: 'BCC Lens Flare', to: 'lensFlare', test: /bcc.*flare/i },
   { vendor: 'BCC', plugin: 'BCC Light Leaks', to: 'lightLeak', test: /bcc.*leak/i },
   { vendor: 'BCC', plugin: 'BCC Prism', to: 'prism', test: /bcc.*prism/i, map: { amount: { n: ['prism amount', 'amount'] } } },

@@ -26,11 +26,13 @@ void main() {
 }`);
 
 const THRESH = frag(`
-uniform float u_thr; uniform vec3 u_color; uniform float u_useColor;
+uniform float u_thr; uniform vec3 u_color; uniform float u_useColor; uniform float u_knee;
 void main() {
   vec4 c = unpre(texture2D(u_tex, v_uv));
   float l = luma(c.rgb);
-  float k = smoothstep(u_thr - 0.05, u_thr + 0.1, l);
+  // joelho do limiar: largo = brilho suave sem recorte (BCC Film Glow); estreito = só os realces
+  float kn = u_knee > 0.0 ? u_knee : 0.15;
+  float k = smoothstep(u_thr - kn / 3.0, u_thr + kn * 2.0 / 3.0, l);
   vec3 cc = mix(c.rgb, u_color * max(l, 0.35) * 1.4, u_useColor);
   gl_FragColor = pre(vec4(cc, c.a * k));
 }`);
@@ -191,11 +193,11 @@ export default [
   {
     type: 'deepGlow', label: 'Deep Glow', category: 'Luz e brilho', plugin: 'Deep Glow',
     description: 'Glow físico em várias escalas com decaimento exponencial (sem o “anel” do glow comum).',
-    params: [num('radius', 'Raio', 120, 0, 1500), num('exposure', 'Exposição', 1, 0, 10, 0.05), num('threshold', 'Limiar %', 0, 0, 100), col('tint', 'Cor do tint', [1, 0.6, 0.2, 1]), bool('useTint', 'Usar tint', false), num('aspect', 'Aspecto (H/V)', 1, 0.1, 10, 0.05)],
+    params: [num('radius', 'Raio', 120, 0, 1500), num('exposure', 'Exposição', 1, 0, 10, 0.05), num('threshold', 'Limiar %', 0, 0, 100), col('tint', 'Cor do tint', [1, 0.6, 0.2, 1]), bool('useTint', 'Usar tint', false), num('aspect', 'Aspecto (H/V)', 1, 0.1, 10, 0.05), num('knee', 'Suavidade do limiar %', 15, 1, 100)],
     pad: (p) => p.radius * 1.2,
     render: (src, p, env) => {
       const { gl } = env;
-      const th = gl.pass(THRESH, { u_tex: src, u_thr: p.threshold / 100, u_color: rgb(p.tint), u_useColor: p.useTint ? 0.85 : 0 });
+      const th = gl.pass(THRESH, { u_tex: src, u_thr: p.threshold / 100, u_color: rgb(p.tint), u_useColor: p.useTint ? 0.85 : 0, u_knee: (p.knee ?? 15) / 100 });
       const r = p.radius * 0.5 * env.scale;
       let acc;
       if (Math.abs(p.aspect - 1) < 0.01) acc = glowLayers(gl, th, r, [0.02, 0.06, 0.15, 0.35, 0.7, 1]);

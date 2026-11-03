@@ -94,7 +94,7 @@ const LGG = colorFrag('uniform vec3 u_lift, u_gamma, u_gain; uniform float u_sat
 const LOOKS = frag(`
 uniform float u_svl[7], u_svs[7]; uniform float u_svon;
 float curve7(float x, float c[7]) { x = clamp(x, 0.0, 1.0) * 6.0; float r = c[6]; for (int i = 0; i < 6; i++) { if (x >= float(i) && x < float(i + 1)) r = mix(c[i], c[i + 1], x - float(i)); } return r; }
-uniform float u_mtint; uniform float u_exp, u_sat, u_hue, u_con, u_fade, u_mojo, u_cool, u_skin, u_punch, u_bleach, u_vig, u_vsize, u_strength, u_temp, u_tint, u_fdens;
+uniform float u_mtint; uniform float u_2s; uniform float u_exp, u_sat, u_hue, u_con, u_fade, u_mojo, u_cool, u_skin, u_punch, u_bleach, u_vig, u_vsize, u_strength, u_temp, u_tint, u_fdens;
 uniform vec3 u_filter, u_lift, u_gamma, u_gain, u_mixr, u_mixg, u_mixb; uniform float u_mixamt;
 uniform vec3 u_hsl[8];
 uniform vec2 u_curve[4]; uniform float u_ncurve;
@@ -172,6 +172,8 @@ void main() {
   hv.y = clamp(hv.y * (1.0 + adj.y / 100.0), 0.0, 1.0);
   hv.z = clamp(hv.z * (1.0 + adj.z / 100.0 * 0.6), 0.0, 1.0);
   r = hsv2rgb(hv);
+  // Two Strip (Technicolor de 2 tiras): verde e azul viram um registro só
+  if (u_2s > 0.001) r = mix(r, vec3(r.r, (r.g + r.b) * 0.5, (r.g + r.b) * 0.5), u_2s);
   // Mojo II: sombras/meios-tons para teal, pele para laranja
   float l = luma(r);
   float skin = smoothstep(22.0, 6.0, abs(mod(hv.x * 360.0 - 28.0 + 180.0, 360.0) - 180.0)) * smoothstep(0.1, 0.35, hv.y);
@@ -189,11 +191,11 @@ void main() {
     float k = u_mojo * (warmSide > 0.5 ? 0.45 * u_skin : 0.6 * u_cool) * smoothstep(0.04, 0.2, mh.y);
     mh.x = fract((hd + dh * clamp(k, 0.0, 0.9)) / 360.0);
     // pele mais rica; o fundo frio vira teal mantendo a cor (antes perdia até 36% e ficava cinza)
-    mh.y = clamp(mh.y * (warmSide > 0.5 ? 1.0 + 0.15 * u_mojo : 1.0 + 0.05 * u_mojo), 0.0, 1.0);
+    mh.y = clamp(mh.y * (warmSide > 0.5 ? 1.0 + 0.35 * u_mojo * min(u_skin, 1.6) : 1.0 + 0.05 * u_mojo), 0.0, 1.0);
     r = hsv2rgb(mh);
   }
   vec3 cool = r + vec3(-0.055, 0.008, 0.06) * (1.0 - hiW) * (1.0 - skin * 0.8);
-  vec3 warmH = r * mix(vec3(1.0), vec3(1.07, 1.01, 0.88), hiW);
+  vec3 warmH = r * mix(vec3(1.0), vec3(1.10, 1.02, 0.84), max(hiW, skin * 0.8));
   r = mix(r, cool, u_mojo * u_cool);
   r = mix(r, warmH, u_mojo * (0.6 + 0.4 * skin) * u_skin);
   // Mojo (manual da Maxon): "aumenta o contraste, esquenta realces e esfria sombras preservando a pele"
@@ -204,7 +206,9 @@ void main() {
   r = max(r, 0.0);
   // Bleach It (manual): menos saturação quanto maior (negativo = mais saturação), com leve contraste prateado
   float bl = luma(r);
-  r = mix(vec3(bl), r, 1.0 - 0.6 * u_bleach);
+  // no Mojo II a pele fica protegida do Bleach: o fundo perde a cor, o rosto continua com tom de pele
+  float skinB = smoothstep(26.0, 8.0, abs(mod(rgb2hsv(clamp(r, 0.0, 1.0)).x * 360.0 - 28.0 + 180.0, 360.0) - 180.0)) * smoothstep(0.08, 0.3, rgb2hsv(clamp(r, 0.0, 1.0)).y);
+  r = mix(vec3(bl), r, 1.0 - 0.6 * u_bleach * (u_bleach > 0.0 ? 1.0 - 0.6 * max(skin, skinB) : 1.0));
   r = mix(r, r * r * (3.0 - 2.0 * r), max(0.0, u_bleach) * 0.12);
   // contraste, saturação, curva, haze/fade
   // Contraste do Looks: curva de filme (S) em torno do pivô, não uma reta que estoura pretos/brancos
@@ -321,7 +325,7 @@ const EFFECTS = [
       num('temperature', 'Temperatura', 0, -100, 100), num('tint', 'Tint', 0, -100, 100),
       num('contrast', 'Contraste', 0, -100, 100), num('saturation', 'Saturação %', 100, 0, 300),
       num('mojo', 'Mojo (teal & orange) %', 0, 0, 100), num('mojoCool', 'Mojo – esfriar %', 50, 0, 100), num('mojoSkin', 'Mojo – pele quente %', 50, 0, 100),
-      num('punch', 'Punch %', 0, 0, 100), num('bleach', 'Bleach %', 0, -100, 100), adv(num('mojoTint', 'Mojo Tint', 0, -100, 100)), { key: 'satLum', label: 'Colorista – Sat × Lum', kind: 'hidden', default: [0, 0, 0, 0, 0, 0, 0] }, { key: 'satSat', label: 'Colorista – Sat × Sat', kind: 'hidden', default: [0, 0, 0, 0, 0, 0, 0] }, num('fade', 'Haze / fade %', 0, 0, 100),
+      num('punch', 'Punch %', 0, 0, 100), adv(num('twoStrip', 'Two Strip (Technicolor) %', 0, 0, 100)), num('bleach', 'Bleach %', 0, -100, 100), adv(num('mojoTint', 'Mojo Tint', 0, -100, 100)), { key: 'satLum', label: 'Colorista – Sat × Lum', kind: 'hidden', default: [0, 0, 0, 0, 0, 0, 0] }, { key: 'satSat', label: 'Colorista – Sat × Sat', kind: 'hidden', default: [0, 0, 0, 0, 0, 0, 0] }, num('fade', 'Haze / fade %', 0, 0, 100),
       num('vignette', 'Vinheta %', 0, 0, 100), num('vignetteSize', 'Tamanho da vinheta %', 50, 0, 100),
       num('diffusion', 'Difusão (glow) %', 0, 0, 300), num('diffusionRadius', 'Raio da difusão', 60, 1, 600), num('diffusionThreshold', 'Limiar da difusão %', 60, 0, 100),
       num('chroma', 'Aberração cromática', 0, 0, 50, 0.1),
@@ -356,7 +360,7 @@ const EFFECTS = [
       let out = gl.pass(LOOKS, {
         u_tex: src, u_exp: p.exposure, u_sat: p.saturation / 100, u_hue: p.hue / 360, u_con: p.contrast / 100, u_fade: p.fade / 100,
         u_svl: { f1: (p.satLum && p.satLum.length === 7 ? p.satLum : [0, 0, 0, 0, 0, 0, 0]) }, u_svs: { f1: (p.satSat && p.satSat.length === 7 ? p.satSat : [0, 0, 0, 0, 0, 0, 0]) }, u_svon: [...(p.satLum || []), ...(p.satSat || [])].some((x) => Math.abs(x) > 1e-4) ? 1 : 0,
-        u_mtint: Math.max(-1, Math.min(1, (p.mojoTint || 0) / 100)), u_mojo: p.mojo / 100, u_cool: (p.mojoCool ?? 50) / 50, u_skin: (p.mojoSkin ?? 50) / 50, u_punch: (p.punch || 0) / 100, u_bleach: (p.bleach || 0) / 100,
+        u_mtint: Math.max(-1, Math.min(1, (p.mojoTint || 0) / 100)), u_2s: Math.max(0, Math.min(1, (p.twoStrip || 0) / 100)), u_mojo: p.mojo / 100, u_cool: (p.mojoCool ?? 50) / 50, u_skin: (p.mojoSkin ?? 50) / 50, u_punch: (p.punch || 0) / 100, u_bleach: (p.bleach || 0) / 100,
         u_temp: (p.temperature || 0) / 100, u_tint: (p.tint || 0) / 100,
         u_vig: p.vignette / 100, u_vsize: p.vignetteSize / 100, u_strength: s,
         u_filter: rgb(p.filter), u_fdens: p.filterDensity / 100,

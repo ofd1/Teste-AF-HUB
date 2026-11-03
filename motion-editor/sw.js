@@ -1,5 +1,5 @@
 // Service worker: funciona offline (PWA) com cache "stale-while-revalidate".
-const CACHE = 'motionframe-v50';
+const CACHE = 'motionframe-v51';
 const SHELL = ['./', './index.html', './css/style.css', './js/main.js', './manifest.webmanifest', './icons/icon.svg'];
 
 self.addEventListener('install', (e) => {

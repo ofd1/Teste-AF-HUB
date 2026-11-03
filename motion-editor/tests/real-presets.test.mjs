@@ -80,7 +80,7 @@ test('CC: Looks decodificado e Gradiente de 4 cores', () => {
   assert.equal(g.opacity, 5);
 
   const dark = load('CC (Color Correction)/ZAZ Reverse Dark CC.ffx').preset.effects[0].params;
-  assert.equal(dark.saturation, 65);
+  assert.equal(dark.saturation, 75.5); // Hue/Sat 65% do Looks (luz linear) ≈ 75,5% na tela
   assert.equal(dark.mojo, 100); // Mojo II = 100 no Looks original
   assert.equal(dark.bleach, 50); // Bleach It 50 (manual: menos saturação)
 
