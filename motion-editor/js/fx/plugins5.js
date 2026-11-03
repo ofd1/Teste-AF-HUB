@@ -133,6 +133,23 @@ function buildBalls(nx, ny, seed) {
   return { data: out, attribs: [['a_cell', 2], ['a_corner', 2], ['a_rnd', 3]] };
 }
 
+// S_Sharpen: soma das faixas de detalhe (cada uma com seu ganho) + unsharp de raio largo; luma e croma separados
+const SSHARP = frag(`
+uniform sampler2D u_b0, u_b1, u_b2, u_b3, u_bw; uniform vec4 u_sc; uniform float u_amp, u_thr, u_luma, u_chroma, u_op;
+void main() {
+  vec4 s = texture2D(u_tex, v_uv);
+  vec3 c = unpre(s).rgb;
+  vec3 a0 = unpre(texture2D(u_b0, v_uv)).rgb, a1 = unpre(texture2D(u_b1, v_uv)).rgb, a2 = unpre(texture2D(u_b2, v_uv)).rgb, a3 = unpre(texture2D(u_b3, v_uv)).rgb;
+  vec3 aw = unpre(texture2D(u_bw, v_uv)).rgb;
+  vec3 d = (c - a0) * u_sc.x + (a0 - a1) * u_sc.y + (a1 - a2) * u_sc.z + (a2 - a3) * u_sc.w + (c - aw) * u_amp;
+  // Edge Threshold: ignora diferenças muito pequenas (ruído/grão)
+  d *= smoothstep(u_thr, u_thr * 3.0 + 0.002, abs(luma(c - a1)) + abs(luma(c - aw)) * 0.5);
+  float dl = luma(d);
+  vec3 dc = d - vec3(dl);
+  vec3 o = c + (vec3(dl) * u_luma + dc * u_chroma) * u_op;
+  gl_FragColor = pre(vec4(clamp(o, 0.0, 1.0), s.a));
+}`);
+
 export default [
   {
     type: 'bevelAlpha', label: 'Bevel Alpha (chanfro)', category: 'Estilizar', plugin: 'Bevel Alpha (After Effects)',
@@ -195,5 +212,26 @@ export default [
     description: 'Mistura vários quadros da própria camada (para trás e para frente no tempo): rastro/eco suave em movimento, como o CC Wide Time.',
     params: [num('forward', 'Forward Steps', 3, 0, 30, 1), num('backward', 'Backward Steps', 3, 0, 30, 1), num('stepSize', 'Distância entre passos (quadros)', 1, 0.1, 10, 0.1), bool('nativeBlur', 'Native Motion Blur (mais amostras)', false)],
     temporal: 'wideTime',
+  },
+  {
+    type: 'sSharpen', label: 'S_Sharpen (nitidez em faixas)', category: 'Cor', plugin: 'S_Sharpen (Sapphire)',
+    description: 'Nitidez da Sapphire: separa a imagem em faixas de detalhe (minúsculo, pequeno, médio, grande) e realça cada uma, mais um contraste local de raio grande (Sharpen Width) — o visual "HDR/qualidade" dos edits.',
+    params: [
+      num('amp', 'Sharpen Amp', 1, 0, 10, 0.01), num('width', 'Sharpen Width (px)', 2, 0.3, 200, 0.1), num('detail', 'Small Detail Size (px)', 2, 0.3, 50, 0.1),
+      num('tiny', 'Scale Tiny Details', 1, 0, 5, 0.01), num('small', 'Scale Small Details', 1, 0, 5, 0.01), num('medium', 'Scale Medium Details', 1, 0, 5, 0.01), num('large', 'Scale Large Details', 1, 0, 5, 0.01),
+      num('edgeThr', 'Edge Threshold', 0, 0, 1, 0.01), num('luma', 'Sharpen Luma', 1, 0, 5, 0.01), num('chroma', 'Sharpen Chroma', 0, 0, 5, 0.01), num('opacity', 'Opacity', 1, 0, 4, 0.01),
+    ],
+    pad: (p) => Math.min(100, Math.max(p.width * 0.25, p.detail * 3)) * 2,
+    render: (src, p, env) => {
+      const { gl } = env, sc = env.scale;
+      const d = Math.max(0.3, p.detail) * sc;
+      // faixas: original → blur(d/2) → blur(d) → blur(3d) → blur(9d); e o unsharp largo com Sharpen Width
+      const b0 = gl.blur(src, d * 0.25), b1 = gl.blur(src, d * 0.5), b2 = gl.blur(src, d * 1.2), b3 = gl.blur(src, d * 3);
+      const bw = gl.blur(src, Math.max(0.3, p.width) * sc * 0.25);
+      return gl.pass(SSHARP, {
+        u_tex: src, u_b0: b0, u_b1: b1, u_b2: b2, u_b3: b3, u_bw: bw,
+        u_sc: [p.tiny - 1, p.small - 1, p.medium - 1, p.large - 1], u_amp: p.amp * 0.5, u_thr: p.edgeThr * 0.1, u_luma: p.luma, u_chroma: p.chroma, u_op: Math.min(1, p.opacity) * 0.5,
+      });
+    },
   },
 ];

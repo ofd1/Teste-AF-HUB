@@ -441,8 +441,13 @@ export const IMPORT_RULES = [
     post: (p, raw) => { p.sapphire = true; p.drift = (raw('drift') ?? 0); if (!raw('motion blur')) p.shutter = 0; if (p.ampX === undefined) p.ampX = 100; if (p.ampY === undefined) p.ampY = 100; } },
   { vendor: 'Sapphire', plugin: 'S_BlurMoCurves', to: 'blurMoCurves', test: /s_blurmocurves/i,
     map: { center: { n: ['center xy'] }, zDist: { n: ['z dist'] }, rotate: { n: ['rotate'] }, shiftX: { n: ['shift x'] }, shiftY: { n: ['shift y'] }, shutter: { n: ['shutter duration'] }, wrap: { n: ['wrap x'], conv: (v) => Math.min(3, Math.max(1, v)) }, wrapY: { n: ['wrap y'], conv: (v) => Math.min(3, Math.max(1, v)) } } },
-  { vendor: 'Sapphire', plugin: 'S_Sharpen', to: 'sharpen', test: /s_sharpen/i,
-    map: { amount: { n: ['sharpen amp'], conv: (v) => v * 60 }, radius: { n: ['small detail size'], conv: (v) => v * 0.8 } } },
+  // S_Sharpen: nitidez em faixas de detalhe + Sharpen Width (contraste local largo); Opacity pode passar de 1 (amplifica)
+  { vendor: 'Sapphire', plugin: 'S_Sharpen', to: 'sSharpen', test: /s_sharpen/i,
+    map: {
+      amp: { n: ['sharpen amp'] }, width: { n: ['sharpen width'] }, detail: { n: ['small detail size'] },
+      tiny: { n: ['scale tiny details'] }, small: { n: ['scale small details'] }, medium: { n: ['scale medium details'] }, large: { n: ['scale large details'] },
+      edgeThr: { n: ['edge threshold'] }, luma: { n: ['sharpen luma'] }, chroma: { n: ['sharpen chroma'] }, opacity: { n: ['opacity'] },
+    } },
   { vendor: 'Sapphire', plugin: 'S_HueSatBright', to: 'looks', test: /s_huesat/i,
     expand: (fx, raw) => [{ type: 'looks', label: 'S_HueSatBright', params: { hue: (raw('hue shift') || 0) * 360, saturation: (raw('saturation') ?? 1) * 100, exposure: Math.log2(Math.max(0.01, raw('brightness') ?? 1)) } }] },
   // S_MathOps: A × Lights + Darks direto no valor da imagem (não em luz linear) → Níveis
@@ -463,7 +468,8 @@ export const IMPORT_RULES = [
   { vendor: 'BCC', plugin: 'BCC Directional Blur', to: 'dirBlur', test: /bcc.*(directional|motion).*blur/i,
     map: { length: { i: 2, n: ['blur amount'], conv: (v) => v }, angle: { i: 3, n: ['angle'] } } },
   { vendor: 'BCC', plugin: 'BCC Unsharp Mask', to: 'sharpen', test: /bcc.*(unsharp|sharpen)/i,
-    map: { radius: { n: ['radius'], conv: (v) => v * 0.25 }, amount: { n: ['amount'], conv: (v) => (v <= 5 ? v * 100 : v) }, threshold: { n: ['threshold'] } } },
+    // BCC Unsharp Mask: Amount em múltiplos (1 = 100%); Radius em px (desfoque grande = contraste local)
+    map: { radius: { n: ['radius'], conv: (v) => v * 0.5 }, amount: { n: ['amount'], conv: (v) => (v <= 20 ? v * 15 : v) }, threshold: { n: ['threshold'] } } },
   { vendor: 'RE:Vision', plugin: 'ReelSmart Motion Blur', to: 'motionBlur', test: /reelsmart|\brsmb\b|motion ?blur ?pro/i,
     map: { amount: { n: ['blur amount', 'motion blur amount'], conv: (v) => (v <= 4 ? v * 200 : v) } } },
   { vendor: 'Plugin Everything', plugin: 'Deep Glow', to: 'deepGlow', test: /deep ?glow|\bpedg\b/i,

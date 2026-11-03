@@ -173,7 +173,14 @@ void main() {
   hv.z = clamp(hv.z * (1.0 + adj.z / 100.0 * 0.6), 0.0, 1.0);
   r = hsv2rgb(hv);
   // Two Strip (Technicolor de 2 tiras): verde e azul viram um registro só
-  if (u_2s > 0.001) r = mix(r, vec3(r.r, (r.g + r.b) * 0.5, (r.g + r.b) * 0.5), u_2s);
+  if (u_2s > 0.001) {
+    // o Two Strip do Looks não apaga os azuis: mistura parcial dos registros + saturação mantida
+    vec3 ts = vec3(r.r, mix(r.g, (r.g + r.b) * 0.5, 0.6), mix(r.b, (r.g + r.b) * 0.5, 0.45));
+    float s0 = max(r.r, max(r.g, r.b)) - min(r.r, min(r.g, r.b)), s1 = max(ts.r, max(ts.g, ts.b)) - min(ts.r, min(ts.g, ts.b));
+    float lt = luma(ts);
+    ts = vec3(lt) + (ts - vec3(lt)) * clamp(s0 / max(s1, 1e-3), 1.0, 1.6);
+    r = mix(r, ts, u_2s);
+  }
   // Mojo II: sombras/meios-tons para teal, pele para laranja
   float l = luma(r);
   float skin = smoothstep(22.0, 6.0, abs(mod(hv.x * 360.0 - 28.0 + 180.0, 360.0) - 180.0)) * smoothstep(0.1, 0.35, hv.y);
