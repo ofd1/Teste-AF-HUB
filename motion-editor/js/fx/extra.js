@@ -216,7 +216,12 @@ void main() {
   // no Mojo II a pele fica protegida do Bleach: o fundo perde a cor, o rosto continua com tom de pele
   float skinB = smoothstep(26.0, 8.0, abs(mod(rgb2hsv(clamp(r, 0.0, 1.0)).x * 360.0 - 28.0 + 180.0, 360.0) - 180.0)) * smoothstep(0.08, 0.3, rgb2hsv(clamp(r, 0.0, 1.0)).y);
   r = mix(vec3(bl), r, 1.0 - 0.6 * u_bleach * (u_bleach > 0.0 ? 1.0 - 0.6 * max(skin, skinB) : 1.0));
-  r = mix(r, r * r * (3.0 - 2.0 * r), max(0.0, u_bleach) * 0.12);
+  // bleach bypass de verdade: a prata que fica no filme = cópia P&B em "overlay" → mais escuro e mais contraste
+  if (u_bleach > 0.0) {
+    vec3 L = vec3(luma(clamp(r, 0.0, 1.0)));
+    vec3 ov = mix(2.0 * r * L, 1.0 - 2.0 * (1.0 - r) * (1.0 - L), step(0.5, L));
+    r = mix(r, ov, u_bleach * 0.55);
+  }
   // contraste, saturação, curva, haze/fade
   // Contraste do Looks: curva de filme (S) em torno do pivô, não uma reta que estoura pretos/brancos
   vec3 cx = clamp(r, 0.0, 1.0);

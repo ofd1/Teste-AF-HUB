@@ -3,6 +3,7 @@ import { EFFECTS, CATEGORIES } from './effects.js';
 import { escapeHtml } from './util.js';
 
 const ICON = {
+  'Looks · Subject': '◐', 'Looks · Matte': '▧', 'Looks · Lens': '◎', 'Looks · Camera': '🎞', 'Looks · Post': '✎',
   'Luz e brilho': '✺', Movimento: '〰', Tempo: '⏱', Desfoque: '◌', Estilizar: '✦', Distorção: '≋', Cor: '◑', '3D': '⬢', Transições: '⇋',
 };
 

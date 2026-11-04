@@ -230,7 +230,7 @@ export default [
       const bw = gl.blur(src, Math.max(0.3, p.width) * sc * 0.25);
       return gl.pass(SSHARP, {
         u_tex: src, u_b0: b0, u_b1: b1, u_b2: b2, u_b3: b3, u_bw: bw,
-        u_sc: [p.tiny - 1, p.small - 1, p.medium - 1, p.large - 1], u_amp: p.amp * 0.5, u_thr: p.edgeThr * 0.1, u_luma: p.luma, u_chroma: p.chroma, u_op: Math.min(1, p.opacity) * 0.5,
+        u_sc: [p.tiny - 1, p.small - 1, p.medium - 1, p.large - 1], u_amp: p.amp * 0.6, u_thr: p.edgeThr * 0.1, u_luma: p.luma, u_chroma: p.chroma, u_op: 0.8, // Opacity da Sapphire é modo de alfa (2 = Normal), não intensidade
       });
     },
   },
