@@ -244,7 +244,8 @@ export function looksFromTools(tools, strength = 100) {
       case 'crv2': case 'curv': {
         // Curves (ordem dos Looks do MBL): por canal (1 = RGB, 2 = R, 3 = G, 4 = B): Contrast, Shadows, Midtones,
         // Highlights, Point 1-5; depois Gamma Space (36) e os pontos livres (37 = quantidade, 38… pares entrada/ajuste)
-        p.contrast += (v[0] || 0) * 35;
+        // v[0] não é o contraste do usuário: vem ~0,92–0,93 em CCs diferentes (vampy, rafa) com curva quase neutra.
+        // Somar isso como contraste (+32) endurecia toda CC com Curves; o contraste vem dos pontos da curva.
         const ch = ['', 'R', 'G', 'B'];
         for (let c = 0; c < 4; c++) {
           const b = c * 9, sh = v[b + 1] || 0, mi = v[b + 2] || 0, hi = v[b + 3] || 0;
