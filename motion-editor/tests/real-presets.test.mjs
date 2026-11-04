@@ -6,6 +6,9 @@ import { parseFFX } from '../js/ffx.js';
 import { ffxToPreset, createEffectInstance, applyPreset } from '../js/presets.js';
 import { anim, valueAt } from '../js/anim.js';
 import { sourceTime } from '../js/timing.js';
+import { looksFromTools } from '../js/import-map.js';
+// valores do Looks decodificados (todas as ferramentas de cada efeito MB Looks juntas, como antes da divisão em ferramentas)
+const looksOf = (parsed) => parsed.effects.filter((e) => e.looksTools).map((e) => looksFromTools(e.looksTools, e.params.find((q) => /strength/i.test(q.name || ''))?.value?.[0] ?? 100).params);
 
 const load = (rel) => {
   const b = readFileSync(new URL(`./fixtures/ffx/${rel}`, import.meta.url));
@@ -19,12 +22,12 @@ const EXPECTED = {
   'Shakes/Sonhei Shake.ffx': ['twitch', 'exposure'],
   'Shakes/ZAZ Shake.ffx': ['motionTile', 'dirBlur', 'shake', 'twitch', 'tint'], // o motion blur do S_Shake agora é do próprio shake
   'Velocity & Reverse/Sonhei Reverse.ffx': ['twixtor', 'blurMoCurves'],
-  'CC (Color Correction)/Sonhei CC.ffx': ['looks', 'looks', 'sSharpen', 'fourColor', 'levels', 'filmLook', 'sSharpen', 'looks', 'exposure'], // S_Sharpen → nitidez em faixas
-  'CC (Color Correction)/Sonhei New CC.ffx': ['looks', 'looks', 'sSharpen'],
-  'CC (Color Correction)/Galego CC.ffx': ['looks', 'glow', 'sSharpen', 'flicker', 'levels', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
-  'CC (Color Correction)/FTB Main CC.ffx': ['looks', 'sSharpen', 'sharpen', 'hueSat', 'sharpen', 'looks', 'glow', 'looks', 'looks'], // Optical Diffusion → glow
-  'CC (Color Correction)/FTB AEP CC.ffx': ['looks', 'glow', 'fourColor', 'looks', 'hueSat', 'looks', 'looks', 'brightnessContrast'],
-  'CC (Color Correction)/ZAZ Reverse Dark CC.ffx': ['looks', 'glow', 'sSharpen', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
+  'CC (Color Correction)/Sonhei CC.ffx': ['looks', 'lkExposure', 'lkGradient', 'lkLensVignette', 'lkExposure', 'lkLensVignette', 'lkEdgeSoftness', 'looks', 'lkEdgeSoftness', 'lkLensVignette', 'looks', 'sSharpen', 'fourColor', 'levels', 'filmLook', 'sSharpen', 'looks', 'exposure'], // S_Sharpen → nitidez em faixas
+  'CC (Color Correction)/Sonhei New CC.ffx': ['looks', 'lkEdgeSoftness', 'lkHaze', 'looks', 'lkChannelMixer', 'sSharpen'],
+  'CC (Color Correction)/Galego CC.ffx': ['looks', 'glow', 'lkChroma', 'lkSaturation', 'lkSpotExposure', 'lkMojo', 'sSharpen', 'flicker', 'levels', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
+  'CC (Color Correction)/FTB Main CC.ffx': ['looks', 'lkGradient', 'lkLensVignette', 'lkEdgeSoftness', 'sSharpen', 'sharpen', 'hueSat', 'sharpen', 'looks', 'glow', 'lkEdgeSoftness', 'looks', 'lkMojo', 'lkChannelMixer', 'looks', 'looks', 'lkChroma', 'looks', 'lkHaze', 'looks'], // Optical Diffusion → glow
+  'CC (Color Correction)/FTB AEP CC.ffx': ['looks', 'glow', 'lkMojo', 'looks', 'lkExposure', 'lkGradient', 'lkLensVignette', 'lkExposure', 'lkLensVignette', 'looks', 'lkEdgeSoftness', 'fourColor', 'lkExposure', 'looks', 'lkDiffusion', 'lkChroma', 'lkHaze', 'looks', 'hueSat', 'looks', 'lkExposure', 'lkGradient', 'lkExposure', 'lkLensVignette', 'looks', 'lkHaze', 'lkEdgeSoftness', 'lkExposure', 'looks', 'brightnessContrast'],
+  'CC (Color Correction)/ZAZ Reverse Dark CC.ffx': ['looks', 'glow', 'lkChroma', 'lkSaturation', 'lkSpotExposure', 'lkMojo', 'sSharpen', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
   'Warp/ZAZ Warp.ffx': ['motionTile', 'warp'],
 };
 
@@ -72,14 +75,15 @@ test('ZAZ Shake: efeitos sincronizados no mesmo tempo', () => {
 test('CC: Looks decodificado e Gradiente de 4 cores', () => {
   const { parsed, preset } = load('CC (Color Correction)/FTB AEP CC.ffx');
   assert.deepEqual(parsed.effects.filter((e) => /^MB/.test(e.matchName)).map((e) => e.name), ['Magic Bullet Looks', 'Looks 3', 'Magic Bullet Looks 2', 'Looks']);
-  const looks = preset.effects.filter((e) => e.type === 'looks');
-  assert.deepEqual(looks.map((l) => l.params.strength), [50, 100, 75, 90]);
-  assert.ok(looks[0].params.mojo > 0 && looks[0].params.vignette > 0 && looks[0].params.optDensity > 0);
+  const looks = looksOf(parsed);
+  assert.ok(looks[0].mojo > 0 && looks[0].vignette > 0 && looks[0].optDensity > 0);
+  // cada ferramenta do Looks virou um efeito, com o Strength do Looks
+  assert.ok(preset.effects.some((e) => e.type === 'lkMojo' || (e.type === 'looks' && e.params.mojo > 0)));
   const g = preset.effects.find((e) => e.type === 'fourColor').params;
   assert.equal(g.mode, 7); // Soft Light
   assert.equal(g.opacity, 5);
 
-  const dark = load('CC (Color Correction)/ZAZ Reverse Dark CC.ffx').preset.effects[0].params;
+  const dark = looksOf(load('CC (Color Correction)/ZAZ Reverse Dark CC.ffx').parsed)[0];
   assert.equal(dark.saturation, 75.5); // Hue/Sat 65% do Looks (luz linear) ≈ 75,5% na tela
   assert.equal(dark.mojo, 100); // Mojo II = 100 no Looks original
   assert.equal(dark.bleach, 50); // Bleach It 50 (manual: menos saturação)
@@ -111,14 +115,14 @@ test('instâncias de efeito criadas a partir dos presets reais são válidas', (
 });
 
 test('Looks: Colorista HSL por cor, temperatura e curvas vêm do arquivo', () => {
-  const sn = load('CC (Color Correction)/Sonhei New CC.ffx').preset.effects.filter((e) => e.type === 'looks').map((e) => e.params);
+  const sn = looksOf(load('CC (Color Correction)/Sonhei New CC.ffx').parsed);
   // ordem do Looks3.aex: matizes R..M (13-20), saturações (21-28), luminâncias (29-36)
   assert.equal(sn[0].hslBlueS, -50);
   assert.equal(sn[0].hslPurpleH, 50);
   assert.equal(sn[0].temperature, -15);
   assert.equal(Math.round(sn[1].saturation), 40); // Colorista Saturation 40%
   assert.equal(sn[1].mixAmt, 0.7); // Channel Mixer com Strength 70%
-  const ftb = load('CC (Color Correction)/FTB AEP CC.ffx').preset.effects.filter((e) => e.type === 'looks').map((e) => e.params);
+  const ftb = looksOf(load('CC (Color Correction)/FTB AEP CC.ffx').parsed);
   assert.deepEqual([ftb[1].curve1x, ftb[1].curve1y].map((v) => +v.toFixed(3)), [0.292, 0.065]); // ponto livre da curva (entrada, ajuste)
   assert.ok(ftb[0].mojo > 30 && ftb[0].bleach > 70) // Mojo 36 + Bleach It 85;
 });

@@ -21,6 +21,9 @@ const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
  * Converte as ferramentas do Magic Bullet Looks (decodificadas do .ffx) para o efeito "Looks" do app.
  * Os valores vêm do arquivo; a correspondência ferramenta → parâmetro é uma aproximação.
  */
+const HSL_NAMES = ['Red', 'Orange', 'Yellow', 'Green', 'Aqua', 'Blue', 'Purple', 'Magenta'];
+const HSL_KEYS = HSL_NAMES.flatMap((k) => ['H', 'S', 'L'].map((c) => `hsl${k}${c}`));
+
 export function looksFromTools(tools, strength = 100) {
   const p = {
     strength, exposure: 0, temperature: 0, tint: 0, filter: [1, 1, 1, 1], filterDensity: 0,
@@ -359,10 +362,63 @@ export function looksFromTools(tools, strength = 100) {
   return { params: p, used, ignored, extra };
 }
 
+// Nomes das ferramentas do Magic Bullet Looks (id interno → nome no Looks)
+const LOOKS_TOOL_NAMES = {
+  expo: 'Exposure', cntr: 'Contrast', cont: 'Contrast', fltr: 'Color Filter', vign: 'Vignette', grad: 'Gradient', lgg2: 'Lift-Gamma-Gain', lggn: 'Lift-Gamma-Gain',
+  '3wcc': '3-Way Color', mono: 'Black & White', fgrn: 'Film Grain', popt: 'Pop', pop2: 'Pop', Clar: 'Clarity', clar: 'Clarity', blby: 'Bleach Bypass', nbby: 'Bleach Bypass',
+  flex: 'Lightflex', tele: 'Telecine Net', filp: 'Film Print', filn: 'Film Negative', ashl: 'Shoulder', shol: 'Shoulder', reno: 'Renoiser', cosm: 'Cosmetic Cleanup',
+  ccon: 'Color Contrast', ssfl: 'Shutter Streak', shfl: 'Shutter Streak', '3stp': '3-Strip Process', mojo: 'Mojo', sspc: 'Spot Exposure', strk: 'Streaks', star: 'Star',
+  lenv: 'Lens Vignette', odif: 'Optical Diffusion', diff: 'Diffusion', chab: 'Chromatic Aberration', husa: 'Hue/Saturation', mjo2: 'Mojo II', haze: 'Haze/Flare',
+  anam: 'Anamorphic Flare', lnsd: 'Lens Distortion', csta: 'Colorista', crv2: 'Curves (Look Table)', curv: 'Curves', cmix: 'Channel Mixer', satu: 'Saturation',
+  wmcl: 'Warm/Cool', shad: 'Shadows & Highlights', rhsl: 'Ranged HSL', '4way': '4-Way Color', duto: 'Duotone', '2stp': 'Two Strip', logc: 'S Curve', spex: 'Spot Exposure',
+  grex: 'Grad Exposure', edgs: 'Edge Softness',
+};
+const LOOKS_BASE = looksFromTools([], 100).params;
+const sameV = (a, b) => (Array.isArray(a) ? a.every((x, i) => Math.abs(x - b[i]) < 1e-6) : typeof a === 'number' ? Math.abs(a - b) < 1e-6 : a === b);
+const only = (changed, keys) => changed.every((k) => keys.includes(k));
+/**
+ * Uma ferramenta do Looks → o efeito de ferramenta do MotionFrame (mesma ordem e valores do arquivo).
+ * Quando a ferramenta mexe em algo que a ferramenta dedicada não tem, vira um "Looks › nome" só com os valores dela.
+ */
+function looksToolEffect(t, strength) {
+  const { params: q, extra } = looksFromTools([t], strength);
+  const changed = Object.keys(q).filter((k) => k !== 'strength' && (LOOKS_BASE[k] === undefined ? !(typeof q[k] === 'number' && (q[k] === 0 || q[k] === -1)) : !sameV(q[k], LOOKS_BASE[k])));
+  const name = LOOKS_TOOL_NAMES[t.id] || t.id;
+  const str = strength;
+  let e = null;
+  if (!changed.length) e = null;
+  else if (only(changed, ['saturation'])) e = { type: 'lkSaturation', params: { str, sat: q.saturation, vib: 0 } };
+  else if (only(changed, ['saturation', 'hue'])) e = { type: 'lkHLS', params: { str, hue: q.hue, light: 0, sat: q.saturation / 100 - 1 } };
+  else if (only(changed, ['exposure'])) e = { type: 'lkExposure', params: { str, stops: q.exposure, con: 0, pivot: 50, gamma: 1 } };
+  else if (only(changed, ['vignette', 'vignetteSize'])) e = { type: 'lkLensVignette', params: { str, amount: q.vignette, size: q.vignetteSize } };
+  else if (only(changed, ['diffusion', 'diffusionRadius', 'diffusionThreshold'])) e = { type: 'lkDiffusion', params: { str, amount: q.diffusion, radius: q.diffusionRadius, threshold: q.diffusionThreshold } };
+  else if (only(changed, ['chroma'])) e = { type: 'lkChroma', params: { str, amount: q.chroma } };
+  else if (only(changed, ['edgeBlur', 'edgeSize', 'edgeSoft', 'edgeCenter', 'edgeAspect'])) e = { type: 'lkEdgeSoftness', params: { str, blur: q.edgeBlur, size: q.edgeSize, soft: q.edgeSoft, center: q.edgeCenter } };
+  else if (only(changed, ['hazeExposure', 'hazeSpill', 'hazeSoftness', 'hazeReach', 'hazeTint'])) e = { type: 'lkHaze', params: { str, exposure: q.hazeExposure, spill: q.hazeSpill, soft: q.hazeSoftness, reach: q.hazeReach ?? 50, tint: q.hazeTint || [1, 0.92, 0.82, 1] } };
+  else if (only(changed, ['anamSize', 'anamBoost', 'anamThreshold'])) e = { type: 'lkAnamorphic', params: { str, size: q.anamSize, boost: q.anamBoost, threshold: q.anamThreshold, color: [0.35, 0.6, 1, 1] } };
+  else if (only(changed, ['spotExposure', 'spotCenter', 'spotSize', 'spotSoft', 'spotInvert'])) e = { type: 'lkSpotExposure', params: { str, stops: q.spotExposure, center: q.spotCenter, size: q.spotSize, soft: q.spotSoft, invert: q.spotInvert } };
+  else if (only(changed, ['gradTwoPoint', 'gradExposure', 'gradColor', 'gradP1', 'gradP2', 'gradSoft'])) e = { type: 'lkGradient', params: { str, stops: q.gradExposure, color: q.gradColor, p1: q.gradP1 || [0.5, 0], p2: q.gradP2 || [0.5, 0.5], soft: q.gradSoft } };
+  else if (only(changed, ['temperature', 'tint'])) e = { type: 'lkTempTint', params: { str, temp: q.temperature, tint: q.tint } };
+  else if (only(changed, ['mixR', 'mixG', 'mixB', 'mixAmt'])) e = { type: 'lkChannelMixer', params: { str: str * q.mixAmt, rr: q.mixR[0], rg: q.mixR[1], rb: q.mixR[2], gr: q.mixG[0], gg: q.mixG[1], gb: q.mixG[2], br: q.mixB[0], bg: q.mixB[1], bb: q.mixB[2] } };
+  else if (only(changed, ['mojo', 'mojoCool', 'mojoSkin', 'punch', 'bleach', 'fade', 'mojoTint', 'exposure', 'temperature', 'tint'])) e = { type: 'lkMojo', params: { str, mojo: q.mojo, cool: q.mojoCool, skin: q.mojoSkin, punch: q.punch, bleach: q.bleach, fade: q.fade * 2, mtint: q.mojoTint || 0, exposure: q.exposure, temp: q.temperature, tint: q.tint } };
+  else if (only(changed, HSL_KEYS)) e = { type: 'lkColorRanges', params: { str, ...Object.fromEntries(HSL_NAMES.flatMap((k) => [[`h${k}`, q[`hsl${k}H`]], [`s${k}`, q[`hsl${k}S`]], [`l${k}`, q[`hsl${k}L`]]])) } };
+  else {
+    // ferramenta que mexe em várias coisas (Mojo II com exposição/temperatura, Curves, Colorista…): Looks só com os valores dela
+    const keep = { strength: str };
+    for (const k of changed) keep[k] = q[k];
+    e = { type: 'looks', params: keep };
+  }
+  const out = [];
+  if (e) out.push({ ...e, label: `${name}`, note: `Looks › ${name}` });
+  return [...out, ...extra];
+}
+
 function looksExpand(fx, raw) {
   const strength = raw('strength') ?? 100;
-  const { params, used, ignored, extra } = looksFromTools(fx.looksTools || [], strength);
-  return [{ type: 'looks', label: fx.name || 'Looks', params, note: `ferramentas: ${used.join(', ') || '—'}${ignored.length ? `; ignoradas: ${ignored.join(', ')}` : ''}` }, ...extra];
+  const tools = (fx.looksTools || []).filter((t) => t.enabled);
+  if (!tools.length) return [];
+  // cada ferramenta do Looks vira um efeito, na ordem do Looks (Subject → Matte → Lens → Camera → Post)
+  return tools.flatMap((t) => looksToolEffect(t, strength));
 }
 
 export const IMPORT_RULES = [
