@@ -26,7 +26,7 @@ for (const e of EFFECTS) {
   }
 }
 export const EFFECT_MAP = Object.fromEntries(EFFECTS.map((e) => [e.type, e]));
-export const CATEGORIES = ['Luz e brilho', 'Movimento', 'Tempo', 'Desfoque', 'Estilizar', 'Distorção', 'Cor', '3D', 'Transições'];
+export const CATEGORIES = ['Luz e brilho', 'Movimento', 'Tempo', 'Desfoque', 'Estilizar', 'Distorção', 'Cor', '3D', 'Transições', 'Looks · Subject', 'Looks · Matte', 'Looks · Lens', 'Looks · Camera', 'Looks · Post'];
 
 /** Efeito para parâmetros importados que não têm renderização equivalente. */
 export const GENERIC_EFFECT = { type: 'generic', label: 'Controles importados', category: 'Importado', params: [] };
