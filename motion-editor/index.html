@@ -30,6 +30,17 @@
         <canvas id="view"></canvas>
         <canvas id="overlay"></canvas>
       </div>
+      <div class="stage-empty" id="stageEmpty" hidden>
+        <h2>Comece seu edit</h2>
+        <p>1. Importe o clipe · 2. Aplique um preset ou efeitos · 3. Exportar</p>
+        <div class="se-btns">
+          <button class="primary" data-cmd="add-media">🎞 Importar vídeo / foto</button>
+          <button data-cmd="presets">★ Presets prontos</button>
+          <button data-cmd="add-text">T Texto</button>
+          <button data-cmd="open-any">⤒ Abrir .ffx / .aep / XML</button>
+        </div>
+        <p class="muted small">Dica: arraste arquivos para cá. No PC, aperte <b>?</b> para ver os atalhos.</p>
+      </div>
       <div class="max-ctl">
         <button id="maxPlay" class="max-only" aria-label="Tocar / pausar">▶</button>
         <button id="maxBtn" title="Ampliar o preview (tela cheia)" aria-label="Ampliar o preview">⛶</button>
@@ -47,10 +58,10 @@
         <button class="icon" data-cmd="end" aria-label="Fim">⏭</button>
       </div>
       <div class="tp-tools">
-        <button data-cmd="add-key" title="Keyframe na transformação (posição, escala, rotação, opacidade)"><b>◆</b><small>Key</small></button>
-        <button data-cmd="select-all-keys" title="Selecionar todos os keyframes"><b>◆◆</b><small>Sel. todos</small></button>
-        <button data-cmd="stretch-keys" title="Esticar comprimento dos keyframes"><b>⟷</b><small>Esticar</small></button>
-        <button data-cmd="marker" title="Marcador de batida no playhead"><b>▾</b><small>Marca</small></button>
+        <button data-cmd="add-key" title="Keyframe na transformação (posição, escala, rotação, opacidade)"><b>◆</b><small>Keyframe</small></button>
+        <button data-cmd="select-all-keys" title="Selecionar todos os keyframes"><b>◆◆</b><small>Todos keys</small></button>
+        <button data-cmd="stretch-keys" title="Esticar comprimento dos keyframes"><b>⟷</b><small>Esticar keys</small></button>
+        <button data-cmd="marker" title="Marcador de batida no playhead"><b>▾</b><small>Marcador</small></button>
       </div>
     </div>
 
@@ -65,6 +76,7 @@
         <h3 id="sheetTitle">Propriedades</h3>
         <button class="icon" id="sheetClose" aria-label="Fechar">✕</button>
       </header>
+      <div class="dock-bar" id="dockBar"></div>
       <div class="sheet-body">
         <div class="pane" data-pane="effects"><div id="effectsPanel"></div></div>
         <div class="pane" data-pane="browser"><div id="fxBrowser"></div></div>
@@ -73,6 +85,7 @@
         <div class="pane" data-pane="keys"><div id="keyTools"></div></div>
         <div class="pane" data-pane="topaz"><div id="topazPanel"></div></div>
         <div class="pane" data-pane="add"><div id="addMenu"></div></div>
+        <div class="pane" data-pane="tracker"><div id="trackerDock"></div></div>
       </div>
     </aside>
 

@@ -30,7 +30,7 @@ import { TrackerPanel } from './tracker-panel.js';
 import { calibrateFromImage, CALIB_LABEL } from './calibrate.js';
 import { parseAEP, aepToProject, mainComps } from './aep.js';
 import { xmlToProject } from './xml-import.js';
-import { importFonts, loadSavedFonts, isFontFile, userFonts, removeFont } from './fonts.js';
+import { importFonts, loadSavedFonts, isFontFile, userFonts, removeFont, ensureFont, onFontsChange } from './fonts.js';
 
 const store = new Store();
 const AUTOSAVE_KEY = 'motionframe.autosave.v2';
@@ -237,7 +237,13 @@ function scheduleCaches() {
   cacheTimer = setTimeout(() => { if (!store.exporting) ensureCaches(store.project); }, 600);
 }
 
+// fontes do Google usadas nos textos: carrega ao abrir o projeto; quando chegam, redesenha
+onFontsChange(() => { frameCacheClear(); dirty = true; });
+const stageEmpty = document.getElementById('stageEmpty');
+stageEmpty.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => commands[b.dataset.cmd]?.()));
 store.on((kind) => {
+  if (kind === 'structure') stageEmpty.hidden = !!store.project.layers.length || !!store.scope?.length;
+  if (kind === 'structure') for (const l of flatLayers(store.project.layers)) if (l.type === 'text') ensureFont(l.props.fontFamily);
   dirty = true;
   if (kind !== 'time' && kind !== 'selection' && kind !== 'keys') frameCacheClear();
   if (kind !== 'selection' && !store.playing) lastEdit = performance.now();
@@ -315,13 +321,83 @@ overlay.addEventListener('pointercancel', endPointer);
 // ------------------------------------------------------------------ sheet (painel inferior / lateral)
 const sheet = document.getElementById('sheet');
 const sheetTitle = document.getElementById('sheetTitle');
-const TITLES = { effects: 'Efeitos', browser: 'Adicionar efeito', props: 'Ajustes da camada', presets: 'Presets', keys: 'Keyframes e gráfico', topaz: 'Topaz (melhorar vídeo)', add: 'Adicionar camada' };
+const TITLES = { effects: 'Efeitos da camada', browser: 'Adicionar efeito', props: 'Propriedades', presets: 'Presets', keys: 'Keyframes e gráfico', topaz: 'Topaz', add: 'Adicionar camada', tracker: 'Tracker' };
 const desktop = window.matchMedia('(min-width: 1100px)');
 const appEl = document.querySelector('.app');
 let sheetPane = null;
 let sheetBackTo = null;
 
+// ---- PC: painéis encaixados no canto (como os do After Effects). Vários abertos ao mesmo tempo, empilhados;
+// cada um pode ser minimizado (só o título) ou fechado, e reaberto pela barra de painéis no topo da coluna.
+const DOCK_KEY = 'motionframe.dock';
+const DOCK_PANES = ['props', 'effects', 'presets', 'keys', 'topaz', 'tracker', 'browser', 'add'];
+const DOCK_BAR = [['props', '☰', 'Propriedades'], ['effects', '✦', 'Efeitos'], ['presets', '★', 'Presets'], ['keys', '📈', 'Keyframes'], ['topaz', '✨', 'Topaz'], ['tracker', '⌖', 'Tracker']];
+const dock = (() => { const d = storage.get(DOCK_KEY, null); return d && Array.isArray(d.open) ? { open: d.open.filter((x) => DOCK_PANES.includes(x)), min: d.min || [] } : { open: ['effects', 'props', 'presets'], min: ['presets'] }; })();
+const saveDock = () => storage.set(DOCK_KEY, { open: dock.open.filter((x) => x !== 'browser' && x !== 'add' && x !== 'tracker'), min: dock.min });
+function renderDock() {
+  const on = desktop.matches;
+  appEl.classList.toggle('dock-mode', on);
+  document.querySelectorAll('.sheet .pane').forEach((p) => {
+    const n = p.dataset.pane;
+    if (!p.querySelector(':scope > .dock-head')) {
+      const h = document.createElement('div');
+      h.className = 'dock-head';
+      h.innerHTML = `<button class="dock-min" title="Minimizar / abrir">▾</button><span class="dock-title"></span><button class="dock-x" title="Fechar o painel">✕</button>`;
+      h.querySelector('.dock-min').addEventListener('click', () => toggleDockMin(n));
+      h.querySelector('.dock-title').addEventListener('click', () => toggleDockMin(n));
+      h.querySelector('.dock-x').addEventListener('click', () => closeDockPane(n));
+      p.prepend(h);
+    }
+    p.querySelector('.dock-title').textContent = TITLES[n] || n;
+    p.classList.toggle('dock-open', on && dock.open.includes(n));
+    p.classList.toggle('dock-min', on && dock.min.includes(n));
+    p.classList.toggle('dock-focus', on && sheetPane === n);
+    if (on) p.style.order = String(dock.open.indexOf(n));
+  });
+  const bar = document.getElementById('dockBar');
+  bar.innerHTML = DOCK_BAR.map(([n, i, l]) => `<button data-dock="${n}" class="${dock.open.includes(n) ? 'on' : ''}" title="${dock.open.includes(n) ? 'Fechar' : 'Abrir'} ${l}">${i} ${l}</button>`).join('');
+  bar.querySelectorAll('[data-dock]').forEach((x) => x.addEventListener('click', () => {
+    const n = x.dataset.dock;
+    if (dock.open.includes(n)) closeDockPane(n); else openSheet(n);
+  }));
+}
+function toggleDockMin(n) {
+  dock.min = dock.min.includes(n) ? dock.min.filter((x) => x !== n) : [...dock.min, n];
+  saveDock(); renderDock();
+}
+function closeDockPane(n) {
+  dock.open = dock.open.filter((x) => x !== n);
+  if (n === 'tracker' && !trackerPanel.el.hidden) trackerPanel.close();
+  if (sheetPane === n) sheetPane = dock.open[0] || null;
+  saveDock(); renderDock();
+}
+desktop.addEventListener?.('change', () => { renderDock(); if (desktop.matches) sheet.classList.add('open'); });
+renderDock();
+if (desktop.matches) sheet.classList.add('open');
+// arrastar a borda esquerda da coluna muda a largura dos painéis (fica salvo)
+(() => {
+  const h = document.createElement('div'); h.className = 'dock-resize'; sheet.appendChild(h);
+  const set = (w) => appEl.style.setProperty('--dock-w', `${Math.round(Math.max(300, Math.min(760, w)))}px`);
+  const saved = storage.get('motionframe.dockW', 0); if (saved) set(saved);
+  h.addEventListener('pointerdown', (e) => {
+    h.setPointerCapture(e.pointerId);
+    const mv = (ev) => { set(window.innerWidth - ev.clientX); layoutCanvas(); };
+    const up = () => { h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); storage.set('motionframe.dockW', parseInt(getComputedStyle(appEl).getPropertyValue('--dock-w'), 10) || 400); };
+    h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up);
+  });
+})();
+
 function openSheet(name, backTo = null) {
+  if (desktop.matches) {
+    // PC: abre (ou traz de volta) o painel no canto, sem fechar os outros
+    if (!dock.open.includes(name)) dock.open.unshift(name);
+    dock.min = dock.min.filter((x) => x !== name);
+    sheetPane = name;
+    sheet.classList.add('open');
+    saveDock(); renderDock();
+    requestAnimationFrame(() => document.querySelector(`.sheet .pane[data-pane="${name}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+    return;
+  }
   if (sheetPane !== name) sheet.querySelector('.sheet-body').scrollTop = 0;
   sheetPane = name;
   sheetBackTo = backTo;
@@ -333,7 +409,7 @@ function openSheet(name, backTo = null) {
   sheet.setAttribute('aria-hidden', 'false');
 }
 function closeSheet() {
-  if (desktop.matches) { openSheet(store.layer() ? 'effects' : 'presets'); return; }
+  if (desktop.matches) { if (sheetPane === 'browser' || sheetPane === 'add') closeDockPane(sheetPane); return; }
   sheetPane = null;
   sheet.classList.remove('open');
   appEl.classList.remove('docked');
@@ -357,6 +433,7 @@ document.getElementById('sheetBack').addEventListener('click', () => sheetBackTo
 })();
 
 function onSelectionChanged() {
+  if (desktop.matches) return; // PC: os painéis ficam onde você deixou (como no After Effects)
   if (!store.layer() && ['effects', 'props'].includes(sheetPane)) {
     if (desktop.matches) openSheet('presets'); else closeSheet();
   } else if (desktop.matches && store.layer() && (sheetPane === 'presets' || sheetPane === 'add' || !sheetPane)) openSheet('effects');
@@ -412,7 +489,8 @@ new TopazPanel(document.getElementById('topazPanel'), store);
 
 // ---- tracker (painel estilo After Effects)
 const trackerPanel = new TrackerPanel(store, {
-  pick: () => { if (!desktop.matches) closeSheet(); return new Promise((res) => { trackPick = res; }); },
+  pick: () => { if (!desktop.matches) closeSheet(); return new Promise((res) => { trackPick = res; });
+{ const tc = trackerPanel.close.bind(trackerPanel); trackerPanel.close = () => { tc(); if (dock.open.includes('tracker')) closeDockPane('tracker'); }; } },
   redraw: () => { dirty = true; },
   pause: () => setPlaying(false),
   setTime: (t) => store.setTime(t),
@@ -421,6 +499,7 @@ const trackerPanel = new TrackerPanel(store, {
 function openTracker(layer, kind) {
   if (layer.type !== 'video') { toast('O tracker funciona em camadas de vídeo.', 'warn'); return; }
   if (!desktop.matches) closeSheet();
+  else { document.getElementById('trackerDock').appendChild(trackerPanel.el); openSheet('tracker'); }
   trackerPanel.open(layer, kind);
 }
 
@@ -501,6 +580,18 @@ const TYPE_LABEL = { video: 'Vídeo', image: 'Foto', audio: 'Áudio', text: 'Tex
 const hintBar = document.createElement('div');
 hintBar.className = 'hint-bar';
 toolbar.before(hintBar);
+// explicação de cada botão (aparece ao parar o mouse em cima, no PC)
+const TIPS = {
+  'add-media': 'Importar vídeo ou foto do aparelho (Ctrl+I)', 'add-audio': 'Adicionar música', 'add-text': 'Nova camada de texto (Ctrl+Alt+Shift+T)', add: 'Sólido, formas, ajuste, Null, câmera…',
+  presets: 'Presets prontos: CC, shakes, transições… e os .ffx/.frameify que você importar', 'add-adjustment': 'Camada de ajuste: efeitos nela valem para tudo que está embaixo (Ctrl+Alt+Y)',
+  group: 'Pré-compor: junta as camadas selecionadas numa composição (Ctrl+Shift+C)', 'import-ffx': 'Importar preset do After Effects (.ffx), Frameify, Looks…', comp: 'Tamanho, fps e duração da composição (Ctrl+K)',
+  effects: 'Efeitos aplicados na camada selecionada', props: 'Posição, escala, rotação, opacidade, cor, texto…', keys: 'Keyframes e editor de gráfico (easing)',
+  split: 'Cortar a camada no playhead (Ctrl+Shift+D)', dup: 'Duplicar a camada (Ctrl+D)', up: 'Subir a camada (Ctrl+])', down: 'Descer a camada (Ctrl+[)', del: 'Excluir (Delete)',
+  'toggle-visible': 'Esconder/mostrar a camada', speed: 'Câmera lenta, rampas de velocidade (Twixtor)', topaz: 'Melhorar qualidade, câmera lenta por IA, estabilizar (Topaz)',
+  freeze: 'Congelar o quadro atual', 'time-reverse': 'Tocar a camada ao contrário', 'bg-remove': 'Tirar o fundo (recorte automático)', calibrate: 'Copiar a cor de uma imagem de referência',
+  sound: 'Volume e som da camada', ungroup: 'Desfazer a pré-composição', 'open-group': 'Entrar na pré-composição para editar', 'close-group': 'Voltar para a composição principal',
+  deselect: 'Tirar a seleção (F2)', sequence: 'Colocar as camadas uma depois da outra',
+};
 function renderToolbar() {
   const layer = store.layer();
   const t = layer?.type;
@@ -531,7 +622,7 @@ function renderToolbar() {
       ['add-media', '🎞', 'Vídeo / Foto', true], ['add-audio', '♪', 'Música'], ['add-text', 'T', 'Texto'], ['add', '＋', 'Mais camadas'],
       ['presets', '★', 'Presets'], ['add-adjustment', '◐', 'Ajuste (CC)'], ['group', '⊞', 'Agrupar'], ['import-ffx', '⤒', 'Importar .ffx'], ['comp', '⚙', 'Composição'],
     ];
-  toolbar.innerHTML = items.map(([cmd, icon, label, hot]) => (cmd === 'sep' ? '<span class="tool sep"></span>' : `<button class="tool ${hot ? 'hot' : ''}" data-cmd="${cmd}"><span class="ti">${icon}</span><span class="tl">${label}</span></button>`)).join('');
+  toolbar.innerHTML = items.map(([cmd, icon, label, hot]) => (cmd === 'sep' ? '<span class="tool sep"></span>' : `<button class="tool ${hot ? 'hot' : ''}" data-cmd="${cmd}" title="${escapeHtml(TIPS[cmd] || label)}"><span class="ti">${icon}</span><span class="tl">${label}</span></button>`)).join('');
   toolbar.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => commands[b.dataset.cmd]?.()));
   // faixa de ajuda: diz o que está selecionado e o próximo passo
   hintBar.hidden = !getSettings().showTips;
@@ -933,6 +1024,7 @@ function timeReverse(l) {
 }
 
 const commands = {
+  'open-any': async () => { const files = await pickFiles('.ffx,.frameify,.aep,.xml,.fcpxml,.json,.rgx,.cube,.ttf,.otf,.woff,.woff2,video/*,image/*,audio/*'); if (files.length) routeFiles(files); },
   menu: showMenu,
   new: () => createProjectFlow(),
   undo: () => store.undo(),
@@ -1209,7 +1301,10 @@ window.addEventListener('drop', (e) => {
   e.preventDefault();
   dragDepth = 0;
   dropOverlay.classList.remove('show');
-  const files = [...(e.dataTransfer?.files || [])];
+  routeFiles([...(e.dataTransfer?.files || [])]);
+});
+/** Abre qualquer arquivo no lugar certo (preset, projeto do AE, XML, fonte ou mídia). */
+function routeFiles(files) {
   const fonts = files.filter((f) => isFontFile(f.name));
   const xml = files.filter((f) => /\.(xml|fcpxml)$/i.test(f.name));
   const aep = files.filter((f) => /\.aep$/i.test(f.name));
@@ -1220,7 +1315,7 @@ window.addEventListener('drop', (e) => {
   if (aep.length) openAEPFlow(aep[0]);
   if (presets.length) { openSheet('presets'); library.importFiles(presets); }
   if (media.length) importMedia(media);
-});
+}
 
 // ------------------------------------------------------------------ autosave
 let saveTimer = 0;
@@ -1278,7 +1373,7 @@ async function openProjectById(id) {
   store.setTime(0);
   home.hide();
   updateTitle(); renderToolbar(); layoutCanvas(); timeline.render();
-  if (desktop.matches) openSheet('presets');
+  if (desktop.matches) { sheet.classList.add('open'); renderDock(); }
 }
 
 async function createProjectFlow() {

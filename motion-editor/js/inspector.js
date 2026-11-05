@@ -6,7 +6,8 @@ import { resolveProp } from './state.js';
 import { getEffectDef } from './effects.js';
 import { escapeHtml, hexToRgba, rgbaToHex, deepClone, uid } from './util.js';
 import { toast, modal } from './ui.js';
-import { fontList } from './fonts.js';
+import { pickFont, ensureFont } from './fonts.js';
+import { exportFFX } from './ffx-export-ui.js';
 import { exprError, EXPR_PRESETS } from './expr.js';
 
 /**
@@ -168,7 +169,7 @@ export class Inspector {
     switch (layer.type) {
       case 'text':
         rows.push(`<textarea data-prop="text" data-fid="p-text" rows="2">${escapeHtml(p.text)}</textarea>`);
-        rows.push(f('Fonte', `<select data-prop="fontFamily">${[...new Set([...fontList(), ...(p.fontFamily ? [p.fontFamily] : [])])].map((x) => `<option value='${x}' ${p.fontFamily === x ? 'selected' : ''}>${x.split(',')[0].replace(/"/g, '')}</option>`).join('')}</select>`));
+        rows.push(f('Fonte', `<button class="font-pick" data-fontpick style='font-family:${String(p.fontFamily || '').replace(/'/g, '&#39;')}'>${escapeHtml(String(p.fontFamily || 'Fonte').split(',')[0].replace(/"/g, ''))} <span class="muted small">🔍 trocar</span></button>`));
         rows.push(f('Tamanho', num('fontSize', 1, 1)));
         rows.push(f('Peso', `<select data-prop="fontWeight">${[300, 400, 600, 800, 900].map((w) => `<option ${+p.fontWeight === w ? 'selected' : ''}>${w}</option>`).join('')}</select>`));
         rows.push(f('Cor', color('color')));
@@ -270,6 +271,7 @@ export class Inspector {
         <button data-clip="copy" ${layer.effects.length ? '' : 'disabled'}>⎘ Copiar efeitos</button>
         <button data-clip="paste" ${clip.length ? '' : 'disabled'}>📋 Colar ${clip.length ? `(${clip.length})` : 'efeitos'}</button>
         <button data-clip="save" ${layer.effects.length ? '' : 'disabled'}>★ Salvar preset</button>
+        <button data-clip="ffx" ${layer.effects.length ? '' : 'disabled'} title="Exportar estes efeitos como preset do After Effects">⤓ Exportar .ffx</button>
       </div>
       ${cards.join('') || '<div class="empty-note">Nenhum efeito nesta camada ainda. Toque em “＋ Adicionar efeito” ou aplique um preset.</div>'}`;
   }
@@ -337,6 +339,14 @@ export class Inspector {
     }));
     root.querySelectorAll('[data-hook]').forEach((b) => b.addEventListener('click', () => this.hooks[b.dataset.hook]?.(layer)));
 
+    root.querySelector('[data-fontpick]')?.addEventListener('click', async () => {
+      const css = await pickFont(layer.props.fontFamily);
+      if (!css) return;
+      await ensureFont(css);
+      layer.props.fontFamily = css;
+      for (const o of store.selectedLayers?.() || []) if (o !== layer && o.type === 'text') o.props.fontFamily = css;
+      store.commit();
+    });
     root.querySelectorAll('[data-prop]').forEach((el) => {
       const k = el.dataset.prop;
       const apply = () => {
@@ -408,6 +418,7 @@ export class Inspector {
         store.commit();
         toast(`${list.length} efeito(s) colado(s) em ${layer.name}.`, 'ok');
       } else if (act === 'save') this.hooks.savePreset?.(layer);
+      else if (act === 'ffx') exportFFX(layer.effects, layer.name, store.project.fps || 30);
     }));
     root.querySelectorAll('.fx-card').forEach((card) => {
       const fx = layer.effects.find((e) => e.id === card.dataset.fx);

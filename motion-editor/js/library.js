@@ -8,6 +8,7 @@ import { sourceTimeRaw } from './timing.js';
 import { modal, toast, pickFiles, storage } from './ui.js';
 import { escapeHtml } from './util.js';
 import { saveFile } from './platform.js';
+import { exportFFX } from './ffx-export-ui.js';
 import { putMedia, getMedia } from './idb.js';
 
 const STORE_KEY = 'motionframe.presets.v1';
@@ -140,7 +141,12 @@ export class Library {
         const p = this.all().find((x) => x.id === el.dataset.id);
         const act = e.target.closest('[data-pact]')?.dataset.pact;
         if (act === 'info') return this.showReport(p);
-        if (act === 'export') return saveFile(`${slug(p.name)}.preset.json`, new Blob([serializePreset(p)], { type: 'application/json' }));
+        if (act === 'export') {
+          const fmt = await modal(`Exportar “${escapeHtml(p.name)}”`, '<p>Em qual formato?</p>', [{ label: 'Cancelar', value: null }, { label: 'MotionFrame (.json)', value: 'json' }, { label: 'After Effects (.ffx)', primary: true, value: 'ffx' }]);
+          if (fmt === 'json') return saveFile(`${slug(p.name)}.preset.json`, new Blob([serializePreset(p)], { type: 'application/json' }));
+          if (fmt === 'ffx') { const full = await this.resolve(p); return exportFFX(full.effects || [], p.name); }
+          return;
+        }
         if (act === 'del') {
           this.user = this.user.filter((x) => x.id !== p.id);
           this.save();
