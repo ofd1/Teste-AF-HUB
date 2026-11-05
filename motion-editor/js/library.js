@@ -9,6 +9,8 @@ import { modal, toast, pickFiles, storage } from './ui.js';
 import { escapeHtml } from './util.js';
 import { saveFile } from './platform.js';
 import { exportFFX } from './ffx-export-ui.js';
+import { scanAex, aexEquivalents, reportsToJSON } from './aex-scan.js';
+import { matchEffect } from './import-map.js';
 import { putMedia, getMedia } from './idb.js';
 
 const STORE_KEY = 'motionframe.presets.v1';
@@ -91,6 +93,7 @@ export class Library {
         <button class="primary" data-act="import">⤒ Importar .ffx / .rgx / .cube / preset</button>
         <button data-act="save-layer">★ Salvar camada como preset</button>
         <button data-act="capture">◐ Capturar CC do After Effects (Looks, Colorista…)</button>
+        <button data-act="aex">⌕ Meus plugins (.aex)</button>
       </div>
       <label class="fit-toggle ${this.fit ? 'on' : ''}">
         <span class="switch"><input type="checkbox" data-act="fit" ${this.fit ? 'checked' : ''}><i></i></span>
@@ -123,11 +126,12 @@ export class Library {
   bind() {
     const r = this.root;
     r.querySelector('[data-act="import"]').addEventListener('click', async () => {
-      const files = await pickFiles('.ffx,.aep,.rgx,.cube,.png,.json,application/json,application/octet-stream');
+      const files = await pickFiles('.ffx,.aep,.rgx,.cube,.png,.aex,.json,application/json,application/octet-stream');
       if (files.length) this.importFiles(files);
     });
     r.querySelector('[data-act="save-layer"]').addEventListener('click', () => this.saveLayer());
     r.querySelector('[data-act="capture"]').addEventListener('click', () => this.captureAE());
+    r.querySelector('[data-act="aex"]').addEventListener('click', async () => { const f = await pickFiles('.aex,.plugin,application/octet-stream', true); if (f.length) this.scanPlugins(f); });
     r.querySelector('[data-act="fit"]').addEventListener('change', (e) => { this.fit = e.target.checked; storage.set('motionframe.presetFit', this.fit); this.render(); });
     const search = r.querySelector('.lib-search');
     search.addEventListener('input', () => {
@@ -287,6 +291,30 @@ export class Library {
     }
   }
 
+  /** Lê os .aex (só os bytes — nunca executa) e mostra qual efeito do MotionFrame corresponde a cada plugin. */
+  async scanPlugins(files) {
+    const reports = [];
+    for (const f of files) {
+      const r = f.size > 512 * 1024 * 1024 ? { path: f.name, error: 'arquivo grande demais', pipl: [] } : scanAex(await f.arrayBuffer(), f.name);
+      r.motionframe = r.error && !r.valid_pe ? [] : aexEquivalents(r, matchEffect);
+      reports.push(r);
+    }
+    const rows = reports.map((r) => {
+      if (!r.valid_pe) return `<tr><td>${escapeHtml(r.path)}</td><td colspan="3" class="muted">${escapeHtml(r.error || 'não é um plugin')}</td></tr>`;
+      return r.motionframe.map((m) => `<tr><td><b>${escapeHtml(m.name)}</b><br><small class="muted">${escapeHtml(r.path)} · ${r.architecture}${m.category ? ` · ${escapeHtml(m.category)}` : ''}</small></td>
+        <td><small>${escapeHtml(m.matchName || '—')}</small></td>
+        <td>${m.effect ? `✔ ${escapeHtml(m.label)}${m.kind === 'approx' ? ' <small class="muted">(aproximado)</small>' : ''}` : '<span class="muted">sem equivalente ainda</span>'}</td></tr>`).join('');
+    }).join('');
+    const ok = reports.reduce((n, r) => n + (r.motionframe || []).filter((m) => m.effect).length, 0), tot = reports.reduce((n, r) => n + Math.max(1, (r.motionframe || []).length), 0);
+    const v = await modal('Meus plugins do After Effects', `
+      <p>${ok} de ${tot} plugin(s) têm efeito equivalente no MotionFrame — presets .ffx que usam esses plugins já abrem com eles.
+      <small class="muted">Leitura estática: o app só lê o cabeçalho do arquivo (nome, categoria, match name); plugins do AE não rodam fora do After Effects.
+      Para a <b>cor exata</b> de um plugin de cor, use “Capturar CC do After Effects”.</small></p>
+      <div style="max-height:55vh;overflow:auto"><table class="aex-table" style="width:100%;border-collapse:collapse"><tr><th align="left">Plugin</th><th align="left">Match name</th><th align="left">No MotionFrame</th></tr>${rows}</table></div>`,
+      [{ label: 'Exportar relatório (.json)', value: 'json' }, { label: 'Fechar', value: null, primary: true }], { wide: true });
+    if (v === 'json') await saveFile('plugins-aex.json', new Blob([reportsToJSON(reports)], { type: 'application/json' }));
+  }
+
   async captureFromImage(f) {
     const bmp = await createImageBitmap(f, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
     const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
@@ -303,6 +331,7 @@ export class Library {
   async importFiles(files) {
     const imported = [];
     const errors = [];
+    const aex = [];
     for (const f of files) {
       try {
         // projeto do After Effects: abre como projeto (não vira um preset gigante)
@@ -314,6 +343,8 @@ export class Library {
           preset.fileName = f.name;
           preset._parsed = parsed;
           imported.push(preset);
+        } else if (/\.aex$/i.test(f.name)) {
+          aex.push(f);
         } else if (/\.png$/i.test(f.name)) {
           imported.push(await this.captureFromImage(f));
         } else if (/\.cube$/i.test(f.name)) {
@@ -337,6 +368,7 @@ export class Library {
       }
     }
     if (errors.length) toast(errors.join('\n'), 'error', 6000);
+    if (aex.length) await this.scanPlugins(aex);
     if (!imported.length) return;
     if (imported.length === 1 && imported[0]._parsed) { await this.showReport(imported[0], true); return; }
     for (const p of imported) this.addToLibrary(p);

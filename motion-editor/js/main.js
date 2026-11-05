@@ -1040,7 +1040,7 @@ function timeReverse(l) {
 }
 
 const commands = {
-  'open-any': async () => { const files = await pickFiles('.ffx,.aep,.xml,.fcpxml,.json,.rgx,.cube,.ttf,.otf,.woff,.woff2,video/*,image/*,audio/*'); if (files.length) routeFiles(files); },
+  'open-any': async () => { const files = await pickFiles('.ffx,.aep,.xml,.fcpxml,.json,.rgx,.cube,.aex,.ttf,.otf,.woff,.woff2,video/*,image/*,audio/*'); if (files.length) routeFiles(files); },
   menu: showMenu,
   new: () => createProjectFlow(),
   undo: () => store.undo(),
@@ -1324,8 +1324,8 @@ function routeFiles(files) {
   const fonts = files.filter((f) => isFontFile(f.name));
   const xml = files.filter((f) => /\.(xml|fcpxml)$/i.test(f.name));
   const aep = files.filter((f) => /\.aep$/i.test(f.name));
-  const presets = files.filter((f) => /\.(ffx|frameify|rgx|cube|json)$/i.test(f.name));
-  const media = files.filter((f) => !/\.(ffx|frameify|rgx|cube|json|xml|fcpxml|aep|ttf|otf|woff2?)$/i.test(f.name));
+  const presets = files.filter((f) => /\.(ffx|frameify|rgx|cube|json|aex)$/i.test(f.name));
+  const media = files.filter((f) => !/\.(ffx|frameify|rgx|cube|json|aex|xml|fcpxml|aep|ttf|otf|woff2?)$/i.test(f.name));
   if (fonts.length) importFontsFlow(fonts);
   if (xml.length) openXMLFlow(xml[0]);
   if (aep.length) openAEPFlow(aep[0]);
