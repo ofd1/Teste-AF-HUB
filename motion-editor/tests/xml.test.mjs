@@ -28,3 +28,16 @@ test('FCPXML: clipe conectado, gap e transformação', () => {
   assert.equal(p.layers[2].inPoint, 0); assert.equal(p.layers[2].outPoint, 5);
   assert.deepEqual(p.layers[0].transform.scale.value, [150, 150]);
 });
+
+test('Alight Motion / Gold Motion XML: camadas, keyframes e efeitos', () => {
+  const { project: p, media } = xmlToProject(fx('alight.xml'));
+  assert.equal(p.width, 1080); assert.equal(p.duration, 4);
+  assert.deepEqual(media, ['clip.mp4']);
+  const [txt, vid] = p.layers; // a camada de cima (última no XML) vem primeiro
+  assert.equal(txt.type, 'text'); assert.equal(txt.props.text, 'OI'); assert.equal(txt.inPoint, 1); assert.equal(txt.props.color, '#ff0000');
+  assert.equal(vid.props.aeMedia.sourceStart, 0.5);
+  assert.deepEqual(vid.transform.scale.value, [120, 120]);
+  assert.equal(vid.transform.position.keys.length, 2); assert.equal(vid.transform.position.keys[1].t, 4);
+  assert.deepEqual(vid.effects.map((e) => e.type), ['shake', 'blur']);
+  assert.equal(vid.effects[1].params[Object.keys(vid.effects[1].params)[0]].keys.length, 2);
+});

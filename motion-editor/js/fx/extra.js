@@ -264,6 +264,7 @@ void main() {
   vec3 o = mix(c.rgb, lifted, w) + b.rgb * u_glow * smoothstep(0.5, 1.0, luma(b.rgb));
   gl_FragColor = vec4(min(o, vec3(c.a)), c.a);
 }`);
+const TINTMUL = frag(`uniform vec3 u_c; void main() { vec4 c = texture2D(u_tex, v_uv); gl_FragColor = vec4(c.rgb * u_c, c.a); }`);
 const THRESH = frag(`
 uniform float u_thr;
 void main() { vec4 c = unpre(texture2D(u_tex, v_uv)); gl_FragColor = pre(vec4(c.rgb, c.a * smoothstep(u_thr - 0.1, u_thr + 0.15, luma(c.rgb)))); }`);
@@ -339,7 +340,7 @@ const EFFECTS = [
       num('mojo', 'Mojo (teal & orange) %', 0, 0, 100), num('mojoCool', 'Mojo – esfriar %', 50, 0, 100), num('mojoSkin', 'Mojo – pele quente %', 50, 0, 100),
       num('punch', 'Punch %', 0, 0, 100), adv(num('twoStrip', 'Two Strip (Technicolor) %', 0, 0, 100)), num('bleach', 'Bleach %', 0, -100, 100), adv(num('mojoTint', 'Mojo Tint', 0, -100, 100)), { key: 'satLum', label: 'Colorista – Sat × Lum', kind: 'hidden', default: [0, 0, 0, 0, 0, 0, 0] }, { key: 'satSat', label: 'Colorista – Sat × Sat', kind: 'hidden', default: [0, 0, 0, 0, 0, 0, 0] }, num('fade', 'Haze / fade %', 0, 0, 100),
       num('vignette', 'Vinheta %', 0, 0, 100), num('vignetteSize', 'Tamanho da vinheta %', 50, 0, 100),
-      num('diffusion', 'Difusão (glow) %', 0, 0, 300), num('diffusionRadius', 'Raio da difusão', 60, 1, 600), num('diffusionThreshold', 'Limiar da difusão %', 60, 0, 100),
+      num('diffusion', 'Difusão (glow) %', 0, 0, 300), num('diffusionRadius', 'Raio da difusão', 60, 1, 600), num('diffusionThreshold', 'Limiar da difusão %', 60, 0, 100), col('diffusionTint', 'Cor da difusão', [1, 1, 1, 1]),
       num('chroma', 'Aberração cromática', 0, 0, 50, 0.1),
       num('anamSize', 'Anamorphic Flare – tamanho', 0, 0, 1000), num('anamBoost', 'Anamorphic Flare – força', 1, 0, 5, 0.01), num('anamThreshold', 'Anamorphic Flare – limiar %', 70, 0, 100), adv(col('anamColor', 'Anamorphic Flare – cor', [0.35, 0.6, 1, 1])),
       num('hazeExposure', 'Haze/Flare – exposição (stops, -99 = desligado)', -99, -99, 4, 0.05), num('hazeSoftness', 'Haze/Flare – suavidade %', 60, 0, 100), num('hazeSpill', 'Haze/Flare – spillage %', 50, 0, 100), num('hazeReach', 'Haze/Flare – reach %', 50, 0, 100), adv(col('hazeTint', 'Haze/Flare – cor', [1, 0.92, 0.82, 1])),
@@ -395,7 +396,9 @@ const EFFECTS = [
         out = gl.pass(OPTDIFF, { u_tex: out, u_tex2: b, u_dens: ((p.optDensity || 0) / 100) * s, u_hl: (p.optHighlights ?? 50) / 100, u_glow: ((p.optGlow || 0) / 100) * s });
       }
       if (p.diffusion * s >= 1) {
-        const th = gl.pass(THRESH, { u_tex: out, u_thr: p.diffusionThreshold / 100 });
+        let th = gl.pass(THRESH, { u_tex: out, u_thr: p.diffusionThreshold / 100 });
+        const dt = p.diffusionTint || [1, 1, 1, 1];
+        if (dt[0] < 0.995 || dt[1] < 0.995 || dt[2] < 0.995) th = gl.pass(TINTMUL, { u_tex: th, u_c: [dt[0], dt[1], dt[2]] });
         const b = gl.blur(th, p.diffusionRadius * 0.5 * env.scale);
         out = gl.pass(SCREEN_ADD, { u_tex: out, u_tex2: b, u_amount: (p.diffusion / 100) * s });
       }

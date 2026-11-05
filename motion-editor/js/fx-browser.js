@@ -2,6 +2,7 @@
 import { EFFECTS, CATEGORIES } from './effects.js';
 import { escapeHtml } from './util.js';
 import { ico } from './icons.js';
+import { fxMatch } from './i18n.js';
 
 const ICON = {
   'Looks · Subject': 'adjust', 'Looks · Matte': 'matte', 'Looks · Lens': 'lens', 'Looks · Camera': 'camera', 'Looks · Post': 'sparkle',
@@ -18,9 +19,7 @@ export class FxBrowser {
   }
 
   render() {
-    const q = this.q.toLowerCase();
-    const list = EFFECTS.filter((e) => (this.cat === 'Todos' || (this.cat === 'Plugins' ? e.plugin : e.category === this.cat))
-      && (!q || `${e.label} ${e.plugin || ''} ${e.category}`.toLowerCase().includes(q)));
+    const list = EFFECTS.filter((e) => (this.cat === 'Todos' || (this.cat === 'Plugins' ? e.plugin : e.category === this.cat)) && fxMatch(e, this.q));
     this.root.innerHTML = `
       <input type="search" class="fx-search" placeholder="Buscar efeito (ex.: glow, twixtor, shake)…" value="${escapeHtml(this.q)}">
       <div class="chips">${['Todos', 'Plugins', ...CATEGORIES].map((c) => `<button class="chip ${c === this.cat ? 'on' : ''}" data-cat="${c}">${c === 'Plugins' ? `${ico('presets')} Plugins` : c}</button>`).join('')}</div>

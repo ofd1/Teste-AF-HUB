@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<scene title="AM teste" width="1080" height="1920" exportWidth="1080" exportHeight="1920" precision="8" type="scene" totalTime="4000" fps="30">
+  <video id="2" label="clip.mp4" startTime="0" endTime="4000" src="content://media/clip.mp4" mediaStartTime="500">
+    <transform>
+      <location><kf t="0.0" v="540.0,960.0,0.0" /><kf t="1.0" v="540.0,800.0,0.0" /></location>
+      <scale value="1.2,1.2" />
+      <rotation value="0.0" />
+    </transform>
+    <effect id="com.alightcreative.effects.shake" locallyApplied="true">
+      <property name="magnitude" type="float" value="0.3" />
+      <property name="frequency" type="float" value="12.0" />
+    </effect>
+    <effect id="com.alightcreative.effects.blur.gaussian"><property name="strength" type="float"><kf t="0.0" v="0.0"/><kf t="0.5" v="20.0"/></property></effect>
+  </video>
+  <text id="3" label="Titulo" startTime="1000" endTime="3000" size="120" font="Anton-Regular.ttf"><content>OI</content><fillColor value="#ffff0000" /></text>
+</scene>

@@ -88,7 +88,7 @@ export class Library {
     const items = all.filter((p) => (this.cat === 'Todos' || p.category === this.cat) && (!q || `${p.name} ${p.category}`.toLowerCase().includes(q)));
     this.root.innerHTML = `
       <div class="lib-tools">
-        <button class="primary" data-act="import">⤒ Importar .ffx / .frameify / .rgx / .cube / preset</button>
+        <button class="primary" data-act="import">⤒ Importar .ffx / .rgx / .cube / preset</button>
         <button data-act="save-layer">★ Salvar camada como preset</button>
       </div>
       <label class="fit-toggle ${this.fit ? 'on' : ''}">
@@ -122,7 +122,7 @@ export class Library {
   bind() {
     const r = this.root;
     r.querySelector('[data-act="import"]').addEventListener('click', async () => {
-      const files = await pickFiles('.ffx,.aep,.frameify,.rgx,.cube,.json,application/json,application/octet-stream');
+      const files = await pickFiles('.ffx,.aep,.rgx,.cube,.json,application/json,application/octet-stream');
       if (files.length) this.importFiles(files);
     });
     r.querySelector('[data-act="save-layer"]').addEventListener('click', () => this.saveLayer());

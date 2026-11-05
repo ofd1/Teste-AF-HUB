@@ -31,6 +31,8 @@ import { calibrateFromImage, CALIB_LABEL } from './calibrate.js';
 import { parseAEP, aepToProject, mainComps } from './aep.js';
 import { xmlToProject } from './xml-import.js';
 import { ico, iconize } from './icons.js';
+import { translateDOM, getLang, setLang } from './i18n.js';
+import { EFFECTS } from './effects.js';
 import { importFonts, loadSavedFonts, isFontFile, userFonts, removeFont, ensureFont, onFontsChange } from './fonts.js';
 
 const store = new Store();
@@ -242,7 +244,15 @@ function scheduleCaches() {
 onFontsChange(() => { frameCacheClear(); dirty = true; });
 // ícones de linha no lugar dos símbolos/emoji em toda a interface (inclusive painéis e janelas criados depois)
 iconize(document.body);
-new MutationObserver((muts) => { for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1) iconize(n.matches?.('button') ? n.parentElement : n); }).observe(document.body, { childList: true, subtree: true });
+translateDOM(document.body, EFFECTS);
+document.documentElement.lang = getLang() === 'en' ? 'en' : 'pt-BR';
+new MutationObserver((muts) => {
+  for (const m of muts) {
+    if (m.type === 'characterData') { if (m.target.parentElement) translateDOM(m.target.parentElement, EFFECTS); continue; }
+    for (const n of m.addedNodes) if (n.nodeType === 1) { iconize(n.matches?.('button') ? n.parentElement : n); translateDOM(n.parentElement || n, EFFECTS); }
+      else if (n.nodeType === 3 && n.parentElement) translateDOM(n.parentElement, EFFECTS);
+  }
+}).observe(document.body, { childList: true, subtree: true, characterData: true });
 const stageEmpty = document.getElementById('stageEmpty');
 stageEmpty.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => commands[b.dataset.cmd]?.()));
 store.on((kind) => {
@@ -587,7 +597,7 @@ toolbar.before(hintBar);
 // explicação de cada botão (aparece ao parar o mouse em cima, no PC)
 const TIPS = {
   'add-media': 'Importar vídeo ou foto do aparelho (Ctrl+I)', 'add-audio': 'Adicionar música', 'add-text': 'Nova camada de texto (Ctrl+Alt+Shift+T)', add: 'Sólido, formas, ajuste, Null, câmera…',
-  presets: 'Presets prontos: CC, shakes, transições… e os .ffx/.frameify que você importar', 'add-adjustment': 'Camada de ajuste: efeitos nela valem para tudo que está embaixo (Ctrl+Alt+Y)',
+  presets: 'Presets prontos: CC, shakes, transições… e os .ffx que você importar', 'add-adjustment': 'Camada de ajuste: efeitos nela valem para tudo que está embaixo (Ctrl+Alt+Y)',
   group: 'Pré-compor: junta as camadas selecionadas numa composição (Ctrl+Shift+C)', 'import-ffx': 'Importar preset do After Effects (.ffx), Frameify, Looks…', comp: 'Tamanho, fps e duração da composição (Ctrl+K)',
   effects: 'Efeitos aplicados na camada selecionada', props: 'Posição, escala, rotação, opacidade, cor, texto…', keys: 'Keyframes e editor de gráfico (easing)',
   split: 'Cortar a camada no playhead (Ctrl+Shift+D)', dup: 'Duplicar a camada (Ctrl+D)', up: 'Subir a camada (Ctrl+])', down: 'Descer a camada (Ctrl+[)', del: 'Excluir (Delete)',
@@ -857,7 +867,8 @@ async function showMenu() {
     <button data-m="comp">⚙ Configurações da composição</button>
     <button data-m="ffx">⤒ Importar preset .ffx do After Effects</button>
     <button data-m="aep">Ae Abrir projeto .aep do After Effects</button>
-    <button data-m="xml">⇄ Importar XML (Premiere / Final Cut / DaVinci)</button>
+    <button data-m="xml">⇄ Importar XML (Alight Motion / Premiere / Final Cut / DaVinci)</button>
+    <button data-m="lang">🌐 Idioma / Language: ${getLang() === 'en' ? 'English' : 'Português'}</button>
     <button data-m="font">🔤 Importar fontes (.ttf / .otf / .woff)</button>
     <button data-m="keys">⌨ Atalhos de teclado (After Effects)</button>
     ${flatLayers(store.project.layers).some((l) => l.props?.aeMedia) ? '<button data-m="relink">🔗 Conectar vídeos/fotos do projeto do AE</button><button data-m="relinksub">🔁 Usar outros vídeos/fotos no lugar dos que faltam</button>' : ''}
@@ -874,6 +885,7 @@ async function showMenu() {
   if (res === 'ffx') commands['import-ffx']();
   if (res === 'aep') openAEPFlow();
   if (res === 'xml') openXMLFlow();
+  if (res === 'lang') setLang(getLang() === 'en' ? 'pt' : 'en');
   if (res === 'font') importFontsFlow();
   if (res === 'keys') showShortcuts();
   if (res === 'account') showAccount();
@@ -1028,7 +1040,7 @@ function timeReverse(l) {
 }
 
 const commands = {
-  'open-any': async () => { const files = await pickFiles('.ffx,.frameify,.aep,.xml,.fcpxml,.json,.rgx,.cube,.ttf,.otf,.woff,.woff2,video/*,image/*,audio/*'); if (files.length) routeFiles(files); },
+  'open-any': async () => { const files = await pickFiles('.ffx,.aep,.xml,.fcpxml,.json,.rgx,.cube,.ttf,.otf,.woff,.woff2,video/*,image/*,audio/*'); if (files.length) routeFiles(files); },
   menu: showMenu,
   new: () => createProjectFlow(),
   undo: () => store.undo(),

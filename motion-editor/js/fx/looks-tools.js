@@ -147,8 +147,8 @@ export default [
   // ------------------------------------------------------------ LENS
   tool('lkLensVignette', 'Lens Vignette', 'Lens', 'Queda de luz ótica nos cantos (negativo clareia as bordas).', [num('amount', 'Amount %', 50, -100, 100), num('size', 'Size %', 50, 1, 100)],
     via('looks', (p) => ({ vignette: Math.max(0, p.amount), vignetteSize: p.size, exposure: p.amount < 0 ? -p.amount / 300 : 0 }))),
-  tool('lkDiffusion', 'Diffusion', 'Lens', 'Realces “florescem” suavemente, como um filtro de difusão.', [num('amount', 'Glow %', 40, 0, 150), num('radius', 'Size', 60, 1, 600), num('threshold', 'Threshold %', 60, 0, 100)],
-    via('looks', (p) => ({ diffusion: p.amount, diffusionRadius: p.radius, diffusionThreshold: p.threshold }))),
+  tool('lkDiffusion', 'Diffusion', 'Lens', 'Realces “florescem” suavemente, como um filtro de difusão.', [num('amount', 'Glow %', 40, 0, 150), num('radius', 'Size', 60, 1, 600), num('threshold', 'Threshold %', 60, 0, 100), col('tint', 'Tint', [1, 1, 1, 1])],
+    via('looks', (p) => ({ diffusion: p.amount, diffusionRadius: p.radius, diffusionThreshold: p.threshold, diffusionTint: p.tint || [1, 1, 1, 1] }))),
   tool('lkEdgeSoftness', 'Edge Softness', 'Lens', 'Desfoque que aumenta em direção às bordas do quadro.', [num('blur', 'Blur', 4, 0, 100, 0.1), num('size', 'Área nítida %', 100, 0, 400), num('soft', 'Spread %', 50, 1, 400), pos('center', 'Centro')],
     via('looks', (p) => ({ edgeBlur: p.blur, edgeSize: p.size, edgeSoft: p.soft, edgeCenter: p.center }))),
   tool('lkHaze', 'Haze/Flare', 'Lens', 'Luz que entra pelas laterais e se espalha pela imagem (Looks Haze/Flare).', [num('exposure', 'Exposure', 0, -6, 4, 0.01), num('spill', 'Spillage', 50, 0, 100), num('soft', 'Softness', 60, 0, 100), num('reach', 'Reach', 50, 0, 100), col('tint', 'Cor', [1, 0.92, 0.82, 1])],

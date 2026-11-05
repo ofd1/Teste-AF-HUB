@@ -163,7 +163,7 @@ export function looksFromTools(tools, strength = 100) {
       // Spot Fill (luz de preenchimento num círculo): [Fill, Center X, Center Y, Radius, Spread, Falloff, Strength, R, G, B, Aspect]
       case 'ssfl':
         p.spotExposure += (v[0] || 0) / 100 * ((v[6] ?? 100) / 100);
-        p.spotCenter = [clampN(0.5 + (v[1] || 0) / 100, 0, 1), clampN(0.5 - (v[2] || 0) / 100, 0, 1)];
+        p.spotCenter = [clampN(0.5 + (v[1] || 0) / 100, 0, 1), clampN(0.5 + (v[2] || 0) / 100, 0, 1)]; // Y como o Frameify
         p.spotSize = clampN((v[3] ?? 1) * 100, 0, 400); p.spotSoft = clampN((v[4] ?? 0.5) * 100, 1, 400); p.spotAspect = clampN(v[10] ?? 1, 0.1, 4);
         p.spotColor = [v[7] ?? 1, v[8] ?? 1, v[9] ?? 1, 1];
         break;
@@ -343,7 +343,7 @@ export function looksFromTools(tools, strength = 100) {
       case 'spex':
         // Spot Exposure (Looks3.aex): [Stops, Center X, Center Y, Radius, Spread, Falloff, Strength, R, G, B, Aspect, Invert]
         p.spotExposure += (v[0] || 0) * ((v[6] ?? 100) / 100);
-        p.spotCenter = [clampN(0.5 + (v[1] || 0) / 100, 0, 1), clampN(0.5 - (v[2] || 0) / 100, 0, 1)];
+        p.spotCenter = [clampN(0.5 + (v[1] || 0) / 100, 0, 1), clampN(0.5 + (v[2] || 0) / 100, 0, 1)]; // Y como o Frameify
         p.spotSize = clampN((v[3] ?? 1) * 100, 0, 400);
         p.spotSoft = clampN(Math.max(0.05, v[4] ?? 0.5) * 100, 1, 400);
         p.spotColor = [v[7] ?? 1, v[8] ?? 1, v[9] ?? 1, 1];
@@ -368,7 +368,7 @@ export function looksFromTools(tools, strength = 100) {
         // Edge Softness: [desfoque, ?, ?, ?, tamanho da área nítida, suavidade, proporção]
         // manual do Looks: Blur Size, (qualidade), Centro X/Y (%), Raio, Spread, Proporção
         p.edgeBlur = Math.max(p.edgeBlur, v[0] || 0);
-        p.edgeCenter = [clampN(0.5 + (v[2] || 0) / 100, 0, 1), clampN(0.5 - (v[3] || 0) / 100, 0, 1)];
+        p.edgeCenter = [clampN(0.5 + (v[2] || 0) / 100, 0, 1), clampN(0.5 + (v[3] || 0) / 100, 0, 1)]; // Y como o Frameify
         p.edgeSize = clampN((v[4] ?? 1) * 100, 0, 400);
         p.edgeSoft = clampN((v[5] ?? 0.5) * 100, 1, 400);
         p.edgeAspect = clampN(v[6] ?? 1, 0.1, 4);
@@ -649,13 +649,12 @@ export const IMPORT_RULES = [
   { vendor: 'Sapphire', plugin: 'S_JpegDamage', to: 'jpegDamage', test: /s_jpeg|jpeg ?glitch/i, map: { amount: { n: ['amount', 'damage'], conv: (v) => (v <= 1 ? v * 100 : v) }, block: { n: ['block size'] } } },
   { vendor: 'Sapphire', plugin: 'S_Streaks', to: 'streaks', test: /s_streaks/i, map: { length: { n: ['streak length', 'length'], conv: (v) => (v <= 2 ? v * 200 : v) }, amount: { n: ['brightness'] }, angle: { n: ['angle', 'streak angle'] } } },
   { vendor: 'Sapphire', plugin: 'S_Feedback', to: 'feedback', test: /s_feedback/i, map: { zoom: { n: ['zoom', 'scale'] }, rotate: { n: ['rotate'] }, count: { n: ['iterations', 'repeats'] } } },
-  { vendor: 'Sapphire', plugin: 'S_Glow', to: 'deepGlow', test: /s_glow/i,
-    // S_Glow (sapphire_ae.dll): Brightness 2 = padrão, Width 0,4 (¼ da largura do quadro), Threshold 0,5, Combine Screen
-    map: { radius: { n: ['width'], conv: (v) => (v < 5 ? v * 500 : v) }, exposure: { n: ['brightness'], conv: (v) => v * 0.6 }, threshold: { n: ['threshold'], conv: pct }, tint: { n: ['color'] } }, set: { useTint: false },
-    // Color do S_Glow MULTIPLICA o brilho do glow: cor escura = glow fraco (e tingido); branca = glow normal
-    post: (p) => {
-      const c = p.tint || [1, 1, 1, 1], l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-      if (l < 0.97) { p.exposure *= Math.max(0.05, l); p.useTint = Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]) > 0.04; p.tint = [c[0] / Math.max(l, 0.05), c[1] / Math.max(l, 0.05), c[2] / Math.max(l, 0.05), 1].map((x, i) => (i < 3 ? Math.min(1, x * 0.6) : 1)); }
+  // S_Glow → Glow/Diffusion, igual ao Frameify: intensidade = Brightness × 50, raio = Width × 0,75, limiar = Threshold × 100, cor
+  { vendor: 'Sapphire', plugin: 'S_Glow', to: 'lkDiffusion', test: /s_glow/i,
+    expand: (fx, raw) => {
+      const col = fx.params.find((q) => (q.name || '').toLowerCase() === 'color')?.value;
+      const c = col && col.length >= 4 ? col.slice(1, 4).map((x) => (x > 1 ? x / 255 : x)) : [1, 1, 1];
+      return [{ type: 'lkDiffusion', label: fx.name || 'S_Glow', note: 'como o Frameify (Glow/Diffusion)', params: { str: 100, amount: (raw('brightness') ?? 1) * 50, radius: (raw('glow width') ?? raw('width') ?? 80) * 0.75, threshold: (raw('threshold') ?? 0.5) * 100, tint: [...c, 1] } }];
     } },
   { vendor: 'Sapphire', plugin: 'S_ZoomBlur', to: 'radialBlur', test: /s_zoomblur|s_blurzoom|s_radialblur/i, set: { mode: 1 },
     map: { amount: { n: ['zoom amount', 'blur amount', 'amount', 'length'], conv: (v) => (v <= 2 ? v * 100 : v) }, center: { n: ['center', 'center xy'] } } },

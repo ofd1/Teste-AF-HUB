@@ -5,6 +5,8 @@
 // escala/posição/rotação/opacidade básicas e marcadores). Os arquivos de mídia não vêm no XML: entram como espaços
 // reservados (os mesmos do .aep) e são conectados depois pelo nome do arquivo.
 import { createProject, LAYER_FACTORIES } from './state.js';
+import { EFFECT_MAP } from './effects.js';
+import { uid } from './util.js';
 import { clone } from './anim.js';
 const setv = (p, v) => { p.value = clone(v); };
 
@@ -40,14 +42,15 @@ const AUD_EXT = /\.(mp3|wav|aiff?|m4a|aac|ogg|flac)$/i;
 const IMG_EXT = /\.(png|jpe?g|gif|bmp|tiff?|webp|psd|heic|exr)$/i;
 const baseName = (p) => decodeURIComponent(String(p || '').replace(/^file:\/\/(localhost)?/i, '')).split(/[\\/]/).pop();
 
-export function isTimelineXML(text) { return /<xmeml[\s>]|<fcpxml[\s>]/i.test(text.slice(0, 4000)); }
+export function isTimelineXML(text) { return /<xmeml[\s>]|<fcpxml[\s>]|<scene[\s>]/i.test(text.slice(0, 4000)); }
 
 /** Converte o XML em { project, media:[nomes], notes:[] }. */
 export function xmlToProject(text, fileName = 'Timeline') {
   const doc = parseXML(text);
   if (find(doc, 'fcpxml')) return fromFCPXML(doc, fileName);
   if (find(doc, 'xmeml')) return fromXMEML(doc, fileName);
-  throw new Error('não é um XML de linha do tempo (Premiere/FCP7 xmeml ou FCPXML).');
+  if (find(doc, 'scene')) return fromAlightMotion(doc, fileName);
+  throw new Error('não é um XML de projeto (Alight Motion / Gold Motion, Premiere/FCP7 xmeml ou FCPXML).');
 }
 
 function placeholder(proj, { file, kind, w, h, sourceStart, speed }) {
@@ -226,4 +229,132 @@ function fromFCPXML(doc, fileName) {
   proj.duration = Math.max(1, +dur.toFixed(3));
   proj.markers = findAll(seq, 'marker').map((mk) => +fcpTime(mk.attrs.start).toFixed(4));
   return { project: proj, media: [...new Set(layers.map((l) => l.props.aeMedia.file))], notes };
+}
+
+// ---------------------------------------------------------------- Alight Motion / Gold Motion (XML de projeto ou preset)
+// <scene width height totalTime fps> com camadas <shape>/<video>/<image>/<text>/<audio>/<embedScene>, tempos em ms,
+// <transform><location|scale|rotation|opacity|pivot value="…"> ou keyframes <kf t="0..1" v="…">, e
+// <effect id="com.alightcreative.effects.…"><property name value/></effect>.
+const AM_FX = [
+  [/shake|wiggle|jitter/, 'shake'], [/motion.?blur/, 'motionBlur'], [/zoom.?blur|radial.?blur/, 'radialBlur'], [/dir(ectional)?.?blur/, 'dirBlur'],
+  [/gaussian|blur/, 'blur'], [/glow/, 'glow'], [/chromatic|rgb.?split|split/, 'rgbSplit'], [/vignette/, 'vignette'], [/sharpen/, 'sharpen'],
+  [/hue|saturation/, 'hueSat'], [/contrast|brightness/, 'brightnessContrast'], [/exposure/, 'exposure'], [/color.?(tune|correct|grade|adjust)|colortune/, 'colorGrade'],
+  [/tint|colorize/, 'tint'], [/invert/, 'invert'], [/mirror/, 'mirror'], [/mosaic|pixel/, 'mosaic'], [/noise|grain/, 'noise'], [/wave|swing/, 'waveWarp'],
+  [/twirl|swirl/, 'twirl'], [/fish.?eye|bulge|lens/, 'bulge'], [/stroke|border|outline/, 'outline'], [/shadow/, 'dropShadow'], [/glitch/, 'glitch'],
+  [/flicker|strobe/, 'flicker'], [/posterize/, 'posterize'], [/vhs|retro/, 'vhs'], [/tile|repeat/, 'motionTile'], [/displace|turbulen/, 'turbulentDisplace'],
+];
+const amNum = (s) => String(s ?? '').split(',').map(Number).filter((x) => Number.isFinite(x));
+function amColor(s) {
+  const m = String(s || '').match(/#?([0-9a-f]{6,8})/i);
+  if (!m) return null;
+  const h = m[1].length === 8 ? m[1].slice(2) : m[1];
+  return [parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255, 1];
+}
+function amProp(el, name, conv, t0, dur) {
+  const p = kid(el, name);
+  if (!p) return null;
+  const kfs = kids(p, 'kf');
+  if (kfs.length) {
+    const ts = kfs.map((k) => num(k.attrs.t));
+    const norm01 = ts.every((x) => x >= 0 && x <= 1.0001);
+    return { keys: kfs.map((k) => ({ t: t0 + (norm01 ? num(k.attrs.t) * dur : num(k.attrs.t) / 1000), v: conv(amNum(k.attrs.v)), ease: /linear/i.test(k.attrs.e || '') ? 'linear' : 'easeInOut' })) };
+  }
+  const v = p.attrs.value ?? txt(p);
+  return v === '' ? null : { value: conv(amNum(v)) };
+}
+const setAP = (prop, v) => { if (!v) return; if (v.keys) { prop.keys = v.keys; prop.value = v.keys[0].v; } else prop.value = v.value; };
+
+// propriedade do Alight Motion → parâmetro do efeito (por nome), com a escala do parâmetro (0–1 do AM → % quando preciso)
+const AM_SYN = { strength: ['amount', 'intensity', 'strength', 'radius'], radius: ['radius', 'size', 'amount'], frequency: ['frequency', 'speed'], magnitude: ['amount', 'amplitude'], angle: ['angle', 'direction', 'rotation'], color: ['color', 'tint'] };
+function amEffect(type, fxEl, t0, dur) {
+  const def = EFFECT_MAP[type];
+  const fx = { id: uid('fx'), type, enabled: fxEl.attrs.enabled !== 'false', params: {} };
+  for (const pd of def.params) fx.params[pd.key] = { value: Array.isArray(pd.default) ? pd.default.slice() : pd.default, keys: [] };
+  for (const pr of kids(fxEl, 'property')) {
+    const n = String(pr.attrs.name || '').toLowerCase();
+    const cands = [n, ...(AM_SYN[n] || [])];
+    const pd = def.params.find((d) => d.kind !== 'hidden' && cands.some((c) => d.key.toLowerCase() === c || d.label.toLowerCase().includes(c)));
+    if (!pd) continue;
+    const conv = (raw) => {
+      if (pd.kind === 'color') return amColor(raw) || pd.default;
+      if (pd.kind === 'bool') return /true|1/.test(String(raw));
+      const v = amNum(raw);
+      if (pd.kind === 'point') return [v[0] ?? 0.5, v[1] ?? 0.5];
+      let x = v[0] ?? 0;
+      if (Math.abs(x) <= 1 && pd.max >= 50 && pd.kind === 'number') x *= 100;
+      return x;
+    };
+    const kfs = kids(pr, 'kf');
+    if (kfs.length) {
+      const norm01 = kfs.every((k) => num(k.attrs.t) <= 1.0001);
+      fx.params[pd.key] = { value: conv(kfs[0].attrs.v), keys: kfs.map((k) => ({ t: t0 + (norm01 ? num(k.attrs.t) * dur : num(k.attrs.t) / 1000), v: conv(k.attrs.v), ease: 'easeInOut' })) };
+    } else if (pr.attrs.value != null) fx.params[pd.key] = { value: conv(pr.attrs.value), keys: [] };
+  }
+  return fx;
+}
+
+function fromAlightMotion(doc, fileName) {
+  const scene = find(doc, 'scene');
+  const W = num(scene.attrs.width, 1080), H = num(scene.attrs.height, 1920);
+  const proj = createProject(W, H);
+  proj.name = scene.attrs.title || fileName;
+  proj.fps = num(scene.attrs.fps, 30) || 30;
+  const notes = [], media = new Set(), unsupported = new Set();
+  let dur = num(scene.attrs.totalTime, 0) / 1000;
+  const LAYER_TAGS = new Set(['shape', 'video', 'image', 'text', 'audio', 'embedScene', 'drawing', 'nullObj', 'camera']);
+  const build = (el, offset) => {
+    const out = [];
+    for (const c of el.kids) {
+      if (!LAYER_TAGS.has(c.name)) continue;
+      const st = num(c.attrs.startTime, 0) / 1000 + offset, en = num(c.attrs.endTime, num(scene.attrs.totalTime, 10000)) / 1000 + offset;
+      if (en <= st) continue;
+      let l;
+      if (c.name === 'text') {
+        l = LAYER_FACTORIES.text(proj);
+        l.props.text = txt(c, 'content') || c.attrs.text || c.attrs.label || 'Texto';
+        if (c.attrs.size) l.props.fontSize = num(c.attrs.size, l.props.fontSize);
+        if (c.attrs.font) l.props.fontFamily = `"${String(c.attrs.font).split('/').pop().replace(/\.(ttf|otf)$/i, '')}", sans-serif`;
+        const fc = amColor(kid(c, 'fillColor')?.attrs.value); if (fc) l.props.color = '#' + fc.slice(0, 3).map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+      } else if (c.name === 'embedScene') {
+        const inner = kid(c, 'scene') || c;
+        l = LAYER_FACTORIES.group(proj, build(inner, st));
+      } else if (c.name === 'video' || c.name === 'image' || c.name === 'audio') {
+        const file = baseName(c.attrs.src || c.attrs.media || c.attrs.label || c.name);
+        const kind = c.name === 'audio' ? 'audio' : c.name === 'image' ? 'image' : 'video';
+        l = placeholder(proj, { file, kind, w: num(c.attrs.width, W), h: num(c.attrs.height, H), sourceStart: num(c.attrs.mediaStartTime, 0) / 1000, speed: num(c.attrs.speed, 1) || 1 });
+        media.add(file);
+        l.name = `⚠ ${c.attrs.label || file}`;
+      } else if (c.name === 'shape' || c.name === 'drawing') {
+        const s = String(c.attrs.s || c.attrs.shape || '').toLowerCase();
+        l = s.includes('ellipse') || s.includes('circle') ? LAYER_FACTORIES.ellipse(proj) : LAYER_FACTORIES.rect(proj);
+        const fc = amColor(kid(c, 'fillColor')?.attrs.value || c.attrs.fillColor); if (fc && l.props) l.props.fill = '#' + fc.slice(0, 3).map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+      } else l = LAYER_FACTORIES.null ? LAYER_FACTORIES.null(proj) : LAYER_FACTORIES.solid(proj);
+      if (!l.name || l.name === 'Texto' || l.name === 'Grupo') l.name = c.attrs.label || l.name;
+      l.inPoint = +st.toFixed(4); l.outPoint = +en.toFixed(4);
+      const tr = kid(c, 'transform');
+      if (tr) {
+        const d = en - st;
+        setAP(l.transform.position, amProp(tr, 'location', (v) => [v[0] ?? W / 2, v[1] ?? H / 2], st, d));
+        setAP(l.transform.scale, amProp(tr, 'scale', (v) => [(v[0] ?? 1) * 100, (v[1] ?? v[0] ?? 1) * 100], st, d));
+        setAP(l.transform.rotation, amProp(tr, 'rotation', (v) => v[0] || 0, st, d));
+        setAP(l.transform.opacity, amProp(tr, 'opacity', (v) => (v[0] ?? 1) * 100, st, d));
+        setAP(l.transform.anchor, amProp(tr, 'pivot', (v) => [v[0] || 0, v[1] || 0], st, d));
+      }
+      if (c.attrs.hidden === 'true') l.visible = false;
+      for (const fxEl of kids(c, 'effect')) {
+        const id = String(fxEl.attrs.id || '').toLowerCase();
+        const hit = AM_FX.find(([re]) => re.test(id.replace(/^com\.alightcreative\.effects\./, '')));
+        if (!hit) { unsupported.add(id.replace(/^com\.alightcreative\.effects\./, '')); continue; }
+        l.effects.push(amEffect(hit[1], fxEl, st, en - st));
+      }
+      out.push(l);
+      dur = Math.max(dur, en);
+    }
+    // no Alight Motion a camada de cima vem por último no XML; no MotionFrame a primeira da lista fica em cima
+    return out.reverse();
+  };
+  proj.layers = build(scene, 0);
+  proj.duration = Math.max(1, +dur.toFixed(3));
+  if (unsupported.size) notes.push(`Efeitos do Alight Motion sem equivalente: ${[...unsupported].slice(0, 8).join(', ')}.`);
+  return { project: proj, media: [...media], notes, amEffects: true };
 }

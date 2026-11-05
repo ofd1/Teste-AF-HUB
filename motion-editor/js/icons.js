@@ -75,6 +75,7 @@ const P = {
   transition: '<rect x="3" y="5" width="8" height="14" rx="1.5"/><rect x="13" y="5" width="8" height="14" rx="1.5"/><path d="M9 12h6M13 10l2 2-2 2"/>',
   lens: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 4v4"/>',
   matte: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 16l12-12M8 20L20 8"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.8 3.8 5.8 3.8 9s-1.3 6.2-3.8 9c-2.5-2.8-3.8-5.8-3.8-9S9.5 5.8 12 3z"/>',
   minimize: '<path d="M6 9l6 6 6-6"/>',
 };
 // símbolos antigos → ícone
@@ -84,7 +85,7 @@ const GLYPH = {
   '✦': 'effects', '📈': 'graph', '✂': 'split', '✂︎': 'bgremove', '⧉': 'dup', '▲': 'up', '▼': 'down', '👁': 'eye', '◌': 'eyeOff', '🗑': 'trash', '✕': 'close', '◀': 'back',
   '📂': 'folder', '⏱': 'speed', '✨': 'sparkle', '❄': 'freeze', '⇆': 'reverse', '🔊': 'sound', '🎯': 'target', '▭': 'rect', '◯': 'ellipse', '■': 'solid', '🎥': 'camera',
   '✛': 'null', '⌖': 'tracker', '⇶': 'sequence', '⛶': 'max', '?': 'help', '⎘': 'copy', '📋': 'paste', '🔑': 'account', '⬇': 'download', 'ⓘ': 'info', '🔗': 'link', '🔤': 'font',
-  '↑': 'up', '↓': 'down', '⌨': 'keyboard', '⇄': 'xml', '✚': 'plus', '📂 ': 'folder', '💾': 'export', '❓': 'help', '🔁': 'reverse',
+  '↑': 'up', '↓': 'down', '⌨': 'keyboard', '⇄': 'xml', '🌐': 'globe', '✚': 'plus', '📂 ': 'folder', '💾': 'export', '❓': 'help', '🔁': 'reverse',
 };
 export function ico(name, cls = '') {
   const key = P[name] ? name : GLYPH[name];

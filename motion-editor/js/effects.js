@@ -20,6 +20,12 @@ import looksTools from './fx/looks-tools.js';
 import plugins6 from './fx/plugins6.js';
 
 export const EFFECTS = [...blurLight, ...color, ...extra, ...distort, ...stylize, ...motion, ...shatter, ...ai, ...more, ...topaz, ...plugins2, ...plugins3, ...plugins4, ...element3d, ...lut, ...plugins5, ...plugins6, ...looksTools];
+// Como no After Effects: escalas, amplitudes, deslocamentos, rotações e distorções aceitam valores negativos
+// (ex.: escala −100 espelha, amplitude negativa inverte o sentido). O controle deslizante vai de −máx a +máx.
+const SIGNED = /^(scale|scale[XYWH]|ampX|ampY|amp|amplitude|rotation|rot|zoom|drift|offset[XY]?|shift[XY]?|twist|bulge|distort|skew|stretch|speed|spin|swirl|lensDistort|curvature|wave|phase|evolution)$/;
+for (const e of EFFECTS) for (const p of e.params) {
+  if (p.kind === 'number' && p.min === 0 && p.max > 0 && SIGNED.test(p.key)) p.min = -p.max;
+}
 // Como no AE (Compositing Options): todo efeito que altera a imagem tem "Opacidade do efeito", animável.
 for (const e of EFFECTS) {
   if (e.render && !e.params.some((p) => p.key === 'fxOpacity')) {
