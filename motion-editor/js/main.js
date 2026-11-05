@@ -19,12 +19,12 @@ import { FxBrowser } from './fx-browser.js';
 import { findInstalled } from './plugins-installed.js';
 import { KeyTools } from './keytools.js';
 import { deleteKeys, animProps, setEase } from './keyframes.js';
-import { sourceTime } from './timing.js';
+import { sourceTime, ensureGroupTime } from './timing.js';
 import { exportDialog } from './exporter.js';
 import { getEffectDef } from './effects.js';
 import { modal, toast, pickFiles, storage } from './ui.js';
 import { formatTime, uid, deepClone, escapeHtml } from './util.js';
-import { putMedia, getMedia, pruneMedia } from './idb.js';
+import { putMedia, getMedia, pruneMedia, flushMedia, pendingMediaCount, ensurePersistentStorage } from './idb.js';
 import { saveFile, registerServiceWorker } from './platform.js';
 import { getGL } from './gl.js';
 import { TrackerPanel } from './tracker-panel.js';
@@ -542,6 +542,7 @@ async function replaceLayerMedia(layer) {
   const isAudio = f.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(f.name);
   const mediaId = uid('m');
   putMedia(mediaId, f);
+  layer.missing = false; // religa camada offline
   const src = URL.createObjectURL(f);
   const old = layer.props || {};
   const box = { width: old.width || old.aeMedia?.width || store.project.width, height: old.height || old.aeMedia?.height || store.project.height };
@@ -684,6 +685,7 @@ function addLayer(type) {
 }
 
 async function importMedia(files) {
+  ensurePersistentStorage();
   for (const f of files) {
     const isVideo = f.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|mkv)$/i.test(f.name);
     const isAudio = f.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(f.name);
@@ -754,10 +756,15 @@ async function relinkMedia(project) {
       if (l.type === 'audio') await loadAudio(l.props.src).catch(() => {});
       // vídeos importados antes do som existir no app: detecta e liga o áudio agora
       if (l.type === 'video' && l.props.hasAudio !== false) loadAudio(l.props.src).then(() => { if (!l.props.hasAudio) { l.props.hasAudio = true; if (l.props.volume == null) l.props.volume = 100; } }).catch(() => { l.props.hasAudio = false; });
-    } else l.missing = true;
+      l.missing = false;
+    } else l.missing = true; // fica no projeto como "mídia offline" (como no AE): dá para trocar por Substituir mídia
   }
-  for (const id of allMediaIds()) keep.add(id); // não apaga mídias de outros projetos
-  pruneMedia(keep);
+}
+
+/** Apaga só mídias que nenhum projeto usa (chamado ao excluir projeto). Na dúvida, não apaga nada. */
+async function cleanUnusedMedia() {
+  const ids = await allMediaIds();
+  if (ids) pruneMedia(ids);
 }
 
 // ------------------------------------------------------------------ projeto
@@ -775,7 +782,6 @@ async function openProject() {
     if (data.format?.startsWith('motionframe-preset') || data.preset || data.presets) { library.importFiles([f]); openSheet('presets'); return; }
     if (!Array.isArray(data.layers) || !data.width) throw new Error('arquivo não é um projeto');
     await relinkMedia(data);
-    data.layers = data.layers.filter((l) => !l.missing);
     store.load(data);
     updateTitle();
     layoutCanvas();
@@ -1198,7 +1204,8 @@ function trimLayer(side) {
   if (!l || t <= l.inPoint - 1e-6 && side === 'out' || t >= l.outPoint && side === 'in') return;
   if (side === 'in') {
     const ni = Math.max(0, Math.min(l.outPoint - 1 / fps, t));
-    if (l.type === 'video' || l.type === 'audio') { const rate = l.type === 'video' ? (l.props.speed ?? 1) : 1; l.props.sourceStart = Math.max(0, (l.props.sourceStart || 0) + (ni - l.inPoint) * rate); }
+    if (l.type === 'group') ensureGroupTime(l);
+    if (l.type === 'video' || l.type === 'audio' || l.type === 'group') { const rate = l.type === 'audio' ? 1 : (l.props.speed ?? 1); l.props.sourceStart = Math.max(0, (l.props.sourceStart || 0) + (ni - l.inPoint) * rate); }
     l.inPoint = ni;
   } else l.outPoint = Math.max(l.inPoint + 1 / fps, Math.min(store.project.duration, t));
   store.commit('structure');
@@ -1394,13 +1401,13 @@ function demoProject() {
 
 // ------------------------------------------------------------------ projetos e tela inicial (estilo Alight Motion)
 async function openProjectById(id) {
+  if (pendingMediaCount()) await flushMedia(); // mídia importada há pouco ainda gravando
   const data = await loadProjectDataAsync(id);
-  if (!data) { toast('Projeto não encontrado.', 'error'); home.render(); return; }
+  if (!data) { toast('Não consegui ler este projeto agora. Ele não foi apagado: tente abrir de novo.', 'error', 6000); home.render(); return; }
   data.id = id;
   await relinkMedia(data);
   const missing = flatLayers(data.layers).filter((l) => l.missing);
-  data.layers = data.layers.filter((l) => !l.missing);
-  if (missing.length) toast(`${missing.length} mídia(s) não encontrada(s) neste aparelho.`, 'warn');
+  if (missing.length) toast(`${missing.length} mídia(s) não encontrada(s) neste aparelho: as camadas continuam no projeto (marcadas como offline). Toque na camada › Substituir mídia para religar.`, 'warn', 8000);
   store.load(data);
   store.setTime(0);
   home.hide();
@@ -1574,6 +1581,7 @@ async function ensureSomeProject() {
 async function goHome() {
   setPlaying(false);
   clearTimeout(saveTimer);
+  if (pendingMediaCount()) { toast('Salvando os vídeos no aparelho…', 'info', 3000); await flushMedia(); }
   saveProjectData(store.project, projectThumb());
   closeSheet();
   home.show();
@@ -1581,6 +1589,7 @@ async function goHome() {
 
 const home = new HomeScreen({
   open: (id) => openProjectById(id),
+  afterDelete: () => cleanUnusedMedia(),
   create: () => createProjectFlow(),
   importProject: () => importProjectFile(),
   importAE: () => importAEFiles(),

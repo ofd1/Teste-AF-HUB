@@ -74,6 +74,38 @@ export function sourceTimeRaw(layer, t) {
   return start + local * rate;
 }
 
+/**
+ * Tempo do conteúdo de uma pré-comp (grupo) no tempo de composição t — como no AE:
+ * - mover a pré-comp na timeline leva o conteúdo junto (o conteúdo é relativo ao início dela);
+ * - aparar o começo não desloca o conteúdo (props.sourceStart, igual ao vídeo);
+ * - Velocidade (Twixtor) e Time Remap na pré-comp mudam o tempo de tudo que está dentro.
+ * As camadas de dentro guardam tempos "absolutos" de quando foram agrupadas; contentStart é esse ponto zero.
+ */
+export function ensureGroupTime(g) {
+  const p = g.props;
+  if (p.contentStart == null) { p.contentStart = g.inPoint; p.sourceStart = 0; } // grupos antigos: mesmo resultado de antes
+}
+export function groupContentTime(g, t) {
+  ensureGroupTime(g);
+  return g.props.contentStart + sourceTimeRaw(g, t);
+}
+export const groupHasTimeFx = (g) => !!(speedEffect(g) || remapEffect(g));
+
+/**
+ * Todas as camadas (inclusive de dentro das pré-comps) com o tempo local de cada uma no tempo de composição t
+ * e o fator de velocidade herdado das pré-comps (k). Camadas de pré-comp fora do intervalo recebem t = NaN.
+ */
+export function timedLayers(layers, t, k = 1, out = []) {
+  for (const l of layers || []) {
+    out.push({ l, t, k });
+    if (l.type === 'group') {
+      const on = t >= l.inPoint && t < l.outPoint;
+      timedLayers(l.props.layers, on ? groupContentTime(l, t) : NaN, on ? k * sourceRate(l, t) : k, out);
+    }
+  }
+  return out;
+}
+
 /** Velocidade instantânea da mídia (1 = normal) — usada como playbackRate na prévia. */
 export function sourceRate(layer, t) {
   const rm = remapEffect(layer);

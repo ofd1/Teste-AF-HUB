@@ -1,5 +1,5 @@
 // Gerenciador de mídia: imagens, vídeos (com dois decodificadores para frame blending) e sincronização.
-import { blendFrames, sourceRate, sourceTime, speedEffect, wantsInterp, vectorBlur, remapEffect, speedProp, dedupeOf } from './timing.js';
+import { blendFrames, sourceRate, sourceTime, speedEffect, wantsInterp, vectorBlur, remapEffect, speedProp, dedupeOf, timedLayers } from './timing.js';
 import { valueAt } from './anim.js';
 import { flatLayers } from './state.js';
 
@@ -135,8 +135,9 @@ function waitMeta(v) {
   });
 }
 
+/** Vídeos ativos no tempo t, cada um com o seu tempo local (dentro de pré-comps o tempo é o da pré-comp). */
 function activeVideos(project, t) {
-  return flatLayers(project.layers).filter((l) => l.type === 'video' && l.visible && t >= l.inPoint && t < l.outPoint && l.props.src);
+  return timedLayers(project.layers, t).filter(({ l, t: lt }) => l.type === 'video' && l.visible && lt >= l.inPoint && lt < l.outPoint && l.props.src);
 }
 
 /**
@@ -146,14 +147,16 @@ function activeVideos(project, t) {
  */
 export function prepare(project, t, { exact = false, playing = false } = {}) {
   const jobs = [];
-  const active = new Set(activeVideos(project, t).map((l) => l.id));
+  const active = new Set(activeVideos(project, t).map(({ l }) => l.id));
   for (const [id, e] of videos) {
     if (!active.has(id)) {
       if (!e.a.paused) e.a.pause();
       if (e.b && !e.b.paused) e.b.pause();
     }
   }
-  for (const l of activeVideos(project, t)) {
+  const t0 = t;
+  for (const { l, t: lt, k } of activeVideos(project, t0)) {
+    const t = lt; // tempo local da camada (pré-comps)
     // com cache pronto (Twixtor), a prévia lê quadros decodificados: sem busca, suave, inclusive em reverse
     if (!exact && cacheReady(l)) {
       const e = videos.get(l.id);
@@ -189,7 +192,7 @@ export function prepare(project, t, { exact = false, playing = false } = {}) {
       jobs.push(seek(e.a, fr.a));
       if (fr.b !== null) jobs.push(seek(e.b, fr.b));
     } else {
-      const rate = sourceRate(l, t);
+      const rate = sourceRate(l, t) * k; // pré-comp com velocidade multiplica
       const v = e.a;
       if (rate < 0.07 || rate > 16) {
         if (!v.paused) v.pause();
@@ -432,10 +435,10 @@ export function detectFps(src) {
  * A mídia do tempo t já está no quadro certo? (imagens carregadas, vídeos parados no quadro pedido ou com cache
  * decodificado). Só quadros "certos" entram no cache de RAM da prévia — nunca um quadro com vídeo ainda buscando.
  */
-export function mediaReady(project, t, playing = false) {
+export function mediaReady(project, t0, playing = false) {
   const fps = project.fps || 30;
-  for (const l of flatLayers(project.layers)) {
-    if (!l.visible || t < l.inPoint || t >= l.outPoint || !l.props?.src) continue;
+  for (const { l, t } of timedLayers(project.layers, t0)) {
+    if (!l.visible || !(t >= l.inPoint && t < l.outPoint) || !l.props?.src) continue; // (t = NaN: pré-comp fora do ar)
     if (l.type === 'image') { const im = images.get(l.props.src); if (!im || !im.complete || !im.naturalWidth) return false; }
     else if (l.type === 'video') {
       if (cacheReady(l)) continue;
@@ -454,9 +457,9 @@ export function mediaReady(project, t, playing = false) {
  * Dá para desenhar o quadro agora sem buracos? (todos os vídeos ativos com quadro decodificado e sem busca em
  * andamento, imagens carregadas). Se não der, a prévia segura o último quadro bom em vez de piscar preto.
  */
-export function framesDrawable(project, t) {
-  for (const l of flatLayers(project.layers)) {
-    if (!l.visible || t < l.inPoint || t >= l.outPoint || !l.props?.src) continue;
+export function framesDrawable(project, t0) {
+  for (const { l, t } of timedLayers(project.layers, t0)) {
+    if (!l.visible || !(t >= l.inPoint && t < l.outPoint) || !l.props?.src) continue; // (t = NaN: pré-comp fora do ar)
     if (l.type === 'image') { const im = images.get(l.props.src); if (im && !im.complete) return false; }
     else if (l.type === 'video') {
       if (cacheReady(l)) continue;

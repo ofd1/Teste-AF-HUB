@@ -3,7 +3,7 @@
 import { storage, modal, toast } from './ui.js';
 import { escapeHtml, uid } from './util.js';
 import { flatLayers } from './state.js';
-import { putMedia, getMedia } from './idb.js';
+import { putMedia, getMedia, deleteMedia } from './idb.js';
 
 const INDEX = 'motionframe.projects.v1';
 const KEY = (id) => `motionframe.project.${id}`;
@@ -28,7 +28,9 @@ export function saveProjectData(p, thumb) {
   if (!storage.set(KEY(p.id), data)) {
     // projeto grande (ex.: .aep com muitos keyframes): vai para o IndexedDB, que tem muito mais espaço
     putMedia(`__prj_${p.id}`, JSON.stringify(data)).then((ok) => { if (!ok) toast('Pouco espaço no aparelho para salvar o projeto.', 'warn'); });
-    storage.set(KEY(p.id), { idb: true, id: p.id, name: p.name, width: p.width, height: p.height, fps: p.fps, duration: p.duration, layers: [] });
+    // resumo no índice: guarda a lista de mídias usadas, senão a limpeza achava que ninguém usava esses vídeos e os apagava
+    const mediaIds = [...new Set(flatLayers(p.layers).map((l) => l.props?.mediaId).filter(Boolean))];
+    storage.set(KEY(p.id), { idb: true, id: p.id, name: p.name, width: p.width, height: p.height, fps: p.fps, duration: p.duration, layers: [], mediaIds });
   }
   const list = storage.get(INDEX, []);
   const i = list.findIndex((x) => x.id === p.id);
@@ -42,21 +44,26 @@ export function loadProjectData(id) { return storage.get(KEY(id), null); }
 /** Igual ao loadProjectData, mas busca no IndexedDB quando o projeto é grande demais para o localStorage. */
 export async function loadProjectDataAsync(id) {
   const d = loadProjectData(id);
-  if (d?.idb) { try { const raw = await getMedia(`__prj_${id}`); if (raw) return JSON.parse(typeof raw === 'string' ? raw : await raw.text()); } catch { /* ok */ } }
+  if (d?.idb) {
+    try { const raw = await getMedia(`__prj_${id}`); if (raw) return JSON.parse(typeof raw === 'string' ? raw : await raw.text()); } catch { /* ok */ }
+    return null; // nunca abre o resumo vazio (o salvamento automático apagaria a edição)
+  }
   return d;
 }
 
 export function deleteProject(id) {
   try { localStorage.removeItem(KEY(id)); } catch { /* ok */ }
+  deleteMedia(`__prj_${id}`);
   saveIndex(storage.get(INDEX, []).filter((x) => x.id !== id));
 }
 
 /** Todas as mídias usadas por algum projeto (para não apagar arquivos de outros projetos). */
-export function allMediaIds() {
+export async function allMediaIds() {
   const ids = new Set();
   for (const e of storage.get(INDEX, [])) {
-    const p = loadProjectData(e.id);
-    if (p) for (const l of flatLayers(p.layers || [])) if (l.props?.mediaId) ids.add(l.props.mediaId);
+    const p = await loadProjectDataAsync(e.id);
+    if (!p) { const stub = loadProjectData(e.id); if (stub?.idb && !stub.mediaIds) return null; for (const m of stub?.mediaIds || []) ids.add(m); continue; } // sem como saber: não limpa nada
+    for (const l of flatLayers(p.layers || [])) if (l.props?.mediaId) ids.add(l.props.mediaId);
   }
   return ids;
 }
@@ -133,7 +140,7 @@ export class HomeScreen {
     } else if (res === 'export' && p) this.hooks.exportJSON?.(p);
     else if (res === 'del') {
       const ok = await modal('Excluir projeto', `<p>Excluir “${escapeHtml(e.name)}”? Isso não pode ser desfeito.</p>`, [{ label: 'Cancelar', value: false }, { label: 'Excluir', danger: true, value: true }]);
-      if (ok) { deleteProject(id); toast('Projeto excluído.', 'ok'); }
+      if (ok) { deleteProject(id); toast('Projeto excluído.', 'ok'); this.hooks.afterDelete?.(); }
     }
     this.render();
   }

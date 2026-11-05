@@ -448,6 +448,13 @@ function buildLayers(parsed, comp, proj, ctx, offset = 0, depth = 0) {
       for (const fx of pre.effects) layer.effects.push(createEffectInstance(fx.type, fx.params, offset + l.startTime, { ...(fx.label ? { label: fx.label } : {}), ...(fx.matchName ? { matchName: fx.matchName } : {}), ...(fx.defs ? { defs: fx.defs } : {}) }));
       for (const e of pre.report.effects) if (e.status === 'unsupported') ctx.unsupported.add(e.name || e.matchName);
     }
+    if (isGroup) {
+      // pré-comp do AE: o conteúdo começa no Start Time da camada; time stretch vira velocidade; Time Remap vira o efeito
+      const st0 = offset + l.startTime, sk = 1 / (l.stretch || 1);
+      layer.props.contentStart = st0; layer.props.speed = sk; layer.props.sourceStart = (layer.inPoint - st0) * sk;
+      const trm = propOf(l, 'ADBE Time Remapping');
+      if (trm?.keyframes?.length >= 2) layer.effects.unshift(createEffectInstance('timeRemap', { time: toAnim(trm, (v) => v[0] || 0, 0, st0), frameBlend: false }, 0));
+    }
     out.push(layer);
   }
   // parentesco: o id da camada no AE → id da camada no MotionFrame (mesma composição)

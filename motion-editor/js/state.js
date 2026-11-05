@@ -1,6 +1,6 @@
 import { anim } from './anim.js';
 import { uid, deepClone } from './util.js';
-import { sourceTime } from './timing.js';
+import { sourceTime, ensureGroupTime } from './timing.js';
 import { migrateTopazFx } from './fx/topaz.js';
 
 export const RESOLUTIONS = {
@@ -200,6 +200,11 @@ export class Store {
     copy.id = uid('ly');
     copy.effects.forEach((fx) => { fx.id = uid('fx'); });
     if (l.type === 'video') copy.props.sourceStart = sourceTime(l, t);
+    if (l.type === 'group') {
+      ensureGroupTime(l); copy.props.contentStart = l.props.contentStart; copy.props.sourceStart = sourceTime(l, t);
+      const reid = (ls) => { for (const c of ls || []) { c.id = uid('ly'); c.effects?.forEach((fx) => { fx.id = uid('fx'); }); reid(c.props?.layers); } };
+      reid(copy.props.layers); // camadas de dentro da cópia com ids próprios
+    }
     if (l.type === 'audio') copy.props.sourceStart = (l.props.sourceStart || 0) + (t - l.inPoint);
     copy.inPoint = t;
     l.outPoint = t;

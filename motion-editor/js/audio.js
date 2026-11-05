@@ -1,6 +1,6 @@
 // Áudio: camadas de música e o som dos vídeos, com reprodução sincronizada (WebAudio), forma de onda e mixagem offline.
 import { flatLayers } from './state.js';
-import { speedEffect } from './timing.js';
+import { speedEffect, groupHasTimeFx, ensureGroupTime } from './timing.js';
 const buffers = new Map(); // src -> AudioBuffer
 const peaksCache = new Map();
 let ctx = null;
@@ -59,8 +59,30 @@ export function videoAudioActive(l) {
   return l.type === 'video' && l.props.hasAudio && !speedEffect(l) && !l.effects.some((fx) => fx.enabled && fx.type === 'timeRemap');
 }
 
+/**
+ * Camadas com som, já no tempo da composição: o som de dentro de uma pré-comp acompanha a pré-comp (mover/aparar),
+ * como no AE. Pré-comp com Velocidade/Time Remap fica muda (o som não acompanha o remapeamento, igual ao vídeo).
+ */
 function audioLayers(project) {
-  return flatLayers(project.layers).filter((l) => (l.type === 'audio' || videoAudioActive(l)) && l.visible && !l.props.muted && buffers.has(l.props.src) && (l.props.volume ?? 100) > 0);
+  const out = [];
+  const walk = (layers, shift, lo, hi) => {
+    for (const l of layers || []) {
+      if (l.type === 'group') {
+        if (!l.visible || groupHasTimeFx(l)) continue;
+        ensureGroupTime(l);
+        walk(l.props.layers, shift + l.inPoint - l.props.contentStart - (l.props.sourceStart || 0), Math.max(lo, l.inPoint + shift), Math.min(hi, l.outPoint + shift));
+        continue;
+      }
+      if (!((l.type === 'audio' || videoAudioActive(l)) && l.visible && !l.props.muted && buffers.has(l.props.src) && (l.props.volume ?? 100) > 0)) continue;
+      if (shift === 0 && lo === -Infinity && hi === Infinity) { out.push(l); continue; }
+      const i0 = l.inPoint + shift, i1 = Math.max(i0, lo), o1 = Math.min(l.outPoint + shift, hi);
+      if (o1 <= i1) continue;
+      const rate = l.type === 'video' ? (l.props.speed ?? 1) : 1;
+      out.push({ type: l.type, id: l.id, inPoint: i1, outPoint: o1, props: { ...l.props, sourceStart: (l.props.sourceStart || 0) + (i1 - i0) * rate } });
+    }
+  };
+  walk(project.layers, 0, -Infinity, Infinity);
+  return out;
 }
 
 /** Volume com fade in/out (automação de ganho). t0 = instante do contexto em que a camada começa a tocar. */

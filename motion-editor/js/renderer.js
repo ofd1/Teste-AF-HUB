@@ -6,7 +6,7 @@ import { EFFECT_MAP, makeCanvas } from './effects.js';
 import { getGL } from './gl.js';
 import { getImage, videoFrames } from './media.js';
 import { computeFlow, interpWithFlow, interpBidirectional, flowMotionBlur } from './flow.js';
-import { layerTime, vectorBlur, sourceRate } from './timing.js';
+import { layerTime, vectorBlur, sourceRate, groupContentTime, groupHasTimeFx, speedEffect, remapEffect } from './timing.js';
 import { localMatrix, cameraFor, apply as apply3, mul as mul4, invert as inv4, dofBlur } from './three-d.js';
 
 const contentCanvases = new Map();
@@ -352,8 +352,20 @@ function renderLayerImage(layer, t, scale0, extra) {
 
   let W = Math.ceil(w * scale + pad * 2), H = Math.ceil(h * scale + pad * 2);
   if (!Number.isFinite(W) || !Number.isFinite(H) || W < 1 || H < 1) { W = Math.max(1, Math.ceil(w * scale) || 1); H = Math.max(1, Math.ceil(h * scale) || 1); }
-  const vf = layer.type === 'video' ? videoFrames(layer, lt, project?.fps || 30, renderOpts.final && !extra?.offTime) : null;
-  const paint = (id, source) => {
+  let vf = layer.type === 'video' ? videoFrames(layer, lt, project?.fps || 30, renderOpts.final && !extra?.offTime) : null;
+  // pré-comp: o conteúdo segue o tempo da pré-comp (mover/aparar/velocidade/Time Remap, como no AE)
+  let gtA = t, gtB = t;
+  if (layer.type === 'group') {
+    const ct = groupContentTime(layer, t);
+    gtA = gtB = ct;
+    const tfx = groupHasTimeFx(layer) ? (speedEffect(layer) || remapEffect(layer)) : null;
+    const blend = tfx && (tfx.params.frameBlend?.value ?? true);
+    if (blend) { // câmera lenta na pré-comp: quadro intermediário por fluxo óptico entre dois quadros do conteúdo (como o Twixtor)
+      const f0 = Math.floor(ct * fps + 1e-6) / fps, fr = (ct - f0) * fps;
+      if (fr > 0.02 && fr < 0.98) { gtA = f0; gtB = f0 + 1 / fps; vf = { a: null, b: true, f: fr }; }
+    }
+  }
+  const paint = (id, source, tt = gtA) => {
     const canvas = poolCanvas(id, W, H);
     const cx = canvas.getContext('2d');
     cx.setTransform(1, 0, 0, 1, 0, 0);
@@ -361,7 +373,7 @@ function renderLayerImage(layer, t, scale0, extra) {
     if (layer.type === 'group') {
       // grupo (pré-composição): desenha as camadas filhas como uma composição própria
       cx.setTransform(1, 0, 0, 1, pad, pad);
-      drawLayerList(cx, layer.props.layers || [], t, scale, fps);
+      drawLayerList(cx, layer.props.layers || [], tt, scale, fps);
       return canvas;
     }
     cx.translate(pad, pad);
@@ -371,13 +383,15 @@ function renderLayerImage(layer, t, scale0, extra) {
     return canvas;
   };
   const canvas = paint(layer.id, vf?.a);
+  // pré-comp em câmera lenta: o 2º quadro é desenhado já (as camadas de dentro usam a GPU e liberariam a textura do 1º)
+  const canvasB = layer.type === 'group' && vf?.b ? paint(`${layer.id}#b`, null, gtB) : null;
 
   const gl = evaluated.length || vf?.b ? getGL() : null;
   if (!gl) {
     if (vf?.b) { // sem WebGL: mistura simples
       const cx = canvas.getContext('2d');
       cx.globalAlpha = vf.f;
-      cx.drawImage(paint(`${layer.id}#b`, vf.b), 0, 0);
+      cx.drawImage(canvasB || paint(`${layer.id}#b`, vf.b, gtB), 0, 0);
       cx.globalAlpha = 1;
     }
     return { src: canvas, sw: W, sh: H, pad, w, h, k: kAll };
@@ -386,7 +400,7 @@ function renderLayerImage(layer, t, scale0, extra) {
   let tex = gl.upload(canvas);
   if (vf?.b) {
     // Twixtor: quadro intermediário por fluxo óptico
-    const texB = gl.upload(paint(`${layer.id}#b`, vf.b));
+    const texB = gl.upload(canvasB || paint(`${layer.id}#b`, vf.b, gtB));
     try {
       // modelo do Topaz Frame Interpolation: Apollo/Aion = fluxo nos dois sentidos, Chronos = um sentido, Fast = fluxo leve
       const fim = layer.effects.find((f) => f.enabled && f.type === 'topazFI')?.params.fiModel?.value | 0;
@@ -630,7 +644,7 @@ function parentWorld(layer, t) {
   const p = layer.parent ? layerIndex.get(layer.parent) : null;
   return p ? worldMatrix(p, t) : null;
 }
-const isActive = (l, t) => l.visible && t >= l.inPoint && t < l.outPoint;
+const isActive = (l, t) => l.visible && !l.missing && t >= l.inPoint && t < l.outPoint; // mídia offline (não achada no aparelho) não desenha
 function setupCamera(layers, t, W, H) {
   if (!layers.some((l) => l.threeD && isActive(l, t))) return null;
   const cam = layers.find((l) => l.type === 'camera' && isActive(l, t)) || null;

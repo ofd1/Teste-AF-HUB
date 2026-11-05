@@ -1,5 +1,6 @@
 // Timeline no estilo After Effects: coluna de camadas, régua de tempo e indicador de tempo (CTI) azul arrastável.
 // A rolagem é livre (não muda o tempo), então nunca "puxa de volta". Pinça/Ctrl+roda dão zoom.
+import { ensureGroupTime } from './timing.js';
 import { sortKeys } from './anim.js';
 import { resolveProp } from './state.js';
 import { getEffectDef } from './effects.js';
@@ -183,7 +184,7 @@ export class Timeline {
           <button class="eye" data-act="eye" aria-label="Visibilidade">${layer.visible ? '◉' : '○'}</button>
           <span class="lbl" style="background:${color}"></span>
           <span class="num">${num}</span>
-          <span class="nm">${escapeHtml(layer.name)}</span>
+          <span class="nm">${layer.missing ? '<span title="Mídia offline: não encontrada neste aparelho. Use Substituir mídia." style="color:#f5a623">⚠ </span>' : ''}${escapeHtml(layer.name)}</span>
         </div>
         <div class="tl-track" style="width:${trackW}px">
           <div class="clip" data-act="clip" style="left:${left}px;width:${width}px;--c:${color};${thumb ? `background-image:url('${thumb}')` : ''}">
@@ -453,8 +454,9 @@ export class Timeline {
         for (const { prop } of animProps(layer)) for (const k of prop.keys) k.t = +(k.t + delta).toFixed(5);
       } else if (act === 'trim-in') {
         let ni = Math.max(0, Math.min(layer.outPoint - 1 / fps, this.snap(frame(in0 + dt), candidates)));
-        if (layer.type === 'video' || layer.type === 'audio') {
-          const rate = layer.type === 'video' ? (layer.props.speed ?? 1) : 1;
+        if (layer.type === 'group') ensureGroupTime(layer);
+        if (layer.type === 'video' || layer.type === 'audio' || layer.type === 'group') {
+          const rate = layer.type === 'audio' ? 1 : (layer.props.speed ?? 1);
           if (src0 + (ni - in0) * rate < 0) ni = in0 - src0 / rate;
           layer.props.sourceStart = Math.max(0, src0 + (ni - in0) * rate);
         }
