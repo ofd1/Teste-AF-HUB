@@ -42,3 +42,11 @@ export async function importAexFiles(files, onProgress = () => {}) {
 
 export function removePlugin(id) { cache = installedPlugins().filter((p) => p.id !== id); save(); }
 export function clearPlugins() { cache = []; save(); }
+
+const norm = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+/** Plugin instalado com esse match name (ou nome) — usado na importação de .ffx. */
+export function findInstalled(matchName, name) {
+  const mn = norm(matchName), nm = norm(name);
+  const list = installedPlugins();
+  return (mn && list.find((p) => p.effect && norm(p.matchName) === mn)) || (nm && list.find((p) => p.effect && !p.matchName && norm(p.name) === nm)) || null;
+}

@@ -6,7 +6,7 @@ import { ffxToPreset } from './presets.js';
 import { TopazPanel } from './topaz-panel.js';
 import { setBgListener, ensureBgModel, bgStatus } from './bgremove.js';
 import { setGLLostListener, glLost } from './gl.js';
-import { createEffectInstance } from './presets.js';
+import { createEffectInstance, setPluginLookup, upgradeLayerEffects } from './presets.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
 import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, detectFps, mediaReady, framesDrawable } from './media.js';
 import { loadAudio, playAudio, stopAudio, detectBeats } from './audio.js';
@@ -16,6 +16,7 @@ import { Timeline } from './timeline.js';
 import { Inspector } from './inspector.js';
 import { Library } from './library.js';
 import { FxBrowser } from './fx-browser.js';
+import { findInstalled } from './plugins-installed.js';
 import { KeyTools } from './keytools.js';
 import { deleteKeys, animProps, setEase } from './keyframes.js';
 import { sourceTime } from './timing.js';
@@ -482,6 +483,17 @@ const library = new Library(document.getElementById('library'), store, {
   onApplied: () => { if (!desktop.matches) closeSheet(); },
   openAEP: (f) => { closeSheet(); return openAEPFlow(f); }, // .aep escolhido em Presets abre como projeto
   importAex: (files) => { openSheet('browser'); return fxBrowser.importAex(files); }, // .aex vira efeito em Efeitos › Meus plugins
+});
+// Plugins .aex instalados: a importação de .ffx usa esses plugins, e quem já estava como "Controles importados"
+// (no projeto aberto e nos presets da biblioteca) é convertido de novo quando um plugin novo é instalado.
+setPluginLookup(findInstalled);
+window.addEventListener('aex-plugins-changed', () => {
+  let n = 0;
+  const walk = (layers) => { for (const l of layers || []) { if (l.effects) n += upgradeLayerEffects(l); walk(l.props?.layers); } };
+  walk(store.project?.layers);
+  const np = library.upgradePlugins();
+  if (n) store.commit('structure');
+  if (n || np) toast(`Plugins instalados: ${n ? `${n} efeito(s) do projeto` : ''}${n && np ? ' e ' : ''}${np ? `${np} preset(s) da biblioteca` : ''} agora usam o efeito equivalente.`, 'ok', 6000);
 });
 const fxBrowser = new FxBrowser(document.getElementById('fxBrowser'), (type, extra = null) => {
   let layer = store.layer();

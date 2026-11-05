@@ -2,7 +2,7 @@
 import { parseFFX, retimeFFX } from './ffx.js';
 import { parseCube, encodeCube, haldPixels, haldToCube, haldIsNeutral, HALD_SIZE } from './fx/lut.js';
 import { frameifyToPreset } from './frameify.js';
-import { BUILTIN_PRESETS, rgxToParsed, ffxToPreset, applyPreset, layerToPreset, serializePreset, parsePresetJSON } from './presets.js';
+import { upgradeGenericEffects, BUILTIN_PRESETS, rgxToParsed, ffxToPreset, applyPreset, layerToPreset, serializePreset, parsePresetJSON } from './presets.js';
 import { LAYER_FACTORIES } from './state.js';
 import { sourceTimeRaw } from './timing.js';
 import { modal, toast, pickFiles, storage } from './ui.js';
@@ -70,6 +70,14 @@ export class Library {
     const slim = this.user.map((p) => (p.report ? { ...p, report: { ...p.report, effects: (p.report.effects || []).map(({ params, ...e }) => e), matchNames: undefined } } : p));
     const ok = await putMedia('__library__', JSON.stringify(slim));
     if (!ok && !storage.set(STORE_KEY, slim) && !quiet) toast('Não foi possível salvar a biblioteca neste aparelho (armazenamento cheio).', 'warn');
+  }
+
+  /** Presets com "Controles importados" de plugins que agora estão instalados → convertidos de novo. */
+  upgradePlugins() {
+    let n = 0;
+    for (const p of this.user) if (p.effects?.some((e) => e.type === 'generic' && e.rawFx) && upgradeGenericEffects(p.effects)) n++;
+    if (n) { this.save(true); this.render(); }
+    return n;
   }
 
   all() { return [...this.user, ...this.free]; } // só os seus presets (importados/salvos) — sem presets prontos

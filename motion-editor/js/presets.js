@@ -229,33 +229,34 @@ export function rgxToParsed(json, fileName = 'Look') {
   };
 }
 
-export function ffxToPreset(parsed) {
-  const preset = {
-    id: uid('ffx'), name: parsed.name || 'Preset FFX', category: 'Importado (FFX)', source: 'ffx', anchor: 'playhead',
-    transform: {}, effects: [],
-    report: { format: parsed.format, effects: [], properties: [], warnings: parsed.warnings.slice(), matchNames: parsed.matchNames },
-  };
 
-  for (const fx of parsed.effects) {
-    const m = matchEffect(fx.matchName, fx.name);
-    const rep = {
-      matchName: fx.matchName, name: fx.name || fx.matchName, status: 'unsupported', mapped: [],
-      params: fx.params.map((p) => ({ name: p.name, type: p.type, value: p.value, keys: p.keyframes.length })),
-    };
-    const raw = (name) => fx.params.find((p) => (p.name || '').toLowerCase().trim() === name)?.value?.[0] ?? null;
-    if (m && m.rule.expand) {
+// ---- plugins .aex instalados pelo usuário (aba Efeitos › Meus plugins)
+let pluginLookup = null;
+/** fn(matchName, name) → plugin instalado { name, effect, set } ou null. */
+export function setPluginLookup(fn) { pluginLookup = fn; }
+function pluginMatch(fx) {
+  const p = pluginLookup?.(fx.matchName, fx.name);
+  if (!p || !p.effect || !EFFECT_MAP[p.effect]) return null;
+  return { p, m: { def: EFFECT_MAP[p.effect], rule: { vendor: p.category || 'Plugin instalado (.aex)', plugin: p.name, set: p.set || {} }, kind: 'plugin' } };
+}
+
+/** Converte um efeito do .ffx com a regra encontrada → lista de efeitos do MotionFrame. */
+function mapFfxEffect(fx, m, rep, plug = null) {
+  const out = [];
+  const raw = (name) => fx.params.find((p) => (p.name || '').toLowerCase().trim() === name)?.value?.[0] ?? null;
+  if (m.rule.expand) {
       // regra que gera um ou mais efeitos a partir do efeito original (ex.: Magic Bullet Looks)
       const list = m.rule.expand(fx, raw);
-      for (const e of list) preset.effects.push({ type: e.type, label: e.label, matchName: fx.matchName, params: e.params });
+      for (const e of list) out.push({ type: e.type, label: e.label, matchName: fx.matchName, params: e.params });
       rep.status = m.kind;
       rep.vendor = m.rule.vendor;
       rep.plugin = m.rule.plugin;
       rep.mappedTo = list.map((e) => getEffectDef(e.type).label).join(' + ');
       rep.mapped = list.map((e) => e.note).filter(Boolean);
       if (!rep.mapped.length) rep.mapped = ['valores convertidos'];
-    } else if (m) {
+  } else {
       const { def, rule } = m;
-      const inst = { type: def.type, label: fx.name && fx.name !== fx.matchName ? fx.name : undefined, matchName: fx.matchName, params: {} };
+      const inst = { type: def.type, label: (fx.name && fx.name !== fx.matchName ? fx.name : undefined) ?? plug?.name, matchName: fx.matchName, params: {} };
       const used = new Set();
       for (const pd of def.params) {
         const mapping = rule.map?.[pd.key];
@@ -275,12 +276,65 @@ export function ffxToPreset(parsed) {
       rep.vendor = rule.vendor;
       rep.plugin = rule.plugin;
       rep.mappedTo = def.label;
-      preset.effects.push(inst);
+      out.push(inst);
       for (const e of rule.extra?.(raw) || []) {
-        preset.effects.push({ type: e.type, matchName: fx.matchName, params: e.params });
+        out.push({ type: e.type, matchName: fx.matchName, params: e.params });
         rep.mappedTo += ` + ${getEffectDef(e.type).label}`;
       }
-    } else {
+  }
+  return out;
+}
+
+/** O mesmo para os efeitos já aplicados numa camada (instâncias com keyframes). */
+export function upgradeLayerEffects(layer) {
+  let n = 0;
+  for (let i = 0; i < layer.effects.length; i++) {
+    const e = layer.effects[i];
+    if (e?.type !== 'generic' || !e.rawFx) continue;
+    const pm = pluginMatch(e.rawFx);
+    const m = matchEffect(e.rawFx.matchName, e.rawFx.name) || pm?.m;
+    if (!m) continue;
+    const list = mapFfxEffect(e.rawFx, m, { mapped: [] }, pm?.p).filter((x) => EFFECT_MAP[x.type])
+      .map((x) => { const inst = createEffectInstance(x.type, x.params, e.ffxT0 ?? 0, { ...(x.label ? { label: x.label } : {}), matchName: x.matchName }); inst.enabled = e.enabled !== false; return inst; });
+    layer.effects.splice(i, 1, ...list); i += list.length - 1; n++;
+  }
+  return n;
+}
+
+/** Depois de instalar plugins: troca os "Controles importados" que agora têm equivalente. Devolve quantos mudaram. */
+export function upgradeGenericEffects(effects) {
+  let n = 0;
+  for (let i = 0; i < effects.length; i++) {
+    const e = effects[i];
+    if (e?.type !== 'generic' || !e.rawFx) continue;
+    const pm = pluginMatch(e.rawFx);
+    const m = matchEffect(e.rawFx.matchName, e.rawFx.name) || pm?.m;
+    if (!m) continue;
+    const rep = { mapped: [] };
+    const list = mapFfxEffect(e.rawFx, m, rep, pm?.p).map((x) => ({ ...x, enabled: e.enabled !== false, ...(e.id ? { id: e.id } : {}) }));
+    effects.splice(i, 1, ...list); i += list.length - 1; n++;
+  }
+  return n;
+}
+
+export function ffxToPreset(parsed) {
+  const preset = {
+    id: uid('ffx'), name: parsed.name || 'Preset FFX', category: 'Importado (FFX)', source: 'ffx', anchor: 'playhead',
+    transform: {}, effects: [],
+    report: { format: parsed.format, effects: [], properties: [], warnings: parsed.warnings.slice(), matchNames: parsed.matchNames },
+  };
+
+  for (const fx of parsed.effects) {
+    const pm = pluginMatch(fx);
+    const me = matchEffect(fx.matchName, fx.name);
+    const m = me && me.kind !== 'approx' ? me : (pm?.m || me || null); // plugin instalado vence palpite por palavra-chave
+    const rep = {
+      matchName: fx.matchName, name: fx.name || fx.matchName, status: 'unsupported', mapped: [],
+      params: fx.params.map((p) => ({ name: p.name, type: p.type, value: p.value, keys: p.keyframes.length })),
+    };
+    if (pm) rep.installedPlugin = pm.p.name;
+    if (m) preset.effects.push(...mapFfxEffect(fx, m, rep, pm?.p));
+    else {
       const defs = [];
       const params = {};
       fx.params.forEach((p, i) => {
@@ -293,7 +347,8 @@ export function ffxToPreset(parsed) {
         const v = convertProp(p, d.kind);
         if (v !== undefined) params[key] = v;
       });
-      preset.effects.push({ type: 'generic', label: fx.name || fx.matchName, matchName: fx.matchName, defs, params });
+      // guarda o efeito original: se o plugin for instalado depois (.aex), o efeito é convertido de novo
+      preset.effects.push({ type: 'generic', label: fx.name || fx.matchName, matchName: fx.matchName, defs, params, rawFx: { matchName: fx.matchName, name: fx.name, params: fx.params } });
     }
     preset.report.effects.push(rep);
   }
@@ -429,6 +484,7 @@ export function applyPreset(layer, preset, playhead, opts = {}) {
       ...(fx.label ? { label: fx.label } : {}),
       ...(fx.matchName ? { matchName: fx.matchName } : {}),
       ...(fx.defs ? { defs: fx.defs } : {}),
+      ...(fx.rawFx ? { rawFx: fx.rawFx, ffxT0: t0 } : {}),
     }));
   }
   return t0;
@@ -456,6 +512,7 @@ export function layerToPreset(layer, name) {
     ...(fx.label ? { label: fx.label } : {}),
     ...(fx.matchName ? { matchName: fx.matchName } : {}),
     ...(fx.defs ? { defs: fx.defs } : {}),
+    ...(fx.rawFx ? { rawFx: fx.rawFx } : {}),
     params: Object.fromEntries(Object.entries(fx.params).map(([key, p]) => [key, p.keys.length ? { keys: rel(p.keys) } : p.value])),
   }));
   const preset = { id: uid('user'), name, category: 'Meus presets', source: 'user', anchor: 'playhead', transform, effects };
