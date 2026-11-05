@@ -16,6 +16,7 @@ import { Timeline } from './timeline.js';
 import { Inspector } from './inspector.js';
 import { Library } from './library.js';
 import { FxBrowser } from './fx-browser.js';
+import { ComposerPanel } from './composer.js';
 import { findInstalled } from './plugins-installed.js';
 import { KeyTools } from './keytools.js';
 import { deleteKeys, animProps, setEase } from './keyframes.js';
@@ -336,7 +337,7 @@ overlay.addEventListener('pointercancel', endPointer);
 // ------------------------------------------------------------------ sheet (painel inferior / lateral)
 const sheet = document.getElementById('sheet');
 const sheetTitle = document.getElementById('sheetTitle');
-const TITLES = { effects: 'Efeitos da camada', browser: 'Adicionar efeito', props: 'Propriedades', presets: 'Presets', keys: 'Keyframes e gráfico', topaz: 'Topaz', add: 'Adicionar camada', tracker: 'Tracker' };
+const TITLES = { composer: 'Composer · animações prontas', effects: 'Efeitos da camada', browser: 'Adicionar efeito', props: 'Propriedades', presets: 'Presets', keys: 'Keyframes e gráfico', topaz: 'Topaz', add: 'Adicionar camada', tracker: 'Tracker' };
 const desktop = window.matchMedia('(min-width: 1100px)');
 const appEl = document.querySelector('.app');
 let sheetPane = null;
@@ -345,8 +346,8 @@ let sheetBackTo = null;
 // ---- PC: painéis encaixados no canto (como os do After Effects). Vários abertos ao mesmo tempo, empilhados;
 // cada um pode ser minimizado (só o título) ou fechado, e reaberto pela barra de painéis no topo da coluna.
 const DOCK_KEY = 'motionframe.dock';
-const DOCK_PANES = ['props', 'effects', 'presets', 'keys', 'topaz', 'tracker', 'browser', 'add'];
-const DOCK_BAR = [['props', '☰', 'Propriedades'], ['effects', '✦', 'Efeitos'], ['presets', '★', 'Presets'], ['keys', '📈', 'Keyframes'], ['topaz', '✨', 'Topaz'], ['tracker', '⌖', 'Tracker']];
+const DOCK_PANES = ['props', 'effects', 'presets', 'composer', 'keys', 'topaz', 'tracker', 'browser', 'add'];
+const DOCK_BAR = [['props', '☰', 'Propriedades'], ['effects', '✦', 'Efeitos'], ['presets', '★', 'Presets'], ['composer', '❖', 'Composer'], ['keys', '📈', 'Keyframes'], ['topaz', '✨', 'Topaz'], ['tracker', '⌖', 'Tracker']];
 const dock = (() => { const d = storage.get(DOCK_KEY, null); return d && Array.isArray(d.open) ? { open: d.open.filter((x) => DOCK_PANES.includes(x)), min: d.min || [] } : { open: ['effects', 'props', 'presets'], min: ['presets'] }; })();
 const saveDock = () => storage.set(DOCK_KEY, { open: dock.open.filter((x) => x !== 'browser' && x !== 'add' && x !== 'tracker'), min: dock.min });
 function renderDock() {
@@ -403,6 +404,7 @@ if (desktop.matches) sheet.classList.add('open');
 })();
 
 function openSheet(name, backTo = null) {
+  if (name === 'composer') setTimeout(() => composer.startPreview(), 0); // o Composer só monta (e anima) quando aberto
   if (desktop.matches) {
     // PC: abre (ou traz de volta) o painel no canto, sem fechar os outros
     if (!dock.open.includes(name)) dock.open.unshift(name);
@@ -514,6 +516,9 @@ const fxBrowser = new FxBrowser(document.getElementById('fxBrowser'), (type, ext
 });
 keyTools = new KeyTools(document.getElementById('keyTools'), store);
 new TopazPanel(document.getElementById('topazPanel'), store);
+const composer = new ComposerPanel(document.getElementById('composerPanel'), store, { onApplied: () => { if (!desktop.matches) closeSheet(); } });
+window.addEventListener('open-composer', () => openSheet('composer'));
+if (dock.open.includes('composer')) setTimeout(() => composer.startPreview(), 300);
 
 // ---- tracker (painel estilo After Effects)
 const trackerPanel = new TrackerPanel(store, {
@@ -636,7 +641,7 @@ function renderToolbar() {
       ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
       ['deselect', '✕', 'Fechar'], ['sep'],
       ...(t === 'group' ? [['open-group', '📂', 'Abrir grupo', true]] : []),
-      ['effects', '✦', 'Efeitos', true], ['presets', '★', 'Presets'],
+      ['effects', '✦', 'Efeitos', true], ['presets', '★', 'Presets'], ['composer', '❖', 'Composer'],
       ...(t === 'video' ? [['speed', '⏱', 'Velocidade', true], ['topaz', '✨', 'Topaz', true], ['freeze', '❄', 'Congelar quadro'], ['time-reverse', '⇆', 'Inverter (reverse)']] : []),
       ...(t === 'video' || t === 'audio' ? [['sound', '🔊', 'Som']] : []),
       ...(t === 'video' || t === 'image' ? [['bg-remove', '✂︎', 'Tirar fundo']] : []),
@@ -649,7 +654,7 @@ function renderToolbar() {
     : [
       ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
       ['add-media', '🎞', 'Vídeo / Foto', true], ['add-audio', '♪', 'Música'], ['add-text', 'T', 'Texto'], ['add', '＋', 'Mais camadas'],
-      ['presets', '★', 'Presets'], ['add-adjustment', '◐', 'Ajuste (CC)'], ['group', '⊞', 'Agrupar'], ['import-ffx', '⤒', 'Importar .ffx'], ['comp', '⚙', 'Composição'],
+      ['presets', '★', 'Presets'], ['composer', '❖', 'Composer'], ['add-adjustment', '◐', 'Ajuste (CC)'], ['group', '⊞', 'Agrupar'], ['import-ffx', '⤒', 'Importar .ffx'], ['comp', '⚙', 'Composição'],
     ];
   toolbar.innerHTML = items.map(([cmd, icon, label, hot]) => (cmd === 'sep' ? '<span class="tool sep"></span>' : `<button class="tool ${hot ? 'hot' : ''}" data-cmd="${cmd}" title="${escapeHtml(TIPS[cmd] || label)}"><span class="ti">${ico(icon)}</span><span class="tl">${label}</span></button>`)).join('');
   toolbar.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => commands[b.dataset.cmd]?.()));
@@ -1099,6 +1104,7 @@ const commands = {
   deselect: () => { store.select(null); closeSheet(); },
   effects: () => openSheet('effects'),
   presets: () => openSheet('presets'),
+  composer: () => openSheet('composer'),
   props: () => openSheet('props'),
   keys: () => openSheet('keys'),
   speed: () => { ensureSpeedEffect(store.layer()); openSheet('effects'); },

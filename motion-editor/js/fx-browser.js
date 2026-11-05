@@ -5,6 +5,7 @@ import { ico } from './icons.js';
 import { fxMatch } from './i18n.js';
 import { installedPlugins, importAexFiles, removePlugin, clearPlugins } from './plugins-installed.js';
 import { toast, modal } from './ui.js';
+import { PANEL_PLUGINS } from './composer.js';
 
 const ICON = {
   'Looks · Subject': 'adjust', 'Looks · Matte': 'matte', 'Looks · Lens': 'lens', 'Looks · Camera': 'camera', 'Looks · Post': 'sparkle',
@@ -62,6 +63,10 @@ export class FxBrowser {
   pluginTiles(list) {
     return list.map((p) => {
       const usable = !!p.effect && !!getEffectDef(p.effect)?.render;
+      if (!usable && PANEL_PLUGINS.test(`${p.name} ${p.matchName} ${p.file}`)) {
+        // plugin de painel (Animation Composer, AEJuice…): abre o painel Composer do MotionFrame
+        return `<button class="fx-tile" data-panel="1" title="${escapeHtml(p.file)}"><span class="fx-ico">${ico('composer')}</span><span class="fx-name">${escapeHtml(p.name)}</span><span class="fx-plugin">painel · abre o Composer (animações prontas)</span></button>`;
+      }
       return `<button class="fx-tile ${usable ? '' : 'disabled'}" ${usable ? `data-plugin="${escapeHtml(p.id)}"` : 'disabled'} title="${escapeHtml(`${p.file} · ${p.matchName || p.name}`)}">
         <span class="fx-ico">${ico(ICON[getEffectDef(p.effect)?.category] || 'presets')}</span>
         <span class="fx-name">${escapeHtml(p.name)}</span>
@@ -115,6 +120,7 @@ export class FxBrowser {
       const p = installedPlugins().find((x) => x.id === b.dataset.plugin);
       if (p) this.onPick(p.effect, { label: p.name, params: p.set, plugin: p });
     }));
+    this.root.querySelectorAll('[data-panel]').forEach((b) => b.addEventListener('click', () => window.dispatchEvent(new CustomEvent('open-composer'))));
     this.root.querySelectorAll('[data-plugin]').forEach((b) => b.addEventListener('contextmenu', async (e) => {
       e.preventDefault();
       const p = installedPlugins().find((x) => x.id === b.dataset.plugin);

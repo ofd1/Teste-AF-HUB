@@ -23,6 +23,7 @@ const P = {
   adjust: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 000 16z" fill="currentColor" stroke="none"/>',
   group: '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><rect x="7.5" y="7.5" width="9" height="9" rx="1.5"/>',
   ungroup: '<rect x="3.5" y="3.5" width="10" height="10" rx="2"/><rect x="10.5" y="10.5" width="10" height="10" rx="2"/>',
+  composer: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><path d="M14.5 14l6 3.25-6 3.25z"/>',
   import: '<path d="M12 15V3"/><path d="M7.5 7.5L12 3l4.5 4.5"/><path d="M4 14v4.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V14"/>',
   export: '<path d="M12 3v12"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M4 14v4.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V14"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
@@ -81,7 +82,7 @@ const P = {
 // símbolos antigos → ícone
 const GLYPH = {
   '⌂': 'home', '☰': 'props', '↶': 'undo', '↷': 'redo', '▶': 'play', '❚❚': 'pause', '⏮': 'start', '⏭': 'end', '◆': 'key', '◆◆': 'keys', '⟷': 'stretch', '▾': 'marker',
-  '🎞': 'media', '♪': 'audio', 'T': 'text', '＋': 'plus', '★': 'presets', '◐': 'adjust', '⊞': 'group', '⊟': 'ungroup', '⤒': 'import', '⤓': 'export', '⚙': 'settings',
+  '🎞': 'media', '♪': 'audio', 'T': 'text', '＋': 'plus', '★': 'presets', '❖': 'composer', '◐': 'adjust', '⊞': 'group', '⊟': 'ungroup', '⤒': 'import', '⤓': 'export', '⚙': 'settings',
   '✦': 'effects', '📈': 'graph', '✂': 'split', '✂︎': 'bgremove', '⧉': 'dup', '▲': 'up', '▼': 'down', '👁': 'eye', '◌': 'eyeOff', '🗑': 'trash', '✕': 'close', '◀': 'back',
   '📂': 'folder', '⏱': 'speed', '✨': 'sparkle', '❄': 'freeze', '⇆': 'reverse', '🔊': 'sound', '🎯': 'target', '▭': 'rect', '◯': 'ellipse', '■': 'solid', '🎥': 'camera',
   '✛': 'null', '⌖': 'tracker', '⇶': 'sequence', '⛶': 'max', '?': 'help', '⎘': 'copy', '📋': 'paste', '🔑': 'account', '⬇': 'download', 'ⓘ': 'info', '🔗': 'link', '🔤': 'font',
