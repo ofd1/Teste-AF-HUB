@@ -259,8 +259,8 @@ export class Inspector {
           ${def.plugin ? `<div class="plugin-note">Recriação estilo <b>${escapeHtml(def.plugin)}</b></div>` : ''}
           ${def.description ? `<div class="desc">${escapeHtml(def.description)}</div>` : ''}
           ${generic ? '<div class="note">Efeito do AE sem equivalente: controles importados (editáveis e animáveis) sem alterar a imagem.</div>' : ''}
-          ${def.params.filter((pd) => !pd.advanced && pd.kind !== 'hidden').map((pd) => this.propRow(`fx:${fx.id}.${pd.key}`, pd)).join('')}
-          ${def.params.some((pd) => pd.advanced) ? `<details class="adv"><summary>Avançado</summary>${def.params.filter((pd) => pd.advanced && pd.kind !== 'hidden').map((pd) => this.propRow(`fx:${fx.id}.${pd.key}`, pd)).join('')}</details>` : ''}
+          ${def.params.filter((pd) => !pd.advanced && pd.kind !== 'hidden' && this.shown(pd, fx)).map((pd) => this.propRow(`fx:${fx.id}.${pd.key}`, pd)).join('')}
+          ${def.params.some((pd) => pd.advanced) ? `<details class="adv"><summary>Avançado</summary>${def.params.filter((pd) => pd.advanced && pd.kind !== 'hidden' && this.shown(pd, fx)).map((pd) => this.propRow(`fx:${fx.id}.${pd.key}`, pd)).join('')}</details>` : ''}
         </div>
       </div>`;
     });
@@ -293,6 +293,14 @@ export class Inspector {
     if (v.remove || !v.e) { delete prop.expr; delete prop.exprOn; }
     else { prop.expr = v.e; prop.exprOn = true; }
     this.store.commit();
+  }
+
+  /** Parâmetro com showIf (como os do plugin que aparecem só em certo modo/modelo). */
+  shown(pd, fx) {
+    if (!pd.showIf) return true;
+    const vals = {};
+    for (const d of getEffectDef(fx.type)?.params || []) vals[d.key] = fx.params[d.key] ? valueAt(fx.params[d.key], this.store.time) : d.default;
+    try { return !!pd.showIf(vals); } catch { return true; }
   }
 
   propRow(path, d) {

@@ -1,6 +1,7 @@
 import { anim } from './anim.js';
 import { uid, deepClone } from './util.js';
 import { sourceTime } from './timing.js';
+import { migrateTopazFx } from './fx/topaz.js';
 
 export const RESOLUTIONS = {
   '1080x1920': 'Story / Reels 9:16',
@@ -114,6 +115,7 @@ export class Store {
     this.undoStack = []; this.redoStack = [];
     this.lastSnapshot = this.snapshot();
     project.markers ||= [];
+    for (const l of flatLayers(project.layers || [])) for (const fx of l.effects || []) migrateTopazFx(fx);
     this.scope = [];
     this.selectedLayerId = null;
     this.selectedKeys = [];

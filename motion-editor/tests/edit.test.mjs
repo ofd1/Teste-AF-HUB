@@ -203,7 +203,11 @@ test('Looks: Haze/Flare, Anamorphic Flare e Lens Distortion convertidos do .ffx'
 
 test('Topaz: modelos com valores automáticos e efeitos registrados', async () => {
   const { EFFECT_MAP } = await import('../js/effects.js');
-  const { TOPAZ_MODELS, TOPAZ_KEYS } = await import('../js/fx/topaz.js');
-  assert.ok(EFFECT_MAP.topaz && EFFECT_MAP.stabilize);
-  for (const [, auto] of TOPAZ_MODELS.slice(1)) for (const k of TOPAZ_KEYS) assert.ok(auto[k] >= (k === 'antialiasDeblur' ? -100 : 0) && auto[k] <= 100, k); // Anti-alias/deblur vai de −100 a 100 (Topaz 7)
+  const { TZ_MODELS, topazValues } = await import('../js/fx/topaz.js');
+  assert.ok(EFFECT_MAP.topaz && EFFECT_MAP.stabilize && EFFECT_MAP.topazFI);
+  for (let m = 1; m <= TZ_MODELS.length; m++) for (const q of [1, 2, 3]) {
+    const v = topazValues({ model: m, inputQuality: q, paramMode: 1 });
+    for (const k of ['c', 'd', 's', 'n', 'h']) assert.ok(v[k] >= 0 && v[k] <= 100, `${m} ${k}`);
+    assert.ok(v.a >= -100 && v.a <= 100);
+  }
 });

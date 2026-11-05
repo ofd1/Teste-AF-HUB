@@ -23,6 +23,19 @@ export function speedEffect(layer) {
   return layer.effects.find((fx) => fx.enabled && EFFECT_MAP[fx.type]?.sourceSpeed) || null;
 }
 
+/** Propriedade de velocidade (%) do efeito de tempo (Twixtor: o próprio parâmetro; Topaz FI: vem do Slowmo). */
+export function speedProp(fx) {
+  const def = EFFECT_MAP[fx.type];
+  return def?.speedProp ? def.speedProp(fx) : fx.params.speed;
+}
+
+/** Quadros duplicados: liga pela camada (painel Topaz) ou pelo Frame Interpolation com Remove Duplicates. */
+export function dedupeOf(layer) {
+  if (layer.props?.dedupe) return { sens: layer.props.dupSens ?? 20 };
+  const fi = layer.effects?.find((f) => f.enabled && f.type === 'topazFI' && f.params.removeDup?.value);
+  return fi ? { sens: fi.params.sensitivity?.value ?? 10 } : null;
+}
+
 /** Integra a velocidade (%) de inPoint até t → segundos de mídia consumidos. */
 export function integrateSpeed(prop, from, to, step = 1 / 120) {
   if (to <= from) return 0;
@@ -57,7 +70,7 @@ export function sourceTimeRaw(layer, t) {
   const start = layer.props.sourceStart || 0;
   const rate = layer.props.speed ?? 1;
   const fx = speedEffect(layer);
-  const local = fx ? integrateSpeed(fx.params.speed, layer.inPoint, lt) : lt - layer.inPoint;
+  const local = fx ? integrateSpeed(speedProp(fx), layer.inPoint, lt) : lt - layer.inPoint;
   return start + local * rate;
 }
 
@@ -67,7 +80,7 @@ export function sourceRate(layer, t) {
   if (rm) { const h = 1 / 120; return (valueAt(rm.params.time, t + h) - valueAt(rm.params.time, t - h)) / (2 * h); }
   const fx = speedEffect(layer);
   const rate = layer.props.speed ?? 1;
-  return fx ? (valueAt(fx.params.speed, t) / 100) * rate : rate;
+  return fx ? (valueAt(speedProp(fx), t) / 100) * rate : rate;
 }
 
 /** Quadros para frame blending: { a, b, f } em segundos de mídia. */
@@ -77,6 +90,7 @@ export function wantsInterp(layer, t) {
   const rm = remapEffect(layer);
   if (rm) return !!valueAt(rm.params.frameBlend, t);
   const fx = speedEffect(layer);
+  if (fx && EFFECT_MAP[fx.type]?.alwaysBlend) return true;
   return !!(fx && valueAt(fx.params.frameBlend, t));
 }
 

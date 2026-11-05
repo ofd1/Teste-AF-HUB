@@ -1,5 +1,5 @@
 // Gerenciador de mídia: imagens, vídeos (com dois decodificadores para frame blending) e sincronização.
-import { blendFrames, sourceRate, sourceTime, speedEffect, wantsInterp, vectorBlur, remapEffect } from './timing.js';
+import { blendFrames, sourceRate, sourceTime, speedEffect, wantsInterp, vectorBlur, remapEffect, speedProp, dedupeOf } from './timing.js';
 import { valueAt } from './anim.js';
 import { flatLayers } from './state.js';
 
@@ -161,7 +161,7 @@ export function prepare(project, t, { exact = false, playing = false } = {}) {
       continue;
     }
     let fr = blendFrames(l, t, project.fps);
-    if (l.props.dedupe) { const d = dedupeTimes(l, sourceTime(l, t)); if (d) fr = d; }
+    if (dedupeOf(l)) { const d = dedupeTimes(l, sourceTime(l, t)); if (d) fr = d; }
     const e = getVideo(l, fr.b !== null);
     e.frame = fr;
     if (exact) {
@@ -227,7 +227,7 @@ export function videoFrames(layer, t, fps, final = false) {
     const x = Math.max(0, Math.min(c.frames.length - 1, (sourceTime(layer, t) - c.t0) * c.fps));
     const i = Math.floor(x), f = x - i;
     const blend = wantsInterp(layer, t);
-    if (layer.props.dedupe) {
+    if (dedupeOf(layer)) {
       const d = dedupeIndex(c, x);
       if (d) return d.ib === null || d.f < 0.02 ? { a: c.frames[d.ia], b: null, f: 0 } : { a: c.frames[d.ia], b: c.frames[d.ib], f: d.f, quality: 'preview' };
     }
@@ -269,7 +269,7 @@ export function setCacheListener(fn) { cacheListener = fn; }
 function cacheKey(layer) {
   const fx = speedEffect(layer);
   const rm = remapEffect(layer);
-  return JSON.stringify([!!layer.props.dedupe, JSON.stringify(rm?.params.time), layer.props.src, layer.props.sourceStart || 0, layer.props.speed ?? 1, layer.inPoint, layer.outPoint, fx?.params.speed, fx?.enabled, !!layer.props.interpolate, layer.props.sourceFps]);
+  return JSON.stringify([dedupeOf(layer)?.sens ?? null, JSON.stringify(rm?.params.time), layer.props.src, layer.props.sourceStart || 0, layer.props.speed ?? 1, layer.inPoint, layer.outPoint, fx ? speedProp(fx) : null, fx?.enabled, !!layer.props.interpolate, layer.props.sourceFps]);
 }
 
 const sigCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
@@ -301,7 +301,7 @@ function dedupeIndex(c, x) {
 /** Tempos de origem (s) já sem quadros duplicados, para a exportação. null se não se aplica. */
 export function dedupeTimes(layer, st) {
   const c = caches.get(layer.id);
-  if (!layer.props.dedupe || !c?.ready || c.key !== cacheKey(layer)) return null;
+  if (!dedupeOf(layer) || !c?.ready || c.key !== cacheKey(layer)) return null;
   const d = dedupeIndex(c, Math.max(0, (st - c.t0) * c.fps));
   if (!d) return null;
   const tt = (k) => c.t0 + (k + 0.01) / c.fps;
@@ -332,7 +332,7 @@ export function cacheStatus() {
 export function ensureCaches(project) {
   const ids = new Set();
   for (const l of flatLayers(project.layers)) {
-    if (l.type !== 'video' || !l.props.src || !(speedEffect(l) || remapEffect(l) || l.props.interpolate || l.props.dedupe || l.effects.some((fx) => fx.enabled && (fx.type === 'timeSlice' || fx.type === 'echo')))) continue;
+    if (l.type !== 'video' || !l.props.src || !(speedEffect(l) || remapEffect(l) || l.props.interpolate || dedupeOf(l) || l.effects.some((fx) => fx.enabled && (fx.type === 'timeSlice' || fx.type === 'echo')))) continue;
     ids.add(l.id);
     const c = caches.get(l.id);
     if (c && c.key === cacheKey(l)) continue;
@@ -350,6 +350,8 @@ async function buildCache(project, layer) {
     const s = sourceTime(layer, t);
     lo = Math.min(lo, s); hi = Math.max(hi, s);
   }
+  // Sensitivity (Topaz): mais alto = considera duplicados também quadros quase iguais (0,9 ≈ sensibilidade 20)
+  const dupThr = 0.15 + (dedupeOf(layer)?.sens ?? 20) * 0.0375;
   const entry = { key, fps, t0: 0, frames: [], dup: [], sigs: [], ready: false, progress: 0, cancelled: false };
   caches.set(layer.id, entry);
   cacheListener();
@@ -375,7 +377,7 @@ async function buildCache(project, layer) {
     c.getContext('2d').drawImage(v, 0, 0, w, h);
     // assinatura pequena do quadro: detecta quadros repetidos (vídeos baixados do TikTok/IG costumam ter)
     const sig = frameSignature(c);
-    entry.dup.push(i > 0 && entry.sigs.length && sigDiff(sig, entry.sigs[entry.sigs.length - 1]) < 0.9);
+    entry.dup.push(i > 0 && entry.sigs.length && sigDiff(sig, entry.sigs[entry.sigs.length - 1]) < dupThr);
     entry.sigs.push(sig);
     entry.frames.push(c);
     entry.progress = (i + 1) / n;

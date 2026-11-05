@@ -167,12 +167,15 @@ export function looksFromTools(tools, strength = 100) {
       // Optical Diffusion (manual do Looks): Density, Size, Falloff, Glow, Highlights Only, Luster, Color…
       // Optical Diffusion: [Density/Amount, Size, …, R, G, B (6-8)] — no Looks vira brilho nos realces (medido em renders
       // do AE: raio ≈ Size/2, intensidade ≈ Amount × 1,5 %, limiar ≈ 30 %) além de um leve amaciamento
-      case 'odif': {
-        p.optDensity = clampN(Math.max(p.optDensity, (v[0] || 0) * 0.5), 0, 100); p.optSize = clampN(v[1] ?? 50, 1, 500); p.optHighlights = clampN(v[4] ?? 50, 0, 100);
-        const tint = [v[6] ?? 1, v[7] ?? 1, v[8] ?? 1], mx = Math.max(...tint, 1e-6);
-        if ((v[0] || 0) > 0) extra.push({ type: 'glow', label: 'Looks · Optical Diffusion', params: { threshold: 40, radius: clampN((v[1] ?? 50) / 2, 1, 300), intensity: clampN((v[0] || 0) * 1.5 / 100 * 0.45, 0, 8) /* glow somado ≈ modo tela do Looks */, color: [...tint.map((c) => c / mx), 1], useColor: tint.some((c) => Math.abs(c - 1) > 0.02) } });
+      case 'odif':
+        // Optical Diffusion → Glow/Diffusion com os mesmos números que o Frameify usa para este preset:
+        // intensidade = 1,5 × Density, raio = Size ÷ 2, limiar 30 (galego: 34 / 260,6 → 51 / 130,3)
+        if ((v[0] || 0) > 0) {
+          p.diffusion = Math.max(p.diffusion, (v[0] || 0) * 1.5);
+          p.diffusionRadius = Math.max(p.diffusionRadius === 60 ? 0 : p.diffusionRadius, (v[1] ?? 50) / 2);
+          p.diffusionThreshold = 30;
+        }
         break;
-      }
       case 'diff':
         // Diffusion (Looks3.aex): [Size, Grade, Glow, Highlights Only, Highlight Bias, Exposure Comp., R, G, B]
         // escala medida em renders do AE: raio ≈ 2,29 × Size px, intensidade ≈ 22,75 × Grade × Glow/100 %,
@@ -182,13 +185,13 @@ export function looksFromTools(tools, strength = 100) {
           p.diffusionRadius = Math.max(p.diffusionRadius, 2.29 * v[0]);
           p.diffusionThreshold = clampN(78.75 + 0.625 * ((v[3] ?? 75) - 75) - 8.1 * (v[4] || 0), 0, 100);
           p.exposure += v[5] || 0;
-        } else if (v[0] < 2) p.exposure += (v[5] || 0) * 0.5; // Diffusion tão pequeno só levanta os realces no Looks (sem glow)
+        } else if (v[0] < 2) p.exposure += v[5] || 0; // Diffusion tão pequeno só levanta os realces (o Frameify usa a compensação inteira)
         break;
       // Chromatic Aberration: [Red/Cyan, Green/Magenta, Blue/Yellow]
-      case 'chab': p.chroma += (Math.abs(v[0] || 0) + Math.abs(v[1] || 0) * 0.7 + Math.abs(v[2] || 0) * 0.7) * 4; break;
-      // Hue/Saturation (Looks): [Hue, Saturation %, pesos de luma]. Trabalha em luz linear: tirar saturação ali apaga
-      // menos a cor visível do que no espaço da tela, por isso a redução é suavizada
-      case 'husa': { const f = (v[1] ?? 100) / 100; p.hue += v[0] || 0; p.saturation *= f < 1 ? 1 - (1 - f) * 0.7 : f; break; }
+      // ajustado aos pares .ffx/.frameify (galego [−1,06, 0, 1] → 6,1; ftb [0,73, 0, −0,5] → 3,9)
+      case 'chab': p.chroma += (Math.abs(v[0] || 0) + (Math.abs(v[1] || 0) + Math.abs(v[2] || 0)) * 0.48) * 4; break;
+      // Hue/Saturation (Looks): [Hue, Saturation %, pesos de luma] — valor direto, como o Frameify (galego 65 → 65%)
+      case 'husa': { const f = (v[1] ?? 100) / 100; p.hue += v[0] || 0; p.saturation *= f; break; }
       case 'mjo2':
         // Mojo II (ordem real, tirada do Looks3.aex): [Mojo, Tint, Punch, Bleach, Fade, Blue Squeeze, Skin Squeeze,
         // Exposure, Cool/Warm, Green/Magenta, Skin Yellow/Pink, Strength]
@@ -438,6 +441,44 @@ export const IMPORT_RULES = [
     map: { speed: { i: 5, n: ['speed %', 'speed'] }, frameBlend: { i: 1, n: ['frame interp', 'frame interpolation'], conv: (v) => v >= 2 } } },
   { vendor: 'Red Giant', plugin: 'Magic Bullet Looks', to: 'looks', test: /^MB Look|magic ?bullet ?looks/i, expand: looksExpand },
   { vendor: 'Red Giant', plugin: 'Magic Bullet Colorista / Mojo', to: 'colorGrade', test: /colorista|\bmojo\b/i },
+  // Topaz Video AI (plugin do AE, categoria "Topaz Video AI"): efeitos "Enhance" e "Frame Interpolation".
+  // Layout lido do próprio plugin: AI Model (Select Model|Proteus|Iris|Nyx|Artemis|Themis|Dione Robust|Dione Robust Dehalo),
+  // Input Quality (LQ|MQ|HQ ou LQ|MQ), Output Resolution (Original|2x|4x ou Original|2x), Parameters (Auto|Relative to auto|
+  // Manual) e os sliders — cada slider existe duas vezes (absoluto e "relativo ao auto"); o plugin guarda 0–1.
+  { vendor: 'Topaz Labs', plugin: 'Topaz Video AI – Frame Interpolation', to: 'topazFI', test: /AEFrameInterpolation|topaz.*frame ?interp|\btvai\b.*interp/i,
+    expand: (fx) => {
+      const g = (n) => fx.params.find((q) => (q.name || '').toLowerCase().trim() === n)?.value?.[0];
+      const slow = g('slowmo') ?? g('slow motion');
+      return [{ type: 'topazFI', label: 'Topaz Frame Interpolation', note: 'Slowmo, Model, Remove Duplicate Frames e Sensitivity convertidos', params: {
+        slowmo: slow != null ? Math.max(1, Math.min(6, Math.round(slow))) : 2,
+        fiModel: g('model') != null ? Math.max(1, Math.min(5, Math.round(g('model')) - 1 || 1)) : 1,
+        removeDup: !!(g('remove duplicates frames') ?? g('remove duplicate frames')),
+        sensitivity: (() => { const v = g('sensitivity'); return v == null ? 10 : v <= 1 ? v * 100 : v; })(),
+      } }];
+    } },
+  { vendor: 'Topaz Labs', plugin: 'Topaz Video AI – Enhance', to: 'topaz', test: /\bAE_Enhance\b|topaz.*(video ai|enhance)|\btvai\b/i,
+    expand: (fx) => {
+      const seen = {}, P = {};
+      const pct01 = (v) => (Math.abs(v) <= 1.0001 ? v * 100 : v);
+      const SL = { 'fix compression': 'compression', 'improve detail': 'details', 'improve details': 'details', sharpen: 'sharpen', 'reduce noise': 'noise', 'reduce large grain': 'largeGrain', dehalo: 'dehalo', 'anti-alias/deblur': 'aa' };
+      for (const q of fx.params) {
+        const n = (q.name || '').toLowerCase().trim(), v = q.value?.[0];
+        if (v == null || typeof v !== 'number') continue;
+        seen[n] = (seen[n] || 0) + 1;
+        if (n === 'ai model') P.model = Math.max(1, Math.min(7, Math.round(v) - 1 || 1)); // 1 = "Select Model"
+        else if (n === 'input quality' && seen[n] === 1) P.inputQuality = Math.max(1, Math.min(3, Math.round(v)));
+        else if ((n === 'output resolution' || n === 'scale factor') && seen[n] === 1) P.upscale = Math.max(1, Math.min(3, Math.round(v)));
+        else if (n === 'parameters' || n === 'parameter mode') P.paramMode = Math.max(1, Math.min(3, Math.round(v)));
+        else if (SL[n]) P[(seen[n] === 1 ? '' : 'ra_') + SL[n]] = Math.round(pct01(v));
+        else if (n === 'recover original details' || n === 'recover details') P.recoverOriginal = Math.round(pct01(v));
+        else if (n === 'nyx recover details') P.nyxRecover = Math.round(pct01(v));
+        else if (n === 'add noise') P.addNoise = Math.min(10, v <= 0.1001 ? v * 100 : v);
+        else if (n === 'amount') P.grainAmount = Math.min(10, v <= 0.1001 ? v * 100 : v);
+        else if (n === 'size') P.grainSize = Math.max(1, Math.min(5, v));
+      }
+      if (P.model === undefined) P.model = 1;
+      return [{ type: 'topaz', label: 'Topaz Video AI – Enhance', note: `modelo ${P.model}, parâmetros ${['Auto', 'Relative to auto', 'Manual'][(P.paramMode || 1) - 1]}`, params: P }];
+    } },
   // Twitch: Amount = intensidade, Speed = frequência (%); quantidades por tipo; Slide com RGB Split e Motion Blur; Time
   { vendor: 'Video Copilot', plugin: 'Twitch', to: 'twitch', test: /twitch/i,
     map: {

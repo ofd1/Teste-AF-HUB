@@ -24,10 +24,10 @@ const EXPECTED = {
   'Velocity & Reverse/Sonhei Reverse.ffx': ['twixtor', 'blurMoCurves'],
   'CC (Color Correction)/Sonhei CC.ffx': ['looks', 'lkExposure', 'lkGradient', 'lkLensVignette', 'lkExposure', 'lkLensVignette', 'lkEdgeSoftness', 'looks', 'lkEdgeSoftness', 'lkLensVignette', 'looks', 'sSharpen', 'fourColor', 'levels', 'filmLook', 'sSharpen', 'looks', 'exposure'], // S_Sharpen → nitidez em faixas
   'CC (Color Correction)/Sonhei New CC.ffx': ['looks', 'lkEdgeSoftness', 'lkHaze', 'looks', 'lkChannelMixer', 'sSharpen'],
-  'CC (Color Correction)/Galego CC.ffx': ['looks', 'glow', 'lkChroma', 'lkSaturation', 'lkSpotExposure', 'lkMojo', 'sSharpen', 'flicker', 'levels', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
-  'CC (Color Correction)/FTB Main CC.ffx': ['looks', 'lkGradient', 'lkLensVignette', 'lkEdgeSoftness', 'looks', 'sSharpen', 'sharpen', 'hueSat', 'sharpen', 'looks', 'glow', 'lkEdgeSoftness', 'looks', 'lkMojo', 'lkChannelMixer', 'looks', 'looks', 'lkChroma', 'looks', 'lkHaze', 'looks'], // Optical Diffusion → glow
-  'CC (Color Correction)/FTB AEP CC.ffx': ['looks', 'glow', 'lkMojo', 'looks', 'lkExposure', 'lkGradient', 'lkLensVignette', 'lkExposure', 'lkLensVignette', 'looks', 'lkEdgeSoftness', 'fourColor', 'lkExposure', 'looks', 'lkDiffusion', 'lkChroma', 'lkHaze', 'looks', 'hueSat', 'looks', 'lkExposure', 'lkGradient', 'lkExposure', 'lkLensVignette', 'looks', 'lkHaze', 'lkEdgeSoftness', 'lkExposure', 'looks', 'brightnessContrast'],
-  'CC (Color Correction)/ZAZ Reverse Dark CC.ffx': ['looks', 'glow', 'lkChroma', 'lkSaturation', 'lkSpotExposure', 'lkMojo', 'sSharpen', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
+  'CC (Color Correction)/Galego CC.ffx': ['lkDiffusion', 'lkChroma', 'lkSaturation', 'lkSpotExposure', 'lkMojo', 'sSharpen', 'flicker', 'levels', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
+  'CC (Color Correction)/FTB Main CC.ffx': ['looks', 'lkGradient', 'lkLensVignette', 'lkEdgeSoftness', 'looks', 'sSharpen', 'sharpen', 'hueSat', 'sharpen', 'lkDiffusion', 'lkEdgeSoftness', 'looks', 'lkMojo', 'lkChannelMixer', 'looks', 'looks', 'lkChroma', 'looks', 'lkHaze', 'looks'], // Optical Diffusion → glow
+  'CC (Color Correction)/FTB AEP CC.ffx': ['lkDiffusion', 'lkMojo', 'looks', 'lkExposure', 'lkGradient', 'lkLensVignette', 'lkExposure', 'lkLensVignette', 'looks', 'lkEdgeSoftness', 'fourColor', 'lkExposure', 'looks', 'lkDiffusion', 'lkChroma', 'lkHaze', 'looks', 'hueSat', 'looks', 'lkExposure', 'lkGradient', 'lkExposure', 'lkLensVignette', 'looks', 'lkHaze', 'lkEdgeSoftness', 'lkExposure', 'looks', 'brightnessContrast'],
+  'CC (Color Correction)/ZAZ Reverse Dark CC.ffx': ['lkDiffusion', 'lkChroma', 'lkSaturation', 'lkSpotExposure', 'lkMojo', 'sSharpen', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
   'Warp/ZAZ Warp.ffx': ['motionTile', 'warp'],
 };
 
@@ -76,7 +76,7 @@ test('CC: Looks decodificado e Gradiente de 4 cores', () => {
   const { parsed, preset } = load('CC (Color Correction)/FTB AEP CC.ffx');
   assert.deepEqual(parsed.effects.filter((e) => /^MB/.test(e.matchName)).map((e) => e.name), ['Magic Bullet Looks', 'Looks 3', 'Magic Bullet Looks 2', 'Looks']);
   const looks = looksOf(parsed);
-  assert.ok(looks[0].mojo > 0 && looks[0].vignette > 0 && looks[0].optDensity > 0);
+  assert.ok(looks[0].mojo > 0 && looks[0].vignette > 0 && looks[0].diffusion > 0); // Optical Diffusion → Glow/Diffusion (como o Frameify)
   // cada ferramenta do Looks virou um efeito, com o Strength do Looks
   assert.ok(preset.effects.some((e) => e.type === 'lkMojo' || (e.type === 'looks' && e.params.mojo > 0)));
   const g = preset.effects.find((e) => e.type === 'fourColor').params;
@@ -84,7 +84,7 @@ test('CC: Looks decodificado e Gradiente de 4 cores', () => {
   assert.equal(g.opacity, 5);
 
   const dark = looksOf(load('CC (Color Correction)/ZAZ Reverse Dark CC.ffx').parsed)[0];
-  assert.equal(dark.saturation, 75.5); // Hue/Sat 65% do Looks (luz linear) ≈ 75,5% na tela
+  assert.equal(dark.saturation, 65); // Hue/Sat 65% do Looks, valor direto (igual ao Frameify)
   assert.equal(dark.mojo, 100); // Mojo II = 100 no Looks original
   assert.equal(dark.bleach, 50); // Bleach It 50 (manual: menos saturação)
 

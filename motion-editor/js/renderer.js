@@ -388,10 +388,13 @@ function renderLayerImage(layer, t, scale0, extra) {
     // Twixtor: quadro intermediário por fluxo óptico
     const texB = gl.upload(paint(`${layer.id}#b`, vf.b));
     try {
-      const hq = renderOpts.final || renderOpts.hq;
+      // modelo do Topaz Frame Interpolation: Apollo/Aion = fluxo nos dois sentidos, Chronos = um sentido, Fast = fluxo leve
+      const fim = layer.effects.find((f) => f.enabled && f.type === 'topazFI')?.params.fiModel?.value | 0;
+      const fast = fim === 2 || fim === 4;
+      const hq = (renderOpts.final || renderOpts.hq) && !fast;
       const flow = computeFlow(gl, tex, texB, hq ? 'final' : 'preview');
       const mbAmt = vectorBlur(layer, lt);
-      if (hq && vf.f > 0.001 && vf.f < 0.999) tex = interpBidirectional(gl, tex, texB, flow, computeFlow(gl, texB, tex, 'final'), vf.f);
+      if (hq && fim !== 3 && vf.f > 0.001 && vf.f < 0.999) tex = interpBidirectional(gl, tex, texB, flow, computeFlow(gl, texB, tex, 'final'), vf.f);
       else tex = interpWithFlow(gl, tex, texB, flow, vf.f);
       if (mbAmt > 0) {
         // obturador de 180° (0,5 quadro) × quadros de origem avançados por quadro de saída
