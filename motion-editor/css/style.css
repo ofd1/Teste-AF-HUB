@@ -560,3 +560,19 @@ a.btn.primary { background: var(--accent); border-color: var(--accent); color: #
 .se-btns { display: grid; grid-template-columns: repeat(2, minmax(150px, 1fr)); gap: 8px; margin: 8px 0; }
 .se-btns button { padding: 12px 14px; font-size: 14px; border-radius: 10px; }
 .se-btns .primary { grid-column: 1 / -1; font-size: 16px; }
+
+/* ícones de linha (no lugar dos emoji) */
+.ico { width: 1.2em; height: 1.2em; vertical-align: -0.22em; flex: none; display: inline-block; }
+.tool .ti .ico { width: 22px; height: 22px; }
+.tool .ti { line-height: 0; }
+.tool.hot .ti { color: var(--accent-2); }
+.add-grid .ai .ico { width: 26px; height: 26px; }
+.icon .ico, .max-ctl .ico, .play .ico { width: 20px; height: 20px; vertical-align: middle; }
+.play .ico { width: 24px; height: 24px; }
+.tp-tools b .ico { width: 16px; height: 16px; }
+.dock-bar .ico { width: 15px; height: 15px; vertical-align: -3px; }
+.dock-head .ico { width: 14px; height: 14px; }
+.prop-row.animated .kbtn .ico, .prop-row.on-key .kbtn .ico { fill: currentColor; }
+.kbtn .ico { width: 13px; height: 13px; }
+.fx-ico .ico { width: 24px; height: 24px; }
+.chip .ico { width: 13px; height: 13px; vertical-align: -2px; }

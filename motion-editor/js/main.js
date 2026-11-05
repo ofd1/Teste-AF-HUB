@@ -30,6 +30,7 @@ import { TrackerPanel } from './tracker-panel.js';
 import { calibrateFromImage, CALIB_LABEL } from './calibrate.js';
 import { parseAEP, aepToProject, mainComps } from './aep.js';
 import { xmlToProject } from './xml-import.js';
+import { ico, iconize } from './icons.js';
 import { importFonts, loadSavedFonts, isFontFile, userFonts, removeFont, ensureFont, onFontsChange } from './fonts.js';
 
 const store = new Store();
@@ -131,7 +132,7 @@ new ResizeObserver(layoutCanvas).observe(stage);
 const maxBtn = document.getElementById('maxBtn'), maxPlay = document.getElementById('maxPlay');
 function setMaxPreview(on) {
   document.body.classList.toggle('preview-max', on);
-  maxBtn.textContent = on ? '✕' : '⛶';
+  maxBtn.innerHTML = ico(on ? 'close' : 'max');
   if (on && document.documentElement.requestFullscreen && !/iPhone|iPad/.test(navigator.userAgent)) document.documentElement.requestFullscreen().catch(() => {});
   if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
   setTimeout(layoutCanvas, 50);
@@ -239,6 +240,9 @@ function scheduleCaches() {
 
 // fontes do Google usadas nos textos: carrega ao abrir o projeto; quando chegam, redesenha
 onFontsChange(() => { frameCacheClear(); dirty = true; });
+// ícones de linha no lugar dos símbolos/emoji em toda a interface (inclusive painéis e janelas criados depois)
+iconize(document.body);
+new MutationObserver((muts) => { for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1) iconize(n.matches?.('button') ? n.parentElement : n); }).observe(document.body, { childList: true, subtree: true });
 const stageEmpty = document.getElementById('stageEmpty');
 stageEmpty.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => commands[b.dataset.cmd]?.()));
 store.on((kind) => {
@@ -255,10 +259,10 @@ store.on((kind) => {
 
 const playBtn = document.querySelector('[data-cmd="play"]');
 function setPlaying(p) {
-  const mp = document.getElementById('maxPlay'); if (mp) mp.textContent = p ? '❚❚' : '▶';
+  const mp = document.getElementById('maxPlay'); if (mp) mp.innerHTML = ico(p ? 'pause' : 'play');
   if (p === store.playing) return;
   store.playing = p;
-  playBtn.textContent = p ? '❚❚' : '▶';
+  playBtn.innerHTML = ico(p ? 'pause' : 'play');
   lastFrame = performance.now();
   if (p) playAudio(store.project, store.time);
   else { stopAudio(); pauseAll(); store.setTime(store.time); }
@@ -342,7 +346,7 @@ function renderDock() {
     if (!p.querySelector(':scope > .dock-head')) {
       const h = document.createElement('div');
       h.className = 'dock-head';
-      h.innerHTML = `<button class="dock-min" title="Minimizar / abrir">▾</button><span class="dock-title"></span><button class="dock-x" title="Fechar o painel">✕</button>`;
+      h.innerHTML = `<button class="dock-min" title="Minimizar / abrir">${ico('minimize')}</button><span class="dock-title"></span><button class="dock-x" title="Fechar o painel">${ico('close')}</button>`;
       h.querySelector('.dock-min').addEventListener('click', () => toggleDockMin(n));
       h.querySelector('.dock-title').addEventListener('click', () => toggleDockMin(n));
       h.querySelector('.dock-x').addEventListener('click', () => closeDockPane(n));
@@ -355,7 +359,7 @@ function renderDock() {
     if (on) p.style.order = String(dock.open.indexOf(n));
   });
   const bar = document.getElementById('dockBar');
-  bar.innerHTML = DOCK_BAR.map(([n, i, l]) => `<button data-dock="${n}" class="${dock.open.includes(n) ? 'on' : ''}" title="${dock.open.includes(n) ? 'Fechar' : 'Abrir'} ${l}">${i} ${l}</button>`).join('');
+  bar.innerHTML = DOCK_BAR.map(([n, i, l]) => `<button data-dock="${n}" class="${dock.open.includes(n) ? 'on' : ''}" title="${dock.open.includes(n) ? 'Fechar' : 'Abrir'} ${l}">${ico(i)} ${l}</button>`).join('');
   bar.querySelectorAll('[data-dock]').forEach((x) => x.addEventListener('click', () => {
     const n = x.dataset.dock;
     if (dock.open.includes(n)) closeDockPane(n); else openSheet(n);
@@ -565,7 +569,7 @@ const ADD_ITEMS = [
   ['camera', '🎥', 'Câmera 3D'], ['null', '✛', 'Null (pai/controle)'],
 ];
 const addMenu = document.getElementById('addMenu');
-addMenu.innerHTML = `<div class="add-grid">${ADD_ITEMS.map(([k, i, l]) => `<button data-add="${k}"><span class="ai">${i}</span>${l}</button>`).join('')}</div>
+addMenu.innerHTML = `<div class="add-grid">${ADD_ITEMS.map(([k, i, l]) => `<button data-add="${k}"><span class="ai">${ico(i)}</span>${l}</button>`).join('')}</div>
   <p class="muted small">Dica: camadas de ajuste aplicam efeitos (shake, glow, CC…) em tudo que está abaixo — como no After Effects.</p>`;
 addMenu.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => {
   const k = b.dataset.add;
@@ -622,11 +626,11 @@ function renderToolbar() {
       ['add-media', '🎞', 'Vídeo / Foto', true], ['add-audio', '♪', 'Música'], ['add-text', 'T', 'Texto'], ['add', '＋', 'Mais camadas'],
       ['presets', '★', 'Presets'], ['add-adjustment', '◐', 'Ajuste (CC)'], ['group', '⊞', 'Agrupar'], ['import-ffx', '⤒', 'Importar .ffx'], ['comp', '⚙', 'Composição'],
     ];
-  toolbar.innerHTML = items.map(([cmd, icon, label, hot]) => (cmd === 'sep' ? '<span class="tool sep"></span>' : `<button class="tool ${hot ? 'hot' : ''}" data-cmd="${cmd}" title="${escapeHtml(TIPS[cmd] || label)}"><span class="ti">${icon}</span><span class="tl">${label}</span></button>`)).join('');
+  toolbar.innerHTML = items.map(([cmd, icon, label, hot]) => (cmd === 'sep' ? '<span class="tool sep"></span>' : `<button class="tool ${hot ? 'hot' : ''}" data-cmd="${cmd}" title="${escapeHtml(TIPS[cmd] || label)}"><span class="ti">${ico(icon)}</span><span class="tl">${label}</span></button>`)).join('');
   toolbar.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => commands[b.dataset.cmd]?.()));
   // faixa de ajuda: diz o que está selecionado e o próximo passo
   hintBar.hidden = !getSettings().showTips;
-  if (!store.project.layers.length) hintBar.innerHTML = '👋 Comece tocando em <b>Vídeo / Foto</b> para importar seu clipe.';
+  if (!store.project.layers.length) hintBar.innerHTML = 'Comece tocando em <b>Vídeo / Foto</b> para importar seu clipe.';
   else if (!layer) hintBar.innerHTML = 'Toque numa camada (na timeline ou na prévia) para editar. Arraste a régua azul para mudar o tempo.';
   else if (many > 1) hintBar.innerHTML = `<b>${many} camadas selecionadas</b> — mudanças em Propriedades valem para todas · Pré-compor junta em um grupo · Shift/Ctrl+clique (ou toque longo) adiciona/remove`;
   else hintBar.innerHTML = `<b>${escapeHtml(layer.name)}</b> · ${TYPE_LABEL[t] || t}${layer.effects.length ? ` · ${layer.effects.length} efeito(s)` : ''} — ${t === 'video' ? 'use <b>Presets</b> para CC/shake/reverse ou <b>Velocidade</b> para câmera lenta' : t === 'group' ? 'efeitos e presets valem para o grupo inteiro' : 'use <b>Efeitos</b> ou <b>Presets</b>'}`;

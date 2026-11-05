@@ -1,10 +1,11 @@
 // Navegador de efeitos (grade com busca e categorias).
 import { EFFECTS, CATEGORIES } from './effects.js';
 import { escapeHtml } from './util.js';
+import { ico } from './icons.js';
 
 const ICON = {
-  'Looks · Subject': '◐', 'Looks · Matte': '▧', 'Looks · Lens': '◎', 'Looks · Camera': '🎞', 'Looks · Post': '✎',
-  'Luz e brilho': '✺', Movimento: '〰', Tempo: '⏱', Desfoque: '◌', Estilizar: '✦', Distorção: '≋', Cor: '◑', '3D': '⬢', Transições: '⇋',
+  'Looks · Subject': 'adjust', 'Looks · Matte': 'matte', 'Looks · Lens': 'lens', 'Looks · Camera': 'camera', 'Looks · Post': 'sparkle',
+  'Luz e brilho': 'sun', Movimento: 'wave', Tempo: 'speed', Desfoque: 'blur', Estilizar: 'effects', Distorção: 'distort', Cor: 'color', '3D': 'cube', Transições: 'transition',
 };
 
 export class FxBrowser {
@@ -22,10 +23,10 @@ export class FxBrowser {
       && (!q || `${e.label} ${e.plugin || ''} ${e.category}`.toLowerCase().includes(q)));
     this.root.innerHTML = `
       <input type="search" class="fx-search" placeholder="Buscar efeito (ex.: glow, twixtor, shake)…" value="${escapeHtml(this.q)}">
-      <div class="chips">${['Todos', 'Plugins', ...CATEGORIES].map((c) => `<button class="chip ${c === this.cat ? 'on' : ''}" data-cat="${c}">${c === 'Plugins' ? '★ Plugins' : c}</button>`).join('')}</div>
+      <div class="chips">${['Todos', 'Plugins', ...CATEGORIES].map((c) => `<button class="chip ${c === this.cat ? 'on' : ''}" data-cat="${c}">${c === 'Plugins' ? `${ico('presets')} Plugins` : c}</button>`).join('')}</div>
       <div class="fx-grid">${list.map((e) => `
         <button class="fx-tile" data-type="${e.type}">
-          <span class="fx-ico">${ICON[e.category] || '•'}</span>
+          <span class="fx-ico">${ico(ICON[e.category] || 'effects')}</span>
           <span class="fx-name">${escapeHtml(e.label)}</span>
           ${e.plugin ? `<span class="fx-plugin">estilo ${escapeHtml(e.plugin.split(' / ')[0])}</span>` : `<span class="fx-plugin muted">${e.category}</span>`}
         </button>`).join('')}</div>
