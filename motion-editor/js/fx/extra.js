@@ -206,7 +206,7 @@ void main() {
   r = mix(r, cool, u_mojo * u_cool);
   r = mix(r, warmH, u_mojo * (0.6 + 0.4 * skin) * u_skin);
   // Mojo (manual da Maxon): "aumenta o contraste, esquenta realces e esfria sombras preservando a pele"
-  r = mix(r, r * r * (3.0 - 2.0 * r), u_mojo * 0.3);
+  r = mix(r, r * r * (3.0 - 2.0 * r), u_mojo * 0.5);
   // Punch It (manual): contraste nas SOMBRAS — empurra as sombras para o preto, preservando a pele
   float shw = (1.0 - smoothstep(0.0, 0.55, luma(r))) * (1.0 - skin * 0.6);
   r = mix(r, r * r * 1.4, clamp(u_punch * shw * 0.8, 0.0, 1.0));

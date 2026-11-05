@@ -9,11 +9,18 @@ const EXPOSURE = colorFrag('uniform float u_exp, u_off, u_gamma;', `
   r = pow(max(r, 0.0), vec3(1.0 / max(u_gamma, 0.01)));`);
 
 // Brilho e contraste "moderno" do AE: preserva preto e branco (curva), não soma um valor fixo.
-const BC = colorFrag('uniform float u_b, u_c;', `
+// Brightness & Contrast (AE, modo novo) — medido no tutorial "football dark cc" (mesmo quadro, antes/depois):
+// Brightness negativo multiplica a imagem (−35 → ×0,8) preservando um pouco os brancos; Contrast é uma curva em S
+// (sigmoide normalizada) com pivô em 0,46 — +40 dá inclinação 1,22 no meio e comprime as pontas.
+const BC = colorFrag('uniform float u_b, u_bn, u_c;', `
   r = clamp(r, 0.0, 1.0);
-  r = u_b >= 0.0 ? pow(r, vec3(1.0 / (1.0 + u_b))) : pow(r, vec3(1.0 - u_b));
-  vec3 s = r * r * (3.0 - 2.0 * r);
-  r = u_c >= 0.0 ? mix(r, s, u_c) : mix(r, vec3(0.5), -u_c * 0.5);`);
+  if (u_bn < 0.0) { vec3 r4 = r * r; r4 *= r4; r = r * (1.0 + u_bn * (1.0 - r4)); }
+  else if (u_b > 0.0) r = pow(r, vec3(1.0 / (1.0 + u_b)));
+  if (u_c > 0.001) {
+    float k = u_c * 8.25, p = 0.46;
+    float s0 = 1.0 / (1.0 + exp(k * p)), s1 = 1.0 / (1.0 + exp(-k * (1.0 - p)));
+    r = (1.0 / (1.0 + exp(-k * (r - p))) - s0) / (s1 - s0);
+  } else if (u_c < 0.0) r = mix(r, vec3(0.5), -u_c * 0.5);`);
 
 const HUESAT = colorFrag('uniform float u_h, u_s, u_l, u_colorize; uniform vec3 u_ccol;', `
   vec3 h = rgb2hsv(r);
@@ -71,7 +78,7 @@ export default [
     type: 'brightnessContrast', label: 'Brilho e contraste', category: 'Cor',
     params: [num('brightness', 'Brilho', 0, -150, 150), num('contrast', 'Contraste', 0, -100, 100)],
     // AE (Brilho e contraste novo): +70 já clareia bastante os meios-tons
-    render: fx(BC, (p) => ({ u_b: p.brightness / 90, u_c: p.contrast / 100 })),
+    render: fx(BC, (p) => ({ u_b: p.brightness / 90, u_bn: Math.min(0, p.brightness / 170), u_c: p.contrast / 100 })),
   },
   {
     type: 'hueSat', label: 'Matiz / Saturação', category: 'Cor',

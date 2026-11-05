@@ -306,7 +306,8 @@ export function looksFromTools(tools, strength = 100) {
       // (em stops por canal, luz linear: R = −W−T+E, G = T+E, B = W+E — Warm/Cool negativo esquenta)
       case 'wmcl': { const w = v[0] || 0, t = v[1] || 0, e = v[2] || 0; [-w - t + e, t + e, w + e].forEach((st, i) => { p[`gain${'RGB'[i]}`] *= 2 ** (st / 2.2); }); break; }
       // Shadows/Highlights: [Shadows 0..1 (abre as sombras), Highlights −1..0 (segura os realces)]
-      case 'shad': for (const k of ['R', 'G', 'B']) { p[`lift${k}`] += (v[0] || 0) * 0.12; p[`gain${k}`] *= 1 + (v[1] || 0) * 0.15; } break;
+      // Shadows/Highlights do Looks → a ferramenta própria (calibrada com o AE no tutorial "football dark cc")
+      case 'shad': extra.push({ type: 'lkShadowsHighs', label: 'Shadows/Highlights', params: { str: p.strength ?? 100, shadows: v[0] || 0, highs: v[1] || 0 } }); break;
       // HSL Colors: [Master Hue, Master Sat, Master Lum, Hue R..M, Sat R..M, Lum R..M]
       case 'rhsl':
         p.hue += v[0] || 0; p.saturation *= 1 + (v[1] || 0) / 100; p.exposure += (v[2] || 0) / 100;

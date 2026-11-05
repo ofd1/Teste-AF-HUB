@@ -134,7 +134,7 @@ function buildBalls(nx, ny, seed) {
 }
 
 // S_Sharpen: soma das faixas de detalhe (cada uma com seu ganho) + unsharp de raio largo; luma e croma separados
-export let SSHARP_K = 0.1; // calibrado com o Vampy CC (3 × S_Sharpen) contra o resultado do Frameify
+export let SSHARP_K = 0.15; // calibrado com o Vampy CC (3 × S_Sharpen) contra o resultado do Frameify
 export function setSSharpK(k) { SSHARP_K = k; }
 const SSHARP = frag(`
 uniform sampler2D u_b0, u_b1, u_b2, u_b3, u_bw; uniform vec4 u_sc; uniform float u_amp, u_thr, u_luma, u_chroma, u_op;
