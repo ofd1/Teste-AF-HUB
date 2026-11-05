@@ -1,3 +1,15 @@
+# Jeito mais rápido: capturar a CC (cor idêntica ao plugin)
+
+No app: **Presets › ◐ Capturar CC do After Effects**. Ou use direto `motionframe-captura-AE.png` desta pasta:
+
+1. No AE, arraste `motionframe-captura-AE.png` para "Nova composição" (512×512, sem escalar). Project Settings › Working Space: **None**.
+2. Aplique a sua CC (Looks, Colorista, Lumetri, Curves…). No Looks, desligue o que depende da posição
+   (Vignette, Diffusion, Haze, Edge Softness, Spot/Grad Exposure, Grain, Chromatic Aberration).
+3. Composição › Salvar quadro como › PNG (sem mudar o tamanho). Dê o nome da CC ao arquivo.
+4. No app: Presets › Capturar CC › **Importar captura**. Pronto: vira preset em "Capturado do AE".
+
+---
+
 # Calibração do Looks e do Colorista (10–15 min no After Effects)
 
 1. Importe `carta-teste.png` numa comp 1920×1080 (8 bits, sem gerenciamento de cor).

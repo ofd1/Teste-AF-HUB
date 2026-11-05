@@ -1,6 +1,6 @@
 // Biblioteca de presets: nativos, pacote FREE (presets/manifest.json), importados (.ffx/.json) e do usuário.
 import { parseFFX, retimeFFX } from './ffx.js';
-import { parseCube, encodeCube } from './fx/lut.js';
+import { parseCube, encodeCube, haldPixels, haldToCube, haldIsNeutral, HALD_SIZE } from './fx/lut.js';
 import { frameifyToPreset } from './frameify.js';
 import { BUILTIN_PRESETS, rgxToParsed, ffxToPreset, applyPreset, layerToPreset, serializePreset, parsePresetJSON } from './presets.js';
 import { LAYER_FACTORIES } from './state.js';
@@ -90,6 +90,7 @@ export class Library {
       <div class="lib-tools">
         <button class="primary" data-act="import">⤒ Importar .ffx / .rgx / .cube / preset</button>
         <button data-act="save-layer">★ Salvar camada como preset</button>
+        <button data-act="capture">◐ Capturar CC do After Effects (Looks, Colorista…)</button>
       </div>
       <label class="fit-toggle ${this.fit ? 'on' : ''}">
         <span class="switch"><input type="checkbox" data-act="fit" ${this.fit ? 'checked' : ''}><i></i></span>
@@ -122,10 +123,11 @@ export class Library {
   bind() {
     const r = this.root;
     r.querySelector('[data-act="import"]').addEventListener('click', async () => {
-      const files = await pickFiles('.ffx,.aep,.rgx,.cube,.json,application/json,application/octet-stream');
+      const files = await pickFiles('.ffx,.aep,.rgx,.cube,.png,.json,application/json,application/octet-stream');
       if (files.length) this.importFiles(files);
     });
     r.querySelector('[data-act="save-layer"]').addEventListener('click', () => this.saveLayer());
+    r.querySelector('[data-act="capture"]').addEventListener('click', () => this.captureAE());
     r.querySelector('[data-act="fit"]').addEventListener('change', (e) => { this.fit = e.target.checked; storage.set('motionframe.presetFit', this.fit); this.render(); });
     const search = r.querySelector('.lib-search');
     search.addEventListener('input', () => {
@@ -255,6 +257,49 @@ export class Library {
     toast(`Preset “${p.name}” salvo em ${p.category}.`, 'ok');
   }
 
+  /** Captura de cor do AE: baixa a imagem de captura (HALD) e importa a versão com a CC aplicada como LUT 3D exata. */
+  async captureAE() {
+    const v = await modal('Capturar CC do After Effects', `
+      <p>Usa o <b>seu</b> Looks / Colorista / Lumetri / qualquer plugin de cor de verdade: o AE aplica a CC numa imagem com
+      todas as cores e o MotionFrame lê o resultado como uma LUT 3D — a cor fica <b>idêntica</b> à do plugin.</p>
+      <ol>
+        <li>Baixe a <b>imagem de captura</b> (512×512 px).</li>
+        <li>No AE: arraste a imagem para “Nova composição” (tem que ficar 512×512, sem escalar). Em Project Settings deixe
+          <i>Working Space: None</i> (sem gerenciamento de cor).</li>
+        <li>Aplique a CC na imagem (o mesmo Looks/Colorista/efeitos de cor que você usa). Para o Looks, desligue as ferramentas
+          que <b>não</b> são de cor: Vignette, Diffusion, Haze, Edge Softness, Spot/Grad Exposure, Grain, Chromatic Aberration — elas
+          dependem da posição na imagem e não entram numa LUT (adicione essas pelos efeitos do MotionFrame).</li>
+        <li>Composição › Salvar quadro como › Arquivo… → <b>PNG</b>, RGB, 8 bits (ou 16). Não mude o tamanho.</li>
+        <li>Volte aqui e toque em <b>Importar captura</b>. Vira um preset na categoria “Capturado do AE”.</li>
+      </ol>`, [{ label: 'Baixar imagem de captura', value: 'dl' }, { label: 'Importar captura', value: 'imp', primary: true }, { label: 'Fechar', value: null }]);
+    if (v === 'dl') {
+      const c = document.createElement('canvas'); c.width = HALD_SIZE; c.height = HALD_SIZE;
+      c.getContext('2d').putImageData(new ImageData(haldPixels(), HALD_SIZE, HALD_SIZE), 0, 0);
+      const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+      await saveFile('motionframe-captura-AE.png', blob);
+      toast('Imagem salva. Aplique a CC nela no AE, exporte em PNG e volte em “Capturar CC” › Importar captura.', 'ok', 6000);
+    } else if (v === 'imp') {
+      const files = await pickFiles('image/png,.png,.tif,.tiff,image/*');
+      for (const f of files) {
+        try { this.addToLibrary(await this.captureFromImage(f)); } catch (e) { toast(`${f.name}: ${e.message}`, 'error', 7000); continue; }
+        this.cat = 'Capturado do AE'; this.render(); toast(`CC “${f.name}” capturada. Está em Presets › Capturado do AE.`, 'ok', 5000);
+      }
+    }
+  }
+
+  async captureFromImage(f) {
+    const bmp = await createImageBitmap(f, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
+    const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+    const ctx = c.getContext('2d', { willReadFrequently: true }); ctx.drawImage(bmp, 0, 0);
+    const px = ctx.getImageData(0, 0, bmp.width, bmp.height).data;
+    const cube = haldToCube(px, bmp.width, bmp.height);
+    if (haldIsNeutral(px)) throw new Error('essa é a imagem de captura sem nenhuma CC aplicada — aplique a CC no AE e exporte o quadro.');
+    const enc = encodeCube(cube);
+    const name = f.name.replace(/\.(png|tiff?)$/i, '').replace(/^motionframe-captura-AE[-_ ]?/i, '') || 'CC capturada';
+    return { id: `cap_${Date.now().toString(36)}`, name, category: 'Capturado do AE', source: 'user', anchor: 'playhead', transform: {},
+      effects: [{ type: 'lut3d', label: `CC capturada · ${name}`, params: { amount: 100, lut: enc.b64, lutSize: enc.size } }] };
+  }
+
   async importFiles(files) {
     const imported = [];
     const errors = [];
@@ -269,6 +314,8 @@ export class Library {
           preset.fileName = f.name;
           preset._parsed = parsed;
           imported.push(preset);
+        } else if (/\.png$/i.test(f.name)) {
+          imported.push(await this.captureFromImage(f));
         } else if (/\.cube$/i.test(f.name)) {
           const enc = encodeCube(parseCube(await f.text()));
           const name = f.name.replace(/\.cube$/i, '');

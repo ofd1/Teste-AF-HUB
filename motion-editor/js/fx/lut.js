@@ -52,6 +52,32 @@ export function encodeCube({ size, data }, max = 33) {
   return { size: n, b64: btoa(bin) };
 }
 
+// ---- Captura de cor do After Effects (HALD CLUT): a imagem tem todas as 64³ cores; o usuário aplica a CC do AE
+// (Looks, Colorista, Lumetri, qualquer plugin de cor) nela, exporta em PNG e o app lê de volta como LUT 3D exata.
+export const HALD_N = 64, HALD_SIZE = 512;
+/** Pixels RGBA da imagem HALD neutra (512×512, 64³ cores; vermelho varia mais rápido, depois verde, depois azul). */
+export function haldPixels() {
+  const px = new Uint8ClampedArray(HALD_SIZE * HALD_SIZE * 4);
+  for (let i = 0; i < HALD_N ** 3; i++) {
+    const r = i % HALD_N, g = Math.floor(i / HALD_N) % HALD_N, b = Math.floor(i / HALD_N / HALD_N);
+    px[i * 4] = Math.round((r * 255) / (HALD_N - 1)); px[i * 4 + 1] = Math.round((g * 255) / (HALD_N - 1)); px[i * 4 + 2] = Math.round((b * 255) / (HALD_N - 1)); px[i * 4 + 3] = 255;
+  }
+  return px;
+}
+/** Lê a HALD exportada do AE (RGBA 512×512) → LUT 3D { size, data } no formato do .cube. */
+export function haldToCube(rgba, w, h) {
+  if (w !== HALD_SIZE || h !== HALD_SIZE) throw new Error(`a imagem de captura precisa ter ${HALD_SIZE}×${HALD_SIZE} px (veio ${w}×${h}). Não redimensione a comp no AE.`);
+  const n = HALD_N, data = new Float32Array(n * n * n * 3);
+  for (let i = 0; i < n * n * n; i++) for (let c = 0; c < 3; c++) data[i * 3 + c] = rgba[i * 4 + c] / 255;
+  return { size: n, data };
+}
+/** Confere se a imagem é a HALD ainda sem cor nenhuma aplicada (o usuário mandou a errada). */
+export function haldIsNeutral(rgba) {
+  const ref = haldPixels(); let d = 0;
+  for (let i = 0; i < ref.length; i += 4 * 97) d += Math.abs(ref[i] - rgba[i]) + Math.abs(ref[i + 1] - rgba[i + 1]) + Math.abs(ref[i + 2] - rgba[i + 2]);
+  return d / (ref.length / (4 * 97)) < 1.5;
+}
+
 const cache = new Map();
 function lutImage(b64, n) {
   let img = cache.get(b64);
