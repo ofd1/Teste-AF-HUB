@@ -247,8 +247,9 @@ export function looksFromTools(tools, strength = 100) {
       case 'crv2': case 'curv': {
         // Curves (ordem dos Looks do MBL): por canal (1 = RGB, 2 = R, 3 = G, 4 = B): Contrast, Shadows, Midtones,
         // Highlights, Point 1-5; depois Gamma Space (36) e os pontos livres (37 = quantidade, 38… pares entrada/ajuste)
-        // v[0] não é o contraste do usuário: vem ~0,92–0,93 em CCs diferentes (vampy, rafa) com curva quase neutra.
-        // Somar isso como contraste (+32) endurecia toda CC com Curves; o contraste vem dos pontos da curva.
+        // v[0] = Contrast da curva. Calibrado com a tabela que o Frameify gera para a mesma ferramenta (Look Table
+        // de 1024 pontos): 0,932 → curva em S ≈ 58% de um smoothstep (0,25→0,19; 0,75→0,82) = contraste ~48 aqui
+        p.contrast += (v[0] || 0) * 52;
         const ch = ['', 'R', 'G', 'B'];
         for (let c = 0; c < 4; c++) {
           const b = c * 9, sh = v[b + 1] || 0, mi = v[b + 2] || 0, hi = v[b + 3] || 0;
@@ -380,7 +381,7 @@ const only = (changed, keys) => changed.every((k) => keys.includes(k));
  * Uma ferramenta do Looks → o efeito de ferramenta do MotionFrame (mesma ordem e valores do arquivo).
  * Quando a ferramenta mexe em algo que a ferramenta dedicada não tem, vira um "Looks › nome" só com os valores dela.
  */
-function looksToolEffect(t, strength) {
+export function looksToolEffect(t, strength) {
   const { params: q, extra } = looksFromTools([t], strength);
   const changed = Object.keys(q).filter((k) => k !== 'strength' && (LOOKS_BASE[k] === undefined ? !(typeof q[k] === 'number' && (q[k] === 0 || q[k] === -1)) : !sameV(q[k], LOOKS_BASE[k])));
   const name = LOOKS_TOOL_NAMES[t.id] || t.id;
@@ -528,7 +529,7 @@ export const IMPORT_RULES = [
     map: { brightness: { n: ['brightness'] }, contrast: { n: ['contrast'] } } },
   { vendor: 'BCC', plugin: 'BCC Unsharp Mask', to: 'sharpen', test: /bcc.*(unsharp|sharpen)/i,
     // BCC Unsharp Mask: Amount em múltiplos (1 = 100%); Radius em px (desfoque grande = contraste local)
-    map: { radius: { n: ['radius'], conv: (v) => v * 0.5 }, amount: { n: ['amount'], conv: (v) => (v <= 20 ? v * 15 : v) }, threshold: { n: ['threshold'] } } },
+    map: { radius: { n: ['radius'], conv: (v) => v * 0.25 }, amount: { n: ['amount'], conv: (v) => (v <= 20 ? v * 4 : v) }, threshold: { n: ['threshold'] } } }, // mesma leitura do Frameify (Amount 6 → 24%, Radius 12 → 3)
   { vendor: 'RE:Vision', plugin: 'ReelSmart Motion Blur', to: 'motionBlur', test: /reelsmart|\brsmb\b|motion ?blur ?pro/i,
     map: { amount: { n: ['blur amount', 'motion blur amount'], conv: (v) => (v <= 4 ? v * 200 : v) } } },
   { vendor: 'Plugin Everything', plugin: 'Deep Glow', to: 'deepGlow', test: /deep ?glow|\bpedg\b/i,
@@ -607,6 +608,14 @@ export const IMPORT_RULES = [
   // S_Vignette (sapphire_ae.dll): Opacity (força), Radius 0,9, Edge Softness 1, Rel Height 0,75 (elipse do quadro), Color
   { vendor: 'Sapphire', plugin: 'S_Vignette', to: 'vignette', test: /s_vignette/i, map: { amount: { n: ['opacity', 'amount', 'vignette amount', 'darken'], conv: (v) => (v <= 1 ? v * 100 : v) }, size: { n: ['radius', 'size'], conv: (v) => (v <= 2 ? v * 60 : v) }, feather: { n: ['edge softness', 'softness', 'feather'], conv: (v) => (v <= 1 ? v * 100 : v) }, color: { n: ['color'] } }, set: { round: false } },
   { vendor: 'Sapphire', plugin: 'S_Kaleido', to: 'kaleida', test: /s_kaleid/i },
+  { vendor: 'Sapphire', plugin: 'S_WipeLine', to: 'wipeLine', test: /s_wipeline/i,
+    map: { pct: { n: ['wipe percent'] }, angle: { n: ['angle'] }, dir: { n: ['transition dir'] }, noiseAmp: { n: ['noise amp'] }, noiseFreq: { n: ['noise freq'] }, noiseSpeed: { n: ['noise speed'] },
+      borderW: { n: ['border width'] }, borderColor: { n: ['border color'] }, borderOp: { n: ['border opacity'] }, glow: { n: ['border glow'] }, glowW: { n: ['glow width'] }, glowColor: { n: ['glow color'] } } },
+  { vendor: 'Sapphire', plugin: 'S_EdgeDetect', to: 'edgeDetect', test: /s_edgedetect/i,
+    map: { threshold: { n: ['threshold'] }, bright: { n: ['brightness'] }, wr: { n: ['weight red'] }, wg: { n: ['weight green'] }, wb: { n: ['weight blue'] } } },
+  { vendor: 'BCC', plugin: 'BCC Textured Wipe', to: 'texturedWipe', test: /bcc.*textured ?wipe/i, map: { amount: { n: ['wipe amount'] }, softness: { n: ['softness'] } } },
+  { vendor: 'BCC', plugin: 'BCC ML Depth Estimation', to: 'depthMap', test: /bcc.*depth ?estim|mldepth/i,
+    map: { far: { n: ['level far'] }, near: { n: ['level near'] }, gamma: { n: ['gamma'], conv: (v) => (v > 0 ? v : 1) }, bright: { n: ['brightness'], conv: (v) => v / 100 }, contrast: { n: ['contrast'], conv: (v) => v / 100 } } },
   { vendor: 'Sapphire', plugin: 'S_WarpFishEye', to: 'fishEye', test: /s_warpfisheye|fish ?eye/i,
     map: { amount: { n: ['amount'] }, center: { n: ['center'] }, wrapX: { n: ['wrap x'], conv: (v) => Math.min(3, Math.max(1, v)) }, wrapY: { n: ['wrap y'], conv: (v) => Math.min(3, Math.max(1, v)) } } },
   { vendor: 'Sapphire', plugin: 'S_TimeWarpRGB', to: 'timeWarpRGB', test: /s_timewarprgb/i, map: { red: { n: ['red shift frames'] }, blue: { n: ['blue shift frames'] } } },
@@ -648,7 +657,15 @@ export const IMPORT_RULES = [
   // ---------------------------------------------------------------- nativos do After Effects
   { vendor: ADOBE, plugin: 'Exposure', to: 'exposure', match: ['ADBE Exposure2'], map: { exposure: { i: 3, n: ['exposure'] }, offset: { i: 4, n: ['offset'] }, gamma: { i: 5, n: ['gamma correction', 'gamma'] } } },
   { vendor: ADOBE, plugin: 'Hue/Saturation', to: 'hueSat', match: ['ADBE HUE SATURATION'],
-    map: { hue: { i: 4, n: ['master hue'] }, saturation: { i: 5, n: ['master saturation'] }, lightness: { i: 6, n: ['master lightness'] }, colorize: { i: 7, n: ['colorize'] } } },
+    map: { hue: { i: 4, n: ['master hue'] }, saturation: { i: 5, n: ['master saturation'] }, lightness: { i: 6, n: ['master lightness'] }, colorize: { i: 7, n: ['colorize'] } },
+    // o AE guarda o Master de verdade no bloco "Channel Range" (inteiros: matiz, saturação, luminosidade, depois as faixas)
+    post: (p, raw, fx) => {
+      const cr = fx?.params?.find((q) => q.arbInts && /channel range/i.test(q.name || ''))?.arbInts;
+      if (!cr || cr.length < 3) return;
+      if (!p.hue) p.hue = cr[0];
+      if (!p.saturation) p.saturation = cr[1];
+      if (!p.lightness) p.lightness = cr[2];
+    } },
   { vendor: ADOBE, plugin: 'Color Balance (HLS)', to: 'hueSat', match: ['ADBE Color Balance (HLS)'], map: { hue: { i: 1, n: ['hue'] }, lightness: { i: 2, n: ['lightness'] }, saturation: { i: 3, n: ['saturation'] } } },
   { vendor: ADOBE, plugin: 'Motion Tile', to: 'motionTile', match: ['ADBE Tile'], map: { outW: { i: 4, n: ['output width'] }, outH: { i: 5, n: ['output height'] }, mirror: { i: 6, n: ['mirror edges'] } } },
   { vendor: ADOBE, plugin: '4-Color Gradient', to: 'fourColor', match: ['ADBE 4ColorGradient'],
@@ -705,6 +722,7 @@ export const IMPORT_RULES = [
   { vendor: ADOBE, plugin: 'Vibrance', to: 'vibrance', match: ['ADBE Vibrance'], map: { vibrance: { n: ['vibrance'] }, saturation: { n: ['saturation'] } } },
   { vendor: ADOBE, plugin: 'Tint', to: 'tint', match: ['ADBE Tint'], map: { black: { i: 1, n: ['map black to'] }, white: { i: 2, n: ['map white to'] }, amount: { i: 3, n: ['amount to tint'] } } },
   { vendor: ADOBE, plugin: 'Black & White', to: 'blackWhite', match: ['ADBE Black&White', 'ADBE Black & White'] },
+  { vendor: ADOBE, plugin: 'Luma Key', to: 'lumaKey', match: ['ADBE Luma Key'], map: { type: { i: 1, n: ['key type'] }, threshold: { i: 2, n: ['threshold'] }, tolerance: { i: 3, n: ['tolerance'] }, feather: { i: 5, n: ['edge feather'] } } },
   { vendor: ADOBE, plugin: 'Bevel Alpha', to: 'bevelAlpha', match: ['ADBE Bevel Alpha'], map: { thickness: { i: 1, n: ['edge thickness'] }, angle: { i: 2, n: ['light angle'] }, color: { i: 3, n: ['light color'] }, intensity: { i: 4, n: ['light intensity'] } } },
   { vendor: ADOBE, plugin: 'Crop Edges', to: 'cropEdges', match: ['ADBE CM CropEdges'], map: { amount: { i: 1, n: ['crop amount (per edge)', 'crop amount'] } } },
   { vendor: ADOBE, plugin: 'Color Key', to: 'colorKey', match: ['ADBE Color Key'], map: { key: { i: 1, n: ['key color'] }, tolerance: { i: 2, n: ['color tolerance'] }, feather: { i: 4, n: ['edge feather'] } } },

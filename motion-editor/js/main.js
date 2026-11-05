@@ -17,7 +17,7 @@ import { Inspector } from './inspector.js';
 import { Library } from './library.js';
 import { FxBrowser } from './fx-browser.js';
 import { KeyTools } from './keytools.js';
-import { deleteKeys, animProps } from './keyframes.js';
+import { deleteKeys, animProps, setEase } from './keyframes.js';
 import { sourceTime } from './timing.js';
 import { exportDialog } from './exporter.js';
 import { getEffectDef } from './effects.js';
@@ -29,6 +29,8 @@ import { getGL } from './gl.js';
 import { TrackerPanel } from './tracker-panel.js';
 import { calibrateFromImage, CALIB_LABEL } from './calibrate.js';
 import { parseAEP, aepToProject, mainComps } from './aep.js';
+import { xmlToProject } from './xml-import.js';
+import { importFonts, loadSavedFonts, isFontFile, userFonts, removeFont } from './fonts.js';
 
 const store = new Store();
 const AUTOSAVE_KEY = 'motionframe.autosave.v2';
@@ -99,6 +101,7 @@ function frameCacheGet(key) {
   frameCache.delete(key); frameCache.set(key, e); // mais recente
   return e.c;
 }
+const DRAFT_MS = IOS_M || /Android|Mobi/i.test(navigator.userAgent) ? 45 : 110;
 let glLosses = 0, lastEdit = 0, hqMs = 0, hqTimer = 0, holdSince = 0;
 setGLLostListener(() => { glLosses++; dirty = true; frameCacheClear(); if (!setGLLostListener.warned) { setGLLostListener.warned = true; toast('A GPU do aparelho reiniciou; o app recuperou a prévia.', 'warn', 3500); } });
 // primeira vez no app: mostra o passo a passo
@@ -175,8 +178,9 @@ function loop(now) {
     const fps = store.project.fps || 30, fi = Math.round(store.time * fps + 1e-6);
     // Resolução adaptativa (como no AE): parado, enquanto você arrasta/mexe num projeto pesado, o quadro sai em
     // rascunho; quando para de mexer, sai o quadro nítido (e vai para o cache).
+    // celular/tablet: entra em rascunho mais cedo (o scrub não trava); PC só em projetos pesados
     const interacting = performance.now() - lastEdit < 380;
-    const draftK = !store.playing && qualitySel.value === 'auto' && interacting && hqMs > 140 ? Math.max(0.3, Math.min(0.8, Math.sqrt(90 / hqMs))) : 1;
+    const draftK = !store.playing && qualitySel.value === 'auto' && interacting && hqMs > DRAFT_MS ? Math.max(0.3, Math.min(0.8, Math.sqrt((DRAFT_MS * 0.65) / hqMs))) : 1;
     const key = `${fi}|${quality}|${store.playing ? 'p' : 'hq'}`;
     const cached = (store.playing && frameCacheGet(`${fi}|${quality}|hq`)) || frameCacheGet(key);
     const tq = store.playing ? fi / fps : store.time;
@@ -518,7 +522,7 @@ function renderToolbar() {
       ...(t === 'video' || t === 'image' ? [['bg-remove', '✂︎', 'Tirar fundo']] : []),
       ['calibrate', '🎯', 'Calibrar CC'], ['props', '☰', 'Propriedades'], ['keys', '📈', 'Keyframes / gráfico'],
       ['split', '✂', 'Dividir'], ['dup', '⧉', 'Duplicar'],
-      t === 'group' ? ['ungroup', '⊟', 'Desagrupar'] : ['group', '⊞', 'Agrupar'],
+      t === 'group' ? ['ungroup', '⊟', 'Desagrupar'] : ['group', '⊞', 'Pré-compor'],
       ['up', '▲', 'Subir'], ['down', '▼', 'Descer'],
       ['toggle-visible', layer.visible ? '👁' : '◌', layer.visible ? 'Ocultar' : 'Mostrar'], ['del', '🗑', 'Excluir'],
     ]
@@ -758,6 +762,9 @@ async function showMenu() {
     <button data-m="comp">⚙ Configurações da composição</button>
     <button data-m="ffx">⤒ Importar preset .ffx do After Effects</button>
     <button data-m="aep">Ae Abrir projeto .aep do After Effects</button>
+    <button data-m="xml">⇄ Importar XML (Premiere / Final Cut / DaVinci)</button>
+    <button data-m="font">🔤 Importar fontes (.ttf / .otf / .woff)</button>
+    <button data-m="keys">⌨ Atalhos de teclado (After Effects)</button>
     ${flatLayers(store.project.layers).some((l) => l.props?.aeMedia) ? '<button data-m="relink">🔗 Conectar vídeos/fotos do projeto do AE</button><button data-m="relinksub">🔁 Usar outros vídeos/fotos no lugar dos que faltam</button>' : ''}
     <button data-m="about">ⓘ Sobre os efeitos e plugins</button>
   </div>`, [{ label: 'Fechar', value: null }], {
@@ -771,6 +778,9 @@ async function showMenu() {
   if (res === 'comp') compSettings();
   if (res === 'ffx') commands['import-ffx']();
   if (res === 'aep') openAEPFlow();
+  if (res === 'xml') openXMLFlow();
+  if (res === 'font') importFontsFlow();
+  if (res === 'keys') showShortcuts();
   if (res === 'account') showAccount();
   if (res === 'apps') showApps();
   if (res === 'relink') relinkAEMedia();
@@ -812,28 +822,30 @@ async function groupLayers() {
   const p = { layers: store.layers };
   const sel = store.selectedLayerId;
   const chosen = store.selectedLayers();
-  // várias camadas já selecionadas na timeline: pré-compõe direto
-  if (chosen.length >= 2) {
-    const name = await modal('Pré-compor', `<p class="muted small">${chosen.length} camadas selecionadas viram uma pré-composição (grupo): dá para mover, animar e pôr efeitos/presets nela inteira. Toque duas vezes no grupo para abrir.</p>
-      <label class="row"><span>Nome</span><input type="text" data-f="name" value="Pré-comp ${p.layers.filter((l) => l.type === 'group').length + 1}"></label>`,
-    [{ label: 'Cancelar', value: null }, { label: 'Pré-compor', primary: true, value: (w) => w.querySelector('[data-f="name"]').value.trim() || 'Pré-comp' }]);
-    if (name == null) return;
-    makeGroup(chosen.map((l) => l.id), name);
+  // camada(s) já selecionada(s) na timeline: pré-compõe direto (1 camada também, como no AE)
+  if (chosen.length >= 1 && (chosen.length >= 2 || chosen[0].type !== 'audio')) {
+    const one = chosen.length === 1, fxN = one ? chosen[0].effects.length : 0;
+    const res = await modal('Pré-compor', `<p class="muted small">${one ? `A camada “${escapeHtml(chosen[0].name)}” vira` : `${chosen.length} camadas selecionadas viram`} uma pré-composição: dá para mover, animar e pôr efeitos/presets nela inteira. Toque duas vezes para abrir.</p>
+      <label class="row"><span>Nome</span><input type="text" data-f="name" value="${one ? escapeHtml(chosen[0].name) + ' Comp 1' : 'Pré-comp ' + (p.layers.filter((l) => l.type === 'group').length + 1)}"></label>
+      ${fxN ? `<label class="row"><span>Efeitos (${fxN})</span><select data-f="fx"><option value="move">Mover para dentro da pré-comp</option><option value="leave">Deixar na pré-comp (por fora)</option></select></label>` : ''}`,
+    [{ label: 'Cancelar', value: null }, { label: 'Pré-compor', primary: true, value: (w) => ({ name: w.querySelector('[data-f="name"]').value.trim() || 'Pré-comp', fx: w.querySelector('[data-f="fx"]')?.value || 'move' }) }]);
+    if (res == null) return;
+    makeGroup(chosen.map((l) => l.id), res.name, res.fx === 'leave');
     return;
   }
   const candidates = p.layers.filter((l) => l.type !== 'audio');
-  if (candidates.length < 2) { toast('Você precisa de pelo menos 2 camadas para agrupar.', 'warn'); return; }
+  if (!candidates.length) { toast('Adicione uma camada primeiro.', 'warn'); return; }
   const ids = await modal('Agrupar camadas', `
     <p class="muted small">Escolha as camadas. Elas viram um <b>grupo</b> (como a pré-composição do After Effects): você move, anima e aplica efeitos/presets no grupo inteiro. Para editar cada camada de novo, use <b>Desagrupar</b>.</p>
     <div class="group-list">${candidates.map((l) => `<label class="group-item"><input type="checkbox" value="${l.id}" ${l.id === sel ? 'checked' : ''}> <span>${escapeHtml(l.name)}</span> <em class="muted small">${l.type}</em></label>`).join('')}</div>
     <label class="row"><span>Nome do grupo</span><input type="text" data-f="name" value="Grupo ${p.layers.filter((l) => l.type === 'group').length + 1}"></label>`,
   [{ label: 'Cancelar', value: null }, { label: 'Agrupar', primary: true, value: (w) => ({ ids: [...w.querySelectorAll('.group-item input:checked')].map((i) => i.value), name: w.querySelector('[data-f="name"]').value.trim() }) }]);
   if (!ids) return;
-  if (ids.ids.length < 2) { toast('Marque pelo menos 2 camadas.', 'warn'); return; }
+  if (!ids.ids.length) { toast('Marque pelo menos 1 camada.', 'warn'); return; }
   makeGroup(ids.ids, ids.name);
 }
 
-function makeGroup(idList, name) {
+function makeGroup(idList, name, leaveFx = false) {
   const p = { layers: store.layers };
   const ids = { ids: idList, name };
   const kids = p.layers.filter((l) => ids.ids.includes(l.id));
@@ -842,13 +854,14 @@ function makeGroup(idList, name) {
   g.name = ids.name || 'Grupo';
   g.inPoint = Math.min(...kids.map((l) => l.inPoint));
   g.outPoint = Math.max(...kids.map((l) => l.outPoint));
+  if (leaveFx && kids.length === 1) { g.effects = kids[0].effects; kids[0].effects = []; }
   const rest = p.layers.filter((l) => !ids.ids.includes(l.id));
   rest.splice(Math.min(at, rest.length), 0, g);
   store.layers = rest;
   store.multi?.clear();
   store.selectedLayerId = g.id;
   store.commit('structure');
-  toast(`${kids.length} camadas agrupadas em “${g.name}”.`, 'ok');
+  toast(kids.length === 1 ? `Pré-composição “${g.name}” criada.` : `${kids.length} camadas agrupadas em “${g.name}”.`, 'ok');
 }
 
 function ungroupLayer() {
@@ -1008,27 +1021,181 @@ const commands = {
 };
 document.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => commands[b.dataset.cmd]?.()));
 
+// ------------------------------------------------------------------ atalhos de teclado (os do After Effects)
+export const SHORTCUTS = [
+  ['Geral', [['Espaço / 0 (numérico)', 'Tocar / pausar'], ['Ctrl+Z / Ctrl+Shift+Z', 'Desfazer / refazer'], ['Ctrl+S', 'Salvar projeto'], ['Ctrl+N', 'Nova composição'], ['Ctrl+K', 'Configurações da composição'], ['Ctrl+I', 'Importar vídeo/foto'], ['Ctrl+M', 'Exportar (fila de render)'], ['~ (til)', 'Ampliar o preview'], ['?', 'Esta lista de atalhos']]],
+  ['Camadas', [['Ctrl+Y', 'Novo sólido'], ['Ctrl+Alt+Y', 'Nova camada de ajuste'], ['Ctrl+Alt+Shift+Y', 'Novo Null'], ['Ctrl+Alt+Shift+T', 'Novo texto'], ['Ctrl+Alt+Shift+C', 'Nova câmera 3D'], ['Ctrl+D', 'Duplicar'], ['Ctrl+Shift+D', 'Dividir camada no playhead'], ['Ctrl+Shift+C', 'Pré-compor (1 ou mais camadas)'], ['Ctrl+C / Ctrl+X / Ctrl+V', 'Copiar / recortar / colar camadas'], ['Delete', 'Excluir'], ['Ctrl+A', 'Selecionar todas as camadas'], ['Ctrl+Shift+A / F2', 'Tirar a seleção'], ['Ctrl+↑ / Ctrl+↓', 'Selecionar camada de cima / de baixo'], ['Ctrl+] / Ctrl+[', 'Subir / descer a camada'], ['Ctrl+Shift+] / Ctrl+Shift+[', 'Trazer para o topo / mandar para o fundo'], ['Ctrl+L', 'Travar / destravar'], ['Ctrl+Alt+F', 'Ajustar à composição'], ['Ctrl+Alt+R', 'Inverter no tempo (reverse)'], ['Ctrl+Alt+T', 'Ativar Time Remap'], ['Ctrl+Shift+E', 'Remover todos os efeitos']]],
+  ['Tempo', [['← / →  ou  Page Up / Page Down', 'Voltar / avançar 1 quadro'], ['Shift + ← / →', '10 quadros'], ['Home / End', 'Início / fim da composição'], ['I / O', 'Ir para a entrada / saída da camada'], ['[ / ]', 'Mover a camada para começar / terminar no playhead'], ['Alt+[ / Alt+]', 'Cortar entrada / saída no playhead'], ['J / K', 'Keyframe anterior / próximo'], ['M ou *', 'Marcador'], ['= / -', 'Zoom da timeline']]],
+  ['Propriedades e keyframes', [['P / S / R / T / A', 'Mostrar Posição / Escala / Rotação / Opacidade / Ancoragem'], ['U', 'Keyframes da camada'], ['E', 'Efeitos da camada'], ['Alt+Shift+P / S / R / T / A', 'Keyframe em Posição / Escala / Rotação / Opacidade / Ancoragem'], ['Shift+K', 'Keyframe em todas as transformações'], ['F9', 'Easy Ease nos keyframes selecionados'], ['Shift+F9 / Ctrl+Shift+F9', 'Easy Ease In / Out'], ['Ctrl+Alt+A', 'Selecionar todos os keyframes'], ['Esc', 'Tirar seleção de keyframes']]],
+];
+export function showShortcuts() {
+  modal('Atalhos de teclado (After Effects)', SHORTCUTS.map(([g, list]) => `<h3 style="margin:12px 0 6px;font-size:14px">${g}</h3><table class="sc-table">${list.map(([k, d]) => `<tr><td><kbd>${escapeHtml(k)}</kbd></td><td>${escapeHtml(d)}</td></tr>`).join('')}</table>`).join(''), [{ label: 'Fechar', value: null }], { wide: true });
+}
+
+let layerClipboard = [];
+const PROP_KEYS = { p: 'position', s: 'scale', r: 'rotation', t: 'opacity', a: 'anchor' };
+function revealProp(k) {
+  if (!store.layer()) return;
+  openSheet('props');
+  setTimeout(() => {
+    const row = document.querySelector(`#propsPanel .prop-row[data-path="transform.${k}"]`);
+    if (row) { row.scrollIntoView({ block: 'center', behavior: 'smooth' }); row.classList.add('flash'); setTimeout(() => row.classList.remove('flash'), 900); }
+  }, 120);
+}
+function keyOne(k) {
+  const l = store.layer();
+  if (!l || !l.transform[k]) return;
+  setKey(l.transform[k], store.time, valueAt(l.transform[k], store.time), 'easeInOut');
+  store.commit();
+  toast(`Keyframe: ${({ position: 'Posição', scale: 'Escala', rotation: 'Rotação', opacity: 'Opacidade', anchor: 'Ancoragem' })[k]}`, 'ok', 1200);
+}
+function jumpKey(dir) {
+  const l = store.layer();
+  const times = [...new Set((l ? [l] : store.layers).flatMap((x) => animProps(x).flatMap(({ prop }) => (prop.keys || []).map((k) => k.t))))].sort((a, b) => a - b);
+  const t = store.time, eps = 1e-4;
+  const nt = dir > 0 ? times.find((x) => x > t + eps) : [...times].reverse().find((x) => x < t - eps);
+  if (nt != null) { setPlaying(false); store.setTime(nt); }
+}
+function selectNeighbor(dir) {
+  const ls = store.layers;
+  if (!ls.length) return;
+  const i = ls.findIndex((l) => l.id === store.selectedLayerId);
+  const j = i < 0 ? 0 : Math.max(0, Math.min(ls.length - 1, i + dir));
+  store.select(ls[j].id);
+}
+function moveToEdge(top) {
+  const l = store.layer();
+  if (!l) return;
+  const i = store.layers.indexOf(l);
+  store.layers.splice(i, 1);
+  if (top) store.layers.unshift(l); else store.layers.push(l);
+  store.commit('structure');
+}
+function trimLayer(side) {
+  const l = store.layer(), t = store.time, fps = store.project.fps || 30;
+  if (!l || t <= l.inPoint - 1e-6 && side === 'out' || t >= l.outPoint && side === 'in') return;
+  if (side === 'in') {
+    const ni = Math.max(0, Math.min(l.outPoint - 1 / fps, t));
+    if (l.type === 'video' || l.type === 'audio') { const rate = l.type === 'video' ? (l.props.speed ?? 1) : 1; l.props.sourceStart = Math.max(0, (l.props.sourceStart || 0) + (ni - l.inPoint) * rate); }
+    l.inPoint = ni;
+  } else l.outPoint = Math.max(l.inPoint + 1 / fps, Math.min(store.project.duration, t));
+  store.commit('structure');
+}
+function alignLayer(edge) {
+  const l = store.layer();
+  if (!l) return;
+  shiftLayer(l, edge === 'in' ? store.time - l.inPoint : store.time - l.outPoint);
+  store.commit('structure');
+}
+function addTimeRemap() {
+  const l = store.layer();
+  if (!l || l.type !== 'video') { toast('Time Remap funciona em camadas de vídeo.', 'warn'); return; }
+  if (l.effects.some((f) => f.type === 'timeRemap')) { openSheet('effects'); return; }
+  const fx = createEffectInstance('timeRemap');
+  getEffectDef('timeRemap').init?.(fx, l);
+  l.effects.unshift(fx);
+  store.commit('structure');
+  toast('Time Remap ativado (anime “Tempo do vídeo”).', 'ok');
+}
+function fitToComp() {
+  const l = store.layer();
+  if (!l) return;
+  const { width: W, height: H } = store.project;
+  const w = l.props?.width || W, h = l.props?.height || H, k = Math.max(W / w, H / h) * 100;
+  setValue(l.transform.position, store.time, [W / 2, H / 2]); setValue(l.transform.scale, store.time, [k, k]); setValue(l.transform.rotation, store.time, 0);
+  store.commit();
+}
+function copyLayers(cut) {
+  const list = store.selectedLayers();
+  if (!list.length) return;
+  layerClipboard = list.map((l) => deepClone(l));
+  if (cut) deleteSelection();
+  toast(`${list.length} camada(s) ${cut ? 'recortada(s)' : 'copiada(s)'}.`, 'ok', 1200);
+}
+function pasteLayers() {
+  if (!layerClipboard.length) return;
+  const fresh = (l) => { const c = deepClone(l); c.id = uid('ly'); if (c.props?.layers) c.props.layers = c.props.layers.map(fresh); for (const fx of c.effects || []) fx.id = uid('fx'); return c; };
+  const copies = layerClipboard.map(fresh);
+  const i = Math.max(0, store.layers.findIndex((l) => l.id === store.selectedLayerId));
+  store.layers.splice(i, 0, ...copies);
+  store.multi?.clear();
+  store.selectedLayerId = copies[0].id;
+  store.commit('structure');
+}
+
 document.addEventListener('keydown', (e) => {
   const tag = e.target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || document.querySelector('.modal-wrap')) return;
-  const mod = e.ctrlKey || e.metaKey;
-  const key = e.key.toLowerCase();
-  if (mod && key === 'z') { e.preventDefault(); (e.shiftKey ? commands.redo : commands.undo)(); return; }
-  if (mod && key === 'y') { e.preventDefault(); commands.redo(); return; }
-  if (mod && key === 's') { e.preventDefault(); saveProject(); return; }
-  if (mod && key === 'd') { e.preventDefault(); commands.dup(); return; }
-  if (mod && key === 'a') { e.preventDefault(); commands['select-all-keys'](); return; }
-  if (mod && e.shiftKey && key === 'k') { e.preventDefault(); commands.split(); return; }
-  switch (e.key) {
-    case ' ': e.preventDefault(); commands.play(); break;
-    case 'ArrowLeft': e.preventDefault(); setPlaying(false); store.setTime(store.time - frame() * (e.shiftKey ? 10 : 1)); break;
-    case 'ArrowRight': e.preventDefault(); setPlaying(false); store.setTime(store.time + frame() * (e.shiftKey ? 10 : 1)); break;
-    case 'Home': commands.start(); break;
-    case 'End': commands.end(); break;
-    case 'Delete': case 'Backspace': e.preventDefault(); deleteSelection(); break;
-    case 'k': case 'K': addTransformKey(); break;
-    case 'm': case 'M': commands.marker(); break;
-    case 'Escape': store.setKeySelection([]); break;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable || document.querySelector('.modal-wrap')) return;
+  const mod = e.ctrlKey || e.metaKey, alt = e.altKey, sh = e.shiftKey;
+  const key = e.key.toLowerCase(), code = e.code;
+  const go = (fn) => { e.preventDefault(); fn(); };
+  if (mod) {
+    // camadas novas (Ctrl+Alt+Shift…) primeiro
+    if (alt && sh && code === 'KeyY') return go(() => addLayer('null'));
+    if (alt && sh && code === 'KeyT') return go(() => commands['add-text']());
+    if (alt && sh && code === 'KeyC') return go(() => addLayer('camera'));
+    if (alt && code === 'KeyY') return go(() => commands['add-adjustment']());
+    if (alt && code === 'KeyA') return go(() => commands['select-all-keys']());
+    if (alt && code === 'KeyR') return go(() => timeReverse(store.layer()));
+    if (alt && code === 'KeyT') return go(addTimeRemap);
+    if (alt && code === 'KeyF') return go(fitToComp);
+    if (code === 'KeyZ') return go(() => (sh ? commands.redo : commands.undo)());
+    if (code === 'KeyY') return go(() => addLayer('solid'));
+    if (code === 'KeyS') return go(() => saveProject());
+    if (code === 'KeyN') return go(() => commands.new());
+    if (code === 'KeyK') return go(() => commands.comp());
+    if (code === 'KeyI') return go(() => commands['add-media']());
+    if (code === 'KeyM') return go(() => commands.export());
+    if (code === 'KeyD') return go(() => (sh ? commands.split() : commands.dup()));
+    if (code === 'KeyK' && sh) return go(() => commands.split());
+    if (code === 'KeyC') return go(() => (sh ? groupLayers() : copyLayers(false)));
+    if (code === 'KeyX') return go(() => copyLayers(true));
+    if (code === 'KeyV') return go(pasteLayers);
+    if (code === 'KeyA') return go(() => (sh ? store.select(null) : (store.layers.forEach((l, i) => store.select(l.id, i > 0)))));
+    if (code === 'KeyE' && sh) return go(() => { const l = store.layer(); if (l) { l.effects = []; store.commit('structure'); } });
+    if (code === 'KeyL') return go(() => { const l = store.layer(); if (l) { l.locked = !l.locked; store.commit('structure'); toast(l.locked ? 'Camada travada.' : 'Camada destravada.', 'ok', 1000); } });
+    if (code === 'BracketRight') return go(() => (sh ? moveToEdge(true) : commands.up()));
+    if (code === 'BracketLeft') return go(() => (sh ? moveToEdge(false) : commands.down()));
+    if (code === 'ArrowUp') return go(() => selectNeighbor(-1));
+    if (code === 'ArrowDown') return go(() => selectNeighbor(1));
+    if (code === 'ArrowLeft') return go(() => { setPlaying(false); store.setTime(store.time - frame()); });
+    if (code === 'ArrowRight') return go(() => { setPlaying(false); store.setTime(store.time + frame()); });
+    if (code === 'F9' && sh) return go(() => { setEase(store.selectedKeys, 'easeOut'); store.commit(); });
+    return;
+  }
+  if (alt && sh && PROP_KEYS[key]) return go(() => keyOne(PROP_KEYS[key]));
+  if (alt && code === 'BracketLeft') return go(() => trimLayer('in'));
+  if (alt && code === 'BracketRight') return go(() => trimLayer('out'));
+  if (alt) return;
+  switch (code) {
+    case 'Space': case 'Numpad0': return go(() => commands.play());
+    case 'ArrowLeft': case 'PageUp': return go(() => { setPlaying(false); store.setTime(store.time - frame() * (sh ? 10 : 1)); });
+    case 'ArrowRight': case 'PageDown': return go(() => { setPlaying(false); store.setTime(store.time + frame() * (sh ? 10 : 1)); });
+    case 'Home': return go(() => commands.start());
+    case 'End': return go(() => commands.end());
+    case 'Delete': case 'Backspace': return go(deleteSelection);
+    case 'BracketLeft': return go(() => alignLayer('in'));
+    case 'BracketRight': return go(() => alignLayer('out'));
+    case 'Equal': case 'NumpadAdd': return go(() => timeline.setZoom(timeline.pps * 1.5));
+    case 'Minus': case 'NumpadSubtract': return go(() => timeline.setZoom(timeline.pps / 1.5));
+    case 'NumpadMultiply': return go(() => commands.marker());
+    case 'F2': return go(() => store.select(null));
+    case 'F9': return go(() => { setEase(store.selectedKeys, 'easeInOut'); store.commit(); });
+    case 'Backquote': return go(() => setMaxPreview(!document.body.classList.contains('preview-max')));
+    case 'Escape': store.setKeySelection([]); return;
+    default:
+  }
+  if (e.key === '?') return go(showShortcuts);
+  if (e.key === '*') return go(() => commands.marker());
+  switch (key) {
+    case 'i': { const l = store.layer(); if (l) go(() => store.setTime(l.inPoint)); return; }
+    case 'o': { const l = store.layer(); if (l) go(() => store.setTime(Math.max(l.inPoint, l.outPoint - frame()))); return; }
+    case 'j': return go(() => jumpKey(-1));
+    case 'k': return go(() => (sh ? addTransformKey() : jumpKey(1)));
+    case 'm': return go(() => commands.marker());
+    case 'u': return go(() => commands.keys());
+    case 'e': return go(() => openSheet('effects'));
+    case 'p': case 's': case 'r': case 't': case 'a': return go(() => revealProp(PROP_KEYS[key]));
     default:
   }
 });
@@ -1043,8 +1210,14 @@ window.addEventListener('drop', (e) => {
   dragDepth = 0;
   dropOverlay.classList.remove('show');
   const files = [...(e.dataTransfer?.files || [])];
-  const presets = files.filter((f) => /\.(ffx|rgx|cube|json)$/i.test(f.name));
-  const media = files.filter((f) => !/\.(ffx|rgx|cube|json)$/i.test(f.name));
+  const fonts = files.filter((f) => isFontFile(f.name));
+  const xml = files.filter((f) => /\.(xml|fcpxml)$/i.test(f.name));
+  const aep = files.filter((f) => /\.aep$/i.test(f.name));
+  const presets = files.filter((f) => /\.(ffx|frameify|rgx|cube|json)$/i.test(f.name));
+  const media = files.filter((f) => !/\.(ffx|frameify|rgx|cube|json|xml|fcpxml|aep|ttf|otf|woff2?)$/i.test(f.name));
+  if (fonts.length) importFontsFlow(fonts);
+  if (xml.length) openXMLFlow(xml[0]);
+  if (aep.length) openAEPFlow(aep[0]);
   if (presets.length) { openSheet('presets'); library.importFiles(presets); }
   if (media.length) importMedia(media);
 });
@@ -1179,6 +1352,44 @@ async function openAEPFlow(file) {
   } else toast(`Projeto “${base}” aberto ✓${extra.length ? ' — ' + extra[0] : ''}`, 'ok', 5000);
 }
 
+async function openXMLFlow(file) {
+  if (!file) { [file] = await pickFiles('.xml,.fcpxml,.fcpxmld,text/xml,application/xml', false); if (!file) return; }
+  const base = file.name.replace(/\.(fcp)?xml$/i, '');
+  let res;
+  try { res = xmlToProject(await file.text(), base); } catch (e) { toast(`${file.name}: ${e.message}`, 'error', 5000); return; }
+  if (!res.project.layers.length) { toast(`${file.name}: a sequência não tem clipes.`, 'warn'); return; }
+  const p = res.project;
+  p.id = uid('prj');
+  saveProjectData(p, null);
+  await openProjectById(p.id);
+  const go = await modal('Conectar os clipes do XML', `<p>A sequência “${escapeHtml(p.name || base)}” foi montada: <b>${p.layers.length}</b> clipe(s), ${p.width}×${p.height}, ${p.fps}fps, ${p.duration.toFixed(1)}s.</p>
+    <p>Ela usa <b>${res.media.length}</b> arquivo(s):</p><ul class="small">${res.media.slice(0, 20).map((m) => `<li>${escapeHtml(m)}</li>`).join('')}${res.media.length > 20 ? '<li>…</li>' : ''}</ul>
+    <p class="muted small">Escolha esses arquivos (pode marcar vários): cada um entra no clipe certo pelo nome, com o mesmo corte, tempo e velocidade.${res.notes.length ? '<br>' + res.notes.map(escapeHtml).join('<br>') : ''}</p>`,
+  [{ label: 'Depois', value: false }, { label: 'Usar outros vídeos/fotos', value: 'sub' }, { label: 'Escolher arquivos', primary: true, value: true }]);
+  if (go === 'sub') await relinkAEMedia({ substitute: true });
+  else if (go) await relinkAEMedia();
+}
+
+async function importFontsFlow(files) {
+  if (!files) files = await pickFiles('.ttf,.otf,.woff,.woff2,font/*', true);
+  if (!files?.length) {
+    const list = userFonts();
+    if (!list.length) return;
+    const rm = await modal('Fontes importadas', `<div class="menu-list">${list.map((f) => `<button data-f="${escapeHtml(f.family)}"><span style="font-family:'${escapeHtml(f.family)}'">${escapeHtml(f.family)}</span> <span class="muted small">tocar para remover</span></button>`).join('')}</div>`,
+      [{ label: 'Fechar', value: null }], { onMount: (w, close) => w.querySelectorAll('[data-f]').forEach((b) => b.addEventListener('click', () => close(b.dataset.f))) });
+    if (rm) { await removeFont(rm); toast(`Fonte “${rm}” removida.`, 'ok'); }
+    return;
+  }
+  const { ok, bad } = await importFonts(files);
+  if (ok.length) {
+    const l = store.layer();
+    if (l?.type === 'text' && ok.length === 1) { l.props.fontFamily = `"${ok[0]}", sans-serif`; store.commit(); }
+    toast(`Fonte(s) importada(s): ${ok.join(', ')} — escolha em Texto › Fonte.`, 'ok', 4500);
+  }
+  if (bad.length) toast(`Não deu para ler: ${bad.join(', ')}`, 'warn', 4500);
+  store.emit('change');
+}
+
 /** Troca os espaços reservados das mídias do .aep pelos arquivos escolhidos (casando pelo nome do arquivo). */
 const AUD_RE = /\.(mp3|wav|aiff?|m4a|aac|ogg|flac)$/i;
 async function relinkAEMedia({ substitute = false } = {}) {
@@ -1212,7 +1423,7 @@ async function relinkAEMedia({ substitute = false } = {}) {
     l.name = l.name.replace(/^⚠ /, '');
     const keep = { width: ae.width, height: ae.height };
     l.props = isAudio ? { src, mediaId, volume: 100, sourceStart: ae.sourceStart || 0, muted: false }
-      : { src, mediaId, width: keep.width, height: keep.height, ...(swapped ? { fit: 'cover', replacedFrom: ae.file } : {}), ...(isVideo ? { sourceStart: swapped ? 0 : ae.sourceStart || 0, speed: ae.speed || 1, volume: 100 } : {}) };
+      : { src, mediaId, width: keep.width, height: keep.height, ...(swapped ? { fit: 'cover', replacedFrom: ae.file } : ae.fit ? { fit: ae.fit } : {}), ...(isVideo ? { sourceStart: swapped ? 0 : ae.sourceStart || 0, speed: ae.speed || 1, volume: 100 } : {}) };
     if (isVideo) {
       detectFps(src).then((fps) => { if (fps) { l.props.sourceFps = fps; store.commit(); } });
       loadAudio(src).then(() => { l.props.hasAudio = true; store.emit('change'); }).catch(() => { l.props.hasAudio = false; });
@@ -1269,6 +1480,7 @@ const home = new HomeScreen({
   store.load(createProject(1080, 1920));
   updateTitle(); renderToolbar(); layoutCanvas();
   registerServiceWorker();
+  loadSavedFonts().then(() => { frameCacheClear(); store.emit('change'); }).catch(() => {});
   home.show();
 })();
 

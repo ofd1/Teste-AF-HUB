@@ -67,7 +67,20 @@ function makeVideo(src, playback = false) {
   v.preload = 'auto';
   v.crossOrigin = 'anonymous';
   v.addEventListener('loadeddata', () => onChange());
-  v.addEventListener('seeked', () => onChange());
+  v.addEventListener('seeked', () => {
+    // scrub: guarda o quadro que acabou de chegar (cópia leve) para mostrar enquanto a próxima busca roda —
+    // o clipe acompanha o playhead em vez de congelar/piscar preto
+    if (v.readyState >= 2 && v.videoWidth) {
+      const k = Math.min(1, 720 / Math.max(v.videoWidth, v.videoHeight));
+      const w = Math.max(2, Math.round(v.videoWidth * k)), h = Math.max(2, Math.round(v.videoHeight * k));
+      const c = v._scrub || (v._scrub = document.createElement('canvas'));
+      if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+      try { c.getContext('2d').drawImage(v, 0, 0, w, h); v._scrubT = v.currentTime; } catch { /* ignore */ }
+    }
+    // busca "a mais recente vence": enquanto o vídeo buscava, o playhead andou — vai direto para o último pedido
+    if (v._pending != null) { const t = v._pending; v._pending = null; if (Math.abs(v.currentTime - t) > 0.001) { v.currentTime = t; return; } }
+    onChange();
+  });
   return v;
 }
 
@@ -85,6 +98,11 @@ function seek(v, time) {
   const target = Math.max(0, Math.min(time, (v.duration || time + 1) - 0.001));
   if (Math.abs(v.currentTime - target) < 0.001 && !v.seeking) return Promise.resolve();
   v._seekGen = (v._seekGen || 0) + 1;
+  // já buscando (scrub rápido): não empilha buscas — guarda só o destino mais recente
+  if (v.seeking && !exportBusy) {
+    v._pending = target;
+    return new Promise((res) => { const f = () => { if (v._pending == null && !v.seeking) { v.removeEventListener('seeked', f); res(); } }; v.addEventListener('seeked', f); setTimeout(() => { v.removeEventListener('seeked', f); res(); }, 3000); });
+  }
   return new Promise((res) => {
     const done = () => {
       v.removeEventListener('seeked', done); clearTimeout(to);
@@ -227,7 +245,11 @@ export function videoFrames(layer, t, fps, final = false) {
     if (!a) return null;
     return { a, b: sb || null, f: sb ? fr.f : 0, quality: 'final' };
   }
-  if (e.a.readyState < 2) return e.last ? { a: e.last, b: null, f: 0, quality: 'final' } : null;
+  if (e.a.readyState < 2 || e.a.seeking) {
+    const held = e.a._scrub && e.a._scrubT != null ? e.a._scrub : e.last;
+    if (held) return { a: held, b: null, f: 0, quality: 'preview' };
+    if (e.a.readyState < 2) return null;
+  }
   return { a: e.a, b: fr.b !== null && e.b && e.b.readyState >= 2 ? e.b : null, f: fr.f, quality: 'final' };
 }
 
@@ -438,8 +460,8 @@ export function framesDrawable(project, t) {
       if (cacheReady(l)) continue;
       const e = videos.get(l.id);
       if (!e) return false;
-      if ((e.a.readyState < 2 || e.a.seeking) && !e.last) return false;
-      if (e.a.seeking || e.a.readyState < 2) return false;
+      // buscando mas com um quadro recente guardado: desenha com ele (scrub acompanha); sem nada ainda, segura
+      if (e.a.seeking || e.a.readyState < 2) { if (!e.a._scrub && !e.last) return false; continue; }
       if (e.frame?.b != null && e.b && (e.b.readyState < 2 || e.b.seeking)) return false;
     }
   }

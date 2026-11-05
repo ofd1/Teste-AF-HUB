@@ -223,7 +223,7 @@ function parseEffect(sspc, matchName, ctx) {
 
   const tdgp = sspc.children.find((c) => c.id === 'LIST' && c.listType === 'tdgp');
   if (tdgp) {
-    let pm = null;
+    let pm = null, lastParam = null;
     for (const c of tdgp.children) {
       if (c.id === 'tdmn') { pm = r.cstr(c.offset, c.size); continue; }
       if (c.id === 'tdsn' && !pm) { const n = readName(r, c); if (n) fx.instanceName = n; } // nome da instância (ex.: "Looks 3")
@@ -237,7 +237,12 @@ function parseEffect(sspc, matchName, ctx) {
           if (def.options) p.options = def.options;
         }
         if (p.type !== 'group' && p.type !== 'custom' && !(p.index === 0 && !p.value.length)) fx.params.push(p);
+        lastParam = p;
         pm = null;
+      } else if (c.id === 'LIST' && c.listType === 'aRbs' && lastParam) {
+        // dados arbitrários logo depois do parâmetro (ex.: "Channel Range" do Hue/Saturation: Master Hue/Sat/Light e faixas)
+        const ar = (c.children || []).find((x) => x.id === 'aRbp');
+        if (ar && ar.size >= 4) { const n = Math.min(512, Math.floor(ar.size / 4)); lastParam.arbInts = Array.from({ length: n }, (_, i) => r.i32(ar.offset + i * 4)); }
       } else if (c.id === 'LIST' && c.listType === 'tdgp') {
         // grupo de parâmetros aninhado: achata (ignora "Compositing Options" do AE)
         if (pm !== BUILT_IN) flattenGroup(c, defs, fx, ctx);
@@ -311,6 +316,12 @@ function parseProperty(tdbs, matchName, def, ctx) {
     else if (c.id === 'tdb4' && c.size >= 4) { p.dims = r.u16(c.offset + 2); if (c.size >= 6) p.spatial = !!(r.u8(c.offset + 5) & 0x08); }
     else if (c.id === 'cdat') cdat = c;
     else if (c.id === 'LIST' && c.listType === 'list') list = c;
+    else if (c.id === 'LIST' && c.listType === 'aRbs') {
+      // dados arbitrários do parâmetro (ex.: "Channel Range" do Hue/Saturation guarda Master Hue/Sat/Light e as faixas
+      // de cor como inteiros) — guardados como lista de inteiros de 32 bits
+      const ar = (c.children || []).find((x) => x.id === 'aRbp');
+      if (ar && ar.size >= 4) { const n = Math.min(512, Math.floor(ar.size / 4)); p.arbInts = Array.from({ length: n }, (_, i) => r.i32(ar.offset + i * 4)); }
+    }
     else if (c.id === 'Utf8') {
       const s = r.cstr(c.offset, c.size);
       if (s.trim()) p.expression = s;

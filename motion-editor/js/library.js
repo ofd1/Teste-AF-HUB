@@ -1,6 +1,7 @@
 // Biblioteca de presets: nativos, pacote FREE (presets/manifest.json), importados (.ffx/.json) e do usuário.
 import { parseFFX, retimeFFX } from './ffx.js';
 import { parseCube, encodeCube } from './fx/lut.js';
+import { frameifyToPreset } from './frameify.js';
 import { BUILTIN_PRESETS, rgxToParsed, ffxToPreset, applyPreset, layerToPreset, serializePreset, parsePresetJSON } from './presets.js';
 import { LAYER_FACTORIES } from './state.js';
 import { sourceTimeRaw } from './timing.js';
@@ -10,7 +11,7 @@ import { saveFile } from './platform.js';
 import { putMedia, getMedia } from './idb.js';
 
 const STORE_KEY = 'motionframe.presets.v1';
-const CAT_ORDER = ['Importado (FFX)', 'Meus presets', 'Shakes', 'Shatter 3D', 'Transições', 'Velocity', 'Glows', 'CC / Cor', 'Looks', 'Entradas', 'Saídas'];
+const CAT_ORDER = ['Importado (FFX)', 'Importado (Frameify)', 'Meus presets', 'Shakes', 'Shatter 3D', 'Transições', 'Velocity', 'Glows', 'CC / Cor', 'Looks', 'Entradas', 'Saídas'];
 const STATUS = {
   native: ['ok', 'Nativo AE'],
   plugin: ['plugin', 'Plugin reconhecido'],
@@ -86,7 +87,7 @@ export class Library {
     const items = all.filter((p) => (this.cat === 'Todos' || p.category === this.cat) && (!q || `${p.name} ${p.category}`.toLowerCase().includes(q)));
     this.root.innerHTML = `
       <div class="lib-tools">
-        <button class="primary" data-act="import">⤒ Importar .ffx / .rgx / .cube / preset</button>
+        <button class="primary" data-act="import">⤒ Importar .ffx / .frameify / .rgx / .cube / preset</button>
         <button data-act="save-layer">★ Salvar camada como preset</button>
       </div>
       <label class="fit-toggle ${this.fit ? 'on' : ''}">
@@ -120,7 +121,7 @@ export class Library {
   bind() {
     const r = this.root;
     r.querySelector('[data-act="import"]').addEventListener('click', async () => {
-      const files = await pickFiles('.ffx,.aep,.rgx,.cube,.json,application/json,application/octet-stream');
+      const files = await pickFiles('.ffx,.aep,.frameify,.rgx,.cube,.json,application/json,application/octet-stream');
       if (files.length) this.importFiles(files);
     });
     r.querySelector('[data-act="save-layer"]').addEventListener('click', () => this.saveLayer());
@@ -267,6 +268,11 @@ export class Library {
           const name = f.name.replace(/\.cube$/i, '');
           imported.push({ id: `lut_${Date.now().toString(36)}_${imported.length}`, name, category: 'LUTs (.cube)', source: 'user', anchor: 'playhead', transform: {},
             effects: [{ type: 'lut3d', label: `LUT · ${name}`, params: { amount: 100, lut: enc.b64, lutSize: enc.size } }] });
+        } else if (/\.frameify$/i.test(f.name)) {
+          // preset do Frameify: cada efeito/ferramenta vira o equivalente do MotionFrame (com keyframes)
+          const pre = frameifyToPreset(await f.text(), f.name);
+          imported.push({ id: `fy_${Date.now().toString(36)}_${imported.length}`, name: pre.name, category: pre.category, source: 'user', anchor: 'playhead', transform: {}, effects: pre.effects, fileName: f.name });
+          if (pre.report.unknown.length) errors.push(`${f.name}: ${pre.report.unknown.length} efeito(s) do Frameify sem equivalente (${pre.report.unknown.join(', ')})`);
         } else if (/\.rgx$/i.test(f.name)) {
           const parsed = rgxToParsed(JSON.parse(await f.text()), f.name);
           const preset = ffxToPreset(parsed);

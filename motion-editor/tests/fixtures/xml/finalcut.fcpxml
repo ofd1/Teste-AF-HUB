@@ -1,0 +1,8 @@
+<?xml version="1.0"?><fcpxml version="1.10"><resources><format id="r1" frameDuration="1001/30000s" width="1920" height="1080"/>
+<asset id="r2" name="clip1" start="0s" duration="20s" hasVideo="1" hasAudio="1" format="r1"><media-rep kind="original-media" src="file:///Users/x/clip1.mov"/></asset>
+<asset id="r3" name="music" start="0s" duration="60s" hasAudio="1"><media-rep src="file:///Users/x/music.wav"/></asset></resources>
+<library><event><project name="Proj"><sequence format="r1" duration="10s"><spine>
+<asset-clip ref="r2" offset="0s" start="2s" duration="5s" name="clip1"><adjust-transform position="10 0" scale="1.5 1.5"/>
+<asset-clip ref="r3" lane="-1" offset="2s" start="0s" duration="5s" name="music"/></asset-clip>
+<gap offset="5s" duration="1s" start="0s"/>
+<asset-clip ref="r2" offset="6s" start="10s" duration="4s" name="clip1b"/></spine></sequence></project></event></library></fcpxml>

@@ -6,6 +6,7 @@ import { resolveProp } from './state.js';
 import { getEffectDef } from './effects.js';
 import { escapeHtml, hexToRgba, rgbaToHex, deepClone, uid } from './util.js';
 import { toast, modal } from './ui.js';
+import { fontList } from './fonts.js';
 import { exprError, EXPR_PRESETS } from './expr.js';
 
 /**
@@ -83,7 +84,6 @@ const OP_STYLES = [
   ['fadeIn', '◐ Fade in'], ['fadeOut', '◑ Fade out'], ['fadeInOut', '◒ Fade in + out'], ['flash', '⚡ Flash'],
   ['blink', '◌ Piscar'], ['strobe', '▦ Strobe'], ['pulse', '◍ Pulsar'], ['flicker', '✳ Cintilar'], ['clear', '✕ Limpar'],
 ];
-const FONTS = ['Inter, system-ui, sans-serif', 'Impact, "Arial Black", sans-serif', '"Arial Black", sans-serif', 'Georgia, serif', '"Courier New", monospace', '"Trebuchet MS", sans-serif', '"Brush Script MT", cursive'];
 const TYPE_NAMES = { camera: 'Câmera', null: 'Null', group: 'Pré-composição', shape: 'Formas', text: 'Texto', rect: 'Retângulo', ellipse: 'Elipse', solid: 'Sólido', image: 'Imagem', video: 'Vídeo', audio: 'Áudio', adjustment: 'Camada de ajuste' };
 
 // área de transferência de efeitos (vale entre camadas e entre projetos neste aparelho)
@@ -168,7 +168,7 @@ export class Inspector {
     switch (layer.type) {
       case 'text':
         rows.push(`<textarea data-prop="text" data-fid="p-text" rows="2">${escapeHtml(p.text)}</textarea>`);
-        rows.push(f('Fonte', `<select data-prop="fontFamily">${FONTS.map((x) => `<option value='${x}' ${p.fontFamily === x ? 'selected' : ''}>${x.split(',')[0].replace(/"/g, '')}</option>`).join('')}</select>`));
+        rows.push(f('Fonte', `<select data-prop="fontFamily">${[...new Set([...fontList(), ...(p.fontFamily ? [p.fontFamily] : [])])].map((x) => `<option value='${x}' ${p.fontFamily === x ? 'selected' : ''}>${x.split(',')[0].replace(/"/g, '')}</option>`).join('')}</select>`));
         rows.push(f('Tamanho', num('fontSize', 1, 1)));
         rows.push(f('Peso', `<select data-prop="fontWeight">${[300, 400, 600, 800, 900].map((w) => `<option ${+p.fontWeight === w ? 'selected' : ''}>${w}</option>`).join('')}</select>`));
         rows.push(f('Cor', color('color')));
