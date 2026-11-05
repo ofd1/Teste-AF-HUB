@@ -70,7 +70,7 @@ export class TopazPanel {
         <label class="tz-title"><span class="switch"><input type="checkbox" data-tz="enh" ${tz?.enabled ? 'checked' : ''}><i></i></span> <b>Aprimoramento</b> <span class="muted small">— upscale/limpeza</span></label>
         ${tz ? (() => {
           const P = evalParams(tz, this.store.time), V = topazValues(P), m = V.model, mode = P.paramMode || 1;
-          const fixed = m.sliders === 'artemis' || m.sliders === 'none';
+          const fixed = false; // todos os modelos ajustáveis
           const keys = SLIDERS.filter(([k]) => (m.sliders === 'nyx' ? k !== 'details' : k !== 'largeGrain'));
           const opt = (key, list, cur) => `<select data-tzs="${key}">${list.map((n, i) => `<option value="${i + 1}" ${cur === i + 1 ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
           const sl = ([k, name, help]) => {

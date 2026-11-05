@@ -14,9 +14,9 @@ test('Auto / Relative to auto / Manual', () => {
   const a = topazValues({ ...base, paramMode: 1 }), r = topazValues({ ...base, paramMode: 2 }), m = topazValues({ ...base, paramMode: 3 });
   assert.equal(r.c, Math.min(100, a.c + 20)); assert.equal(r.s, 0);
   assert.equal(m.c, 80); assert.equal(m.a, -30);
-  // Artemis não tem sliders: Manual é ignorado, vale o auto da Input Quality
+  // no MotionFrame todos os modelos aceitam Manual (inclusive Artemis, que no plugin é só Auto)
   const art = topazValues({ ...base, model: 4, paramMode: 3, inputQuality: 1 });
-  assert.notEqual(art.c, 80);
+  assert.equal(art.c, 80);
   assert.ok(topazValues({ ...base, model: 4, inputQuality: 1 }).n > topazValues({ ...base, model: 4, inputQuality: 3 }).n);
 });
 

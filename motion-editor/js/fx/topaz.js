@@ -222,8 +222,8 @@ export const TZ_MODELS = [
 const Q3 = (lq, mq, hq) => [lq, mq, hq];
 const AUTO = {
   Proteus: Q3({ c: 70, d: 30, s: 25, n: 45, h: 30, a: 15 }, { c: 52, d: 30, s: 22, n: 30, h: 25, a: 10 }, { c: 25, d: 35, s: 20, n: 12, h: 20, a: 5 }),
-  // Iris calibrado com um print real do Topaz 7 (Fix compression 100, Improve detail 100, Sharpen 20, Reduce noise 10, Dehalo 6, AA −40)
-  Iris: Q3({ c: 100, d: 100, s: 20, n: 20, h: 6, a: -40 }, { c: 100, d: 100, s: 20, n: 10, h: 6, a: -40 }, { c: 60, d: 70, s: 20, n: 5, h: 6, a: -20 }),
+  // Iris: natural (o Iris de verdade é suave, sem cara de "pintado"; comparado com o print do usuário Iris × MotionFrame)
+  Iris: Q3({ c: 70, d: 45, s: 8, n: 25, h: 10, a: -15 }, { c: 55, d: 40, s: 6, n: 15, h: 8, a: -10 }, { c: 30, d: 35, s: 5, n: 8, h: 6, a: -5 }),
   Nyx: Q3({ c: 40, d: 40, s: 10, n: 85, h: 20, a: 5 }, { c: 30, d: 25, s: 10, n: 70, h: 20, a: 5 }, { c: 15, d: 15, s: 8, n: 50, h: 15, a: 0 }),
   Artemis: Q3({ c: 85, d: 35, s: 30, n: 60, h: 40, a: 30 }, { c: 60, d: 45, s: 40, n: 40, h: 35, a: 35 }, { c: 25, d: 55, s: 45, n: 15, h: 30, a: 30 }),
   Themis: Q3({ c: 30, d: 40, s: 50, n: 20, h: 25, a: 90 }, { c: 20, d: 40, s: 50, n: 15, h: 25, a: 90 }, { c: 10, d: 40, s: 45, n: 8, h: 20, a: 85 }),
@@ -257,8 +257,8 @@ export function topazValues(p) {
   const man = legacy
     ? { c: p.revertCompression, d: p.recoverDetails, s: p.sharpen, n: p.reduceNoise, h: p.dehalo, a: p.antialiasDeblur }
     : { c: p.compression, d: p.details, s: p.sharpen, n: p.noise, h: p.dehalo, a: p.aa };
-  // modelos sem sliders (Artemis, Themis, Dione, Gaia) ficam sempre no Auto, como no plugin
-  const fixed = m.sliders === 'none' || m.sliders === 'artemis';
+  // todos os modelos aceitam Relative to auto / Manual (no MotionFrame dá para ajustar qualquer um)
+  const fixed = false;
   const out = {};
   for (const [k, key] of SL) {
     let v = auto[k];
@@ -278,7 +278,7 @@ export function topazValues(p) {
 export const FI_MODELS = ['Apollo', 'Apollo Fast', 'Chronos', 'Chronos Fast', 'Aion'];
 const QUALITY = ['LQ (baixa qualidade)', 'MQ (média)', 'HQ (alta)'];
 const isMode = (n) => (v) => (v.paramMode ?? 1) === n;
-const notFixed = (v) => !['artemis', 'none'].includes((TZ_MODELS[(v.model || 1) - 1] || {}).sliders);
+const notFixed = () => true;
 const isNyx = (v) => (TZ_MODELS[(v.model || 1) - 1] || {}).sliders === 'nyx';
 
 export default [
@@ -342,15 +342,13 @@ export default [
       }
       // Iris (aprendido): rede treinada com pares reais original → Topaz Iris; roda na escala do treino (1 px do vídeo = 1,6 px)
       if (m.face) {
+        // rede treinada com pares reais original → Iris; entra suave (Improve Detail) e o resto dos ajustes vale depois
         const k = IRIS_NET.scale / pxs;
         const cw = Math.max(8, Math.min(4096, Math.round(src.w * k))), ch = Math.max(8, Math.min(4096, Math.round(src.h * k)));
         const same = Math.abs(cw - src.w) < 2 && Math.abs(ch - src.h) < 2;
         let x = same ? out : gl.copy(out, cw, ch);
-        x = runNet(gl, IRIS_NET, x, Math.max(0, v('d')));
+        x = runNet(gl, IRIS_NET, x, Math.max(0, Math.min(1, v('d') * 0.8)));
         out = same ? x : gl.copy(x, src.w, src.h);
-        const ro0 = v('recover');
-        if (ro0 > 0.001 || V.grain > 0.01) out = gl.pass(GRAIN, { u_tex: out, u_orig: src, u_orig_mix: ro0 * 0.8, u_amt: (V.grain / 10) * 0.12, u_gsize: V.grainSize * env.scale, u_seed: Math.floor(env.t * 30) % 97 });
-        return out;
       }
       const rc = v('c'), rn = v('n');
       // Fix compression: guided filter leve (tira blocos sem apagar a trama do tecido)
@@ -371,7 +369,7 @@ export default [
         out = gl.pass(KUWAHARA, { u_tex: out, u_r: 1.2 * pxs, u_amt: Math.min(1, ai * 1.2) });
         out = gl.pass(KUWAHARA, { u_tex: out, u_r: 2.0 * pxs, u_amt: ai * 0.6 });
       }
-      const det = v('d'), sh = v('s'), aa = Math.max(-1, Math.min(1, v('a'))), dh = v('h');
+      const det = v('d') * (m.face ? 0.3 : 1), sh = v('s'), aa = Math.max(-1, Math.min(1, v('a'))), dh = v('h'); // Iris: o detalhe já veio da rede
       const u = Math.max(1, pxs / 1.6);
       const esmooth = (img, amt, len) => {
         if (amt <= 0.01) return img;

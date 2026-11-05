@@ -24,6 +24,22 @@ const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
 const HSL_NAMES = ['Red', 'Orange', 'Yellow', 'Green', 'Aqua', 'Blue', 'Purple', 'Magenta'];
 const HSL_KEYS = HSL_NAMES.flatMap((k) => ['H', 'S', 'L'].map((c) => `hsl${k}${c}`));
 
+/** LUT de 68 valores (mestre + R, G, B com 17 pontos cada) da ferramenta Curves do Looks. */
+export function looksCurveLUT(v, str = 1) {
+  const k = 0.8 * Math.pow(Math.max(0, v[0] || 0), 0.66);
+  const black = Math.max(0, (v[4] || 0) * 0.4);
+  const n = Math.min(8, Math.round(v[37] || 0));
+  const pts = [[0, 0]];
+  for (let i = 0; i < n; i++) pts.push([v[38 + i * 2], v[39 + i * 2] || 0]);
+  pts.push([1, 0]);
+  pts.sort((a, b) => a[0] - b[0]);
+  const off = (x) => { for (let i = 0; i < pts.length - 1; i++) { const [x0, y0] = pts[i], [x1, y1] = pts[i + 1]; if (x <= x1) { const u = x1 > x0 ? (x - x0) / (x1 - x0) : 0; const sm = u * u * (3 - 2 * u); return y0 + (y1 - y0) * sm; } } return 0; };
+  const f = (x) => { const s = x * x * (3 - 2 * x) - x; let y = x + k * s + off(x); y = black + (1 - black) * y; return Math.max(0, Math.min(1, x + (y - x) * str)); };
+  const ch = Array.from({ length: 17 }, (_, i) => +f(i / 16).toFixed(4));
+  const id = Array.from({ length: 17 }, (_, i) => +(i / 16).toFixed(4));
+  return [...id, ...ch, ...ch, ...ch];
+}
+
 export function looksFromTools(tools, strength = 100) {
   const p = {
     strength, exposure: 0, temperature: 0, tint: 0, filter: [1, 1, 1, 1], filterDensity: 0,
@@ -205,7 +221,7 @@ export function looksFromTools(tools, strength = 100) {
           if (v[5] > 0) p.mojoCool = clampN(50 + v[5], 0, 100);
           if (v[6] > 0) p.mojoSkin = clampN(50 + v[6], 0, 100);
           p.exposure += (v[7] || 0) * k;
-          p.temperature -= (v[8] || 0) * 0.35 * k; // Cool/Warm do Mojo II: negativo = quente (como o Warm/Cool do Looks)
+          p.temperature += (v[8] || 0) * 0.35 * k; // Cool/Warm do Mojo II: negativo = frio (conferido com o Vampy CC renderizado no Frameify)
           p.tint -= (v[9] || 0) * 0.5 * k; // Green/Magenta positivo deixa esverdeado no AE (ZAZ Dark: cinza-esverdeado)
           p.mojoTint = (v[1] || 0) * k;
         }
@@ -252,6 +268,13 @@ export function looksFromTools(tools, strength = 100) {
         // Highlights, Point 1-5; depois Gamma Space (36) e os pontos livres (37 = quantidade, 38… pares entrada/ajuste)
         // v[0] = Contrast da curva. Calibrado com a tabela que o Frameify gera para a mesma ferramenta (Look Table
         // de 1024 pontos): 0,932 → curva em S ≈ 58% de um smoothstep (0,25→0,19; 0,75→0,82) = contraste ~48 aqui
+        // Curva exata (mesmo cálculo que o Frameify grava na tabela de 1024 pontos): identidade + curva em S com força
+        // 0,8·Contrast^0,66 + deslocamentos dos pontos livres + preto levantado (Point 1). Ajustado com 3 pares
+        // .ffx ↔ .frameify (rimo, ftb ×2): erro ≈ 0,01. Só vale quando os canais R/G/B não foram mexidos.
+        if (t.id === 'crv2' && [...Array(27)].every((_, i) => !v[9 + i])) {
+          extra.push({ type: 'curves', label: 'Curves (Looks)', params: { lut: looksCurveLUT(v, (p.strength ?? 100) / 100) } });
+          break;
+        }
         p.contrast += (v[0] || 0) * 52;
         const ch = ['', 'R', 'G', 'B'];
         for (let c = 0; c < 4; c++) {

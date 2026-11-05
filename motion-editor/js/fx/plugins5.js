@@ -134,6 +134,8 @@ function buildBalls(nx, ny, seed) {
 }
 
 // S_Sharpen: soma das faixas de detalhe (cada uma com seu ganho) + unsharp de raio largo; luma e croma separados
+export let SSHARP_K = 0.1; // calibrado com o Vampy CC (3 × S_Sharpen) contra o resultado do Frameify
+export function setSSharpK(k) { SSHARP_K = k; }
 const SSHARP = frag(`
 uniform sampler2D u_b0, u_b1, u_b2, u_b3, u_bw; uniform vec4 u_sc; uniform float u_amp, u_thr, u_luma, u_chroma, u_op;
 void main() {
@@ -141,7 +143,8 @@ void main() {
   vec3 c = unpre(s).rgb;
   vec3 a0 = unpre(texture2D(u_b0, v_uv)).rgb, a1 = unpre(texture2D(u_b1, v_uv)).rgb, a2 = unpre(texture2D(u_b2, v_uv)).rgb, a3 = unpre(texture2D(u_b3, v_uv)).rgb;
   vec3 aw = unpre(texture2D(u_bw, v_uv)).rgb;
-  vec3 d = (c - a0) * u_sc.x + (a0 - a1) * u_sc.y + (a1 - a2) * u_sc.z + (a2 - a3) * u_sc.w + (c - aw) * u_amp;
+  // Sapphire: Sharpen Amp multiplica a soma das faixas (cada uma com o seu Scale; 1 = normal), até o Sharpen Width
+  vec3 d = ((c - a0) * u_sc.x + (a0 - a1) * u_sc.y + (a1 - a2) * u_sc.z + (a2 - aw) * u_sc.w) * u_amp;
   // Edge Threshold: ignora diferenças muito pequenas (ruído/grão)
   d *= smoothstep(u_thr, u_thr * 3.0 + 0.002, abs(luma(c - a1)) + abs(luma(c - aw)) * 0.5);
   float dl = luma(d);
@@ -226,11 +229,11 @@ export default [
       const { gl } = env, sc = env.scale;
       const d = Math.max(0.3, p.detail) * sc;
       // faixas: original → blur(d/2) → blur(d) → blur(3d) → blur(9d); e o unsharp largo com Sharpen Width
-      const b0 = gl.blur(src, d * 0.25), b1 = gl.blur(src, d * 0.5), b2 = gl.blur(src, d * 1.2), b3 = gl.blur(src, d * 3);
-      const bw = gl.blur(src, Math.max(0.3, p.width) * sc * 0.25);
+      const b0 = gl.blur(src, d * 0.25), b1 = gl.blur(src, d * 0.5), b2 = gl.blur(src, d * 1.2), b3 = b2;
+      const bw = gl.blur(src, Math.max(d * 1.5, Math.max(0.3, p.width) * sc * 0.25));
       return gl.pass(SSHARP, {
         u_tex: src, u_b0: b0, u_b1: b1, u_b2: b2, u_b3: b3, u_bw: bw,
-        u_sc: [p.tiny - 1, p.small - 1, p.medium - 1, p.large - 1], u_amp: p.amp * 0.6, u_thr: p.edgeThr * 0.1, u_luma: p.luma, u_chroma: p.chroma, u_op: 0.8, // Opacity da Sapphire é modo de alfa (2 = Normal), não intensidade
+        u_sc: [p.tiny, p.small, p.medium, p.large], u_amp: p.amp * SSHARP_K, u_thr: p.edgeThr * 0.1, u_luma: p.luma, u_chroma: p.chroma, u_op: 0.8, // Opacity da Sapphire é modo de alfa (2 = Normal), não intensidade
       });
     },
   },

@@ -25,8 +25,8 @@ const EXPECTED = {
   'CC (Color Correction)/Sonhei CC.ffx': ['looks', 'lkExposure', 'lkGradient', 'lkLensVignette', 'lkExposure', 'lkLensVignette', 'lkEdgeSoftness', 'looks', 'lkEdgeSoftness', 'lkLensVignette', 'looks', 'sSharpen', 'fourColor', 'levels', 'filmLook', 'sSharpen', 'looks', 'exposure'], // S_Sharpen → nitidez em faixas
   'CC (Color Correction)/Sonhei New CC.ffx': ['looks', 'lkEdgeSoftness', 'lkHaze', 'looks', 'lkChannelMixer', 'sSharpen'],
   'CC (Color Correction)/Galego CC.ffx': ['lkDiffusion', 'lkChroma', 'lkSaturation', 'lkSpotExposure', 'lkMojo', 'sSharpen', 'flicker', 'levels', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
-  'CC (Color Correction)/FTB Main CC.ffx': ['looks', 'lkGradient', 'lkLensVignette', 'lkEdgeSoftness', 'looks', 'sSharpen', 'sharpen', 'hueSat', 'sharpen', 'lkDiffusion', 'lkEdgeSoftness', 'looks', 'lkMojo', 'lkChannelMixer', 'looks', 'looks', 'lkChroma', 'looks', 'lkHaze', 'looks'], // Optical Diffusion → glow
-  'CC (Color Correction)/FTB AEP CC.ffx': ['lkDiffusion', 'lkMojo', 'looks', 'lkExposure', 'lkGradient', 'lkLensVignette', 'lkExposure', 'lkLensVignette', 'looks', 'lkEdgeSoftness', 'fourColor', 'lkExposure', 'looks', 'lkDiffusion', 'lkChroma', 'lkHaze', 'looks', 'hueSat', 'looks', 'lkExposure', 'lkGradient', 'lkExposure', 'lkLensVignette', 'looks', 'lkHaze', 'lkEdgeSoftness', 'lkExposure', 'looks', 'brightnessContrast'],
+  'CC (Color Correction)/FTB Main CC.ffx': ['looks', 'lkGradient', 'lkLensVignette', 'lkEdgeSoftness', 'curves', 'sSharpen', 'sharpen', 'hueSat', 'sharpen', 'lkDiffusion', 'lkEdgeSoftness', 'looks', 'lkMojo', 'lkChannelMixer', 'looks', 'looks', 'lkChroma', 'looks', 'lkHaze', 'looks'], // Optical Diffusion → glow
+  'CC (Color Correction)/FTB AEP CC.ffx': ['lkDiffusion', 'lkMojo', 'looks', 'lkExposure', 'lkGradient', 'lkLensVignette', 'lkExposure', 'lkLensVignette', 'looks', 'lkEdgeSoftness', 'fourColor', 'lkExposure', 'curves', 'lkDiffusion', 'lkChroma', 'lkHaze', 'looks', 'hueSat', 'looks', 'lkExposure', 'lkGradient', 'lkExposure', 'lkLensVignette', 'looks', 'lkHaze', 'lkEdgeSoftness', 'lkExposure', 'curves', 'brightnessContrast'],
   'CC (Color Correction)/ZAZ Reverse Dark CC.ffx': ['lkDiffusion', 'lkChroma', 'lkSaturation', 'lkSpotExposure', 'lkMojo', 'sSharpen', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
   'Warp/ZAZ Warp.ffx': ['motionTile', 'warp'],
 };
@@ -123,6 +123,9 @@ test('Looks: Colorista HSL por cor, temperatura e curvas vêm do arquivo', () =>
   assert.equal(Math.round(sn[1].saturation), 40); // Colorista Saturation 40%
   assert.equal(sn[1].mixAmt, 0.7); // Channel Mixer com Strength 70%
   const ftb = looksOf(load('CC (Color Correction)/FTB AEP CC.ffx').parsed);
-  assert.deepEqual([ftb[1].curve1x, ftb[1].curve1y].map((v) => +v.toFixed(3)), [0.292, 0.065]); // ponto livre da curva (entrada, ajuste)
+  // Curves do Looks vira uma curva exata (mesma tabela que o Frameify calcula): preto levantado e S suave
+  const { preset: fp } = load('CC (Color Correction)/FTB AEP CC.ffx');
+  const cv = fp.effects.find((e) => e.type === 'curves' && e.label === 'Curves (Looks)').params.lut;
+  assert.ok(cv[17] > 0.005 && cv[17] < 0.02 && cv[25] > 0.5 && cv[33] === 1);
   assert.ok(ftb[0].mojo > 30 && ftb[0].bleach > 70) // Mojo 36 + Bleach It 85;
 });
