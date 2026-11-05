@@ -105,6 +105,8 @@ float hueCenter(int i) {
   if (i == 0) return 0.0; if (i == 1) return 30.0; if (i == 2) return 60.0; if (i == 3) return 120.0;
   if (i == 4) return 180.0; if (i == 5) return 240.0; if (i == 6) return 275.0; return 315.0;
 }
+vec3 srgbLin(vec3 c) { c = clamp(c, 0.0, 1.0); return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
+vec3 srgbGam(vec3 l) { l = max(l, 0.0); return mix(l * 12.92, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, l)); }
 float curveDy(float x) {
   float px = 0.0, py = 0.0;
   for (int i = 0; i < 5; i++) {
@@ -129,7 +131,12 @@ void main() {
     vec2 dd = (cuv - u_spc) * u_imgasp * 2.0; dd.x /= max(u_spasp, 0.05);
     float m = 1.0 - smoothstep(u_spsize, u_spsize + max(u_spsoft, 0.001), length(dd));
     if (u_spinv > 0.5) m = 1.0 - m;
-    lin *= mix(vec3(1.0), pow(2.0, u_spexp) * u_spcol, m);
+    // Looks clareia com "ombro": ganho total nos escuros, realces chegam ao branco sem estourar (medido no tutorial)
+    vec3 gv = mix(vec3(1.0), pow(2.0, u_spexp) * u_spcol, m);
+    // (em luz linear sRGB de verdade, com o trecho linear perto do preto: os escuros sobem mais, como no Looks)
+    vec3 sl = srgbLin(pow(max(lin, 0.0), vec3(1.0 / 2.2))), lc = clamp(sl, 0.0, 1.0);
+    sl = mix(sl * gv, lc * gv / (1.0 + (gv - 1.0) * lc * 0.65), step(1.0, gv));
+    lin = pow(srgbGam(sl), vec3(2.2));
   }
   // Gradient Exposure: exposição em degradê na direção do ângulo
   if (u_gr2 > 0.5) {

@@ -63,11 +63,17 @@ void main() {
   } else if (m < 21.5) {               // 21 Shadows/Mids/Highs Tint (3-Way Color): cor nas três faixas
     float L = lu(c); float sh = 1.0 - smoothstep(0.0, 0.45, L), hi = smoothstep(0.55, 1.0, L), mi = 1.0 - sh - hi;
     o = c + ((u_c1 - 0.5) * sh + (u_c2 - 0.5) * mi + (u_c3 - 0.5) * hi) * u_a;
+  } else if (m < 22.5) {               // 22 Shadows & Highlights do Looks: curva na luminância, cor escala junto (escuros perdem cor)
+    float L = clamp(lu(c), 0.0, 1.0), q = 1.0 - L;
+    float f = clamp(L + u_a * u_c * L * q * q * q * q + u_b * 1.03 * L * L * L * L * q, 0.0, 1.0);
+    o = mix(c * (f / max(L, 1e-4)), c + (f - L), 0.35);
   }
   o = clamp(o, 0.0, 1.0);
   gl_FragColor = pre(vec4(mix(c, o, u_str), unpre(s).a));
 }`);
 
+export let SH_K = 0.6;
+export const setShK = (k) => { SH_K = k; };
 const defaultsOf = (type) => {
   const d = EFFECT_MAP[type];
   const out = {};
@@ -112,7 +118,10 @@ export default [
     [num('stops', 'Exposure (stops)', 0, -5, 5, 0.01), num('con', 'Contrast', 0, -1, 2, 0.01), num('pivot', 'Contrast pivot %', 50, 1, 99), num('gamma', 'Midtone gamma', 1, 0.2, 3, 0.01)], lt(3, (p) => ({ a: p.stops, b: p.con, c: p.pivot / 100, d: p.gamma }))),
   tool('lkSaturation', 'Saturation', 'Subject', 'Saturação e vibrance (mais nas cores que têm menos).', [num('sat', 'Saturation %', 100, 0, 300), num('vib', 'Vibrance', 0, -1, 1, 0.01)], lt(4, (p) => ({ a: p.sat / 100, b: p.vib }))),
   tool('lkColorBalance', 'Color Balance', 'Subject', 'Balanço de branco: quente contra frio, verde contra magenta.', [num('warm', 'Warm / Cool (stops)', 0, -2, 2, 0.01), num('tint', 'Green / Magenta', 0, -2, 2, 0.01)], lt(5, (p) => ({ a: p.warm, b: p.tint }))),
-  tool('lkShadowsHighs', 'Shadows & Highlights', 'Subject', 'Levanta ou esmaga os escuros e os claros separadamente.', [num('shadows', 'Shadows', 0, -1, 1, 0.01), num('highs', 'Highlights', 0, -1, 1, 0.01)], lt(6, (p) => ({ a: p.shadows * 0.15, b: p.highs * 0.15 }))), // escala do Looks: Shadows −1 escurece só as sombras de leve (medido no tutorial HOBO)
+  // Shadows/Highlights do Looks, medido no tutorial: curva na luminância y = x + S·k·x(1−x)⁴ + H·1,03·x⁴(1−x) (k=0,6),
+  // a cor escala junto com a luz (os escuros perdem um pouco de cor, como no Looks).
+  tool('lkShadowsHighs', 'Shadows & Highlights', 'Subject', 'Levanta ou esmaga os escuros e os claros separadamente.', [num('shadows', 'Shadows', 0, -1, 1, 0.01), num('highs', 'Highlights', 0, -1, 1, 0.01)],
+    lt(22, (p) => ({ a: p.shadows, b: p.highs, c: SH_K }))),
   tool('lk3Way', '3-Way Color', 'Subject', 'Lift, gamma e gain por canal (como os três discos de um corretor de cor).',
     [col('lift', 'Lift (sombras)', [0.5, 0.5, 0.5, 1]), col('gamma', 'Gamma (meios-tons)', [0.5, 0.5, 0.5, 1]), col('gain', 'Gain (realces)', [0.5, 0.5, 0.5, 1]), num('amt', 'Intensidade', 1, 0, 3, 0.01)],
     lt(21, (p) => ({ a: p.amt, c1: rgb(p.lift), c2: rgb(p.gamma), c3: rgb(p.gain) }))),
@@ -148,7 +157,7 @@ export default [
   tool('lkLensVignette', 'Lens Vignette', 'Lens', 'Queda de luz ótica nos cantos (negativo clareia as bordas).', [num('amount', 'Amount %', 50, -100, 100), num('size', 'Size %', 50, 1, 100)],
     via('looks', (p) => ({ vignette: Math.max(0, p.amount), vignetteSize: p.size, exposure: p.amount < 0 ? -p.amount / 300 : 0 }))),
   tool('lkDiffusion', 'Diffusion', 'Lens', 'Realces “florescem” suavemente, como um filtro de difusão.', [num('amount', 'Glow %', 40, 0, 150), num('radius', 'Size', 60, 1, 600), num('threshold', 'Threshold %', 60, 0, 100), col('tint', 'Tint', [1, 1, 1, 1])],
-    via('looks', (p) => ({ diffusion: p.amount, diffusionRadius: p.radius, diffusionThreshold: p.threshold, diffusionTint: p.tint || [1, 1, 1, 1] }))),
+    via('looks', (p) => ({ diffusion: p.amount * 0.6, diffusionRadius: p.radius, diffusionThreshold: p.threshold, diffusionTint: p.tint || [1, 1, 1, 1] }))), // ×0,6: medido no tutorial (Optical Diffusion 30 / 250)
   tool('lkEdgeSoftness', 'Edge Softness', 'Lens', 'Desfoque que aumenta em direção às bordas do quadro.', [num('blur', 'Blur', 4, 0, 100, 0.1), num('size', 'Área nítida %', 100, 0, 400), num('soft', 'Spread %', 50, 1, 400), pos('center', 'Centro')],
     via('looks', (p) => ({ edgeBlur: p.blur, edgeSize: p.size, edgeSoft: p.soft, edgeCenter: p.center }))),
   tool('lkHaze', 'Haze/Flare', 'Lens', 'Luz que entra pelas laterais e se espalha pela imagem (Looks Haze/Flare).', [num('exposure', 'Exposure', 0, -6, 4, 0.01), num('spill', 'Spillage', 50, 0, 100), num('soft', 'Softness', 60, 0, 100), num('reach', 'Reach', 50, 0, 100), col('tint', 'Cor', [1, 0.92, 0.82, 1])],

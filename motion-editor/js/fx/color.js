@@ -25,8 +25,10 @@ const BC = colorFrag('uniform float u_b, u_bn, u_c;', `
 const HUESAT = colorFrag('uniform float u_h, u_s, u_l, u_colorize; uniform vec3 u_ccol;', `
   vec3 h = rgb2hsv(r);
   h.x = fract(h.x + u_h);
-  h.y = clamp(h.y * u_s, 0.0, 1.0);
   r = hsv2rgb(h);
+  // Saturação como no AE (HLS): tira/põe cor em torno da luminosidade (máx+mín)/2, sem clarear a imagem
+  float hl = (max(r.r, max(r.g, r.b)) + min(r.r, min(r.g, r.b))) * 0.5;
+  r = clamp(mix(vec3(hl), r, u_s), 0.0, 1.0);
   if (u_colorize > 0.5) r = hsv2rgb(vec3(rgb2hsv(u_ccol).x, rgb2hsv(u_ccol).y * u_s, luma(c.rgb)));
   r = u_l >= 0.0 ? mix(r, vec3(1.0), u_l) : r * (1.0 + u_l);`);
 
