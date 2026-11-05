@@ -437,7 +437,7 @@ input[type="number"], input[type="text"], input[type="search"], select, textarea
   background: linear-gradient(135deg, #1f4f86, #2d8ceb); border: 0; color: #fff; font-size: 15px; }
 .home-new .plus { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; background: #ffffff26; font-size: 28px; flex: none; }
 .home-new .muted { color: #d9e9ff; }
-.home-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 6px; }
+.home-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0 6px; }
 .home-actions button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 10px; font-size: 12px; white-space: normal; line-height: 1.2; }
 .home-actions span { font-size: 20px; font-weight: 800; color: var(--accent); }
 .home-h { display: flex; align-items: baseline; gap: 8px; margin: 18px 0 10px; font-size: 13px; text-transform: none; color: #e6e6e6; letter-spacing: 0; }

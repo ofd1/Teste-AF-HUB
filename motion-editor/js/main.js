@@ -481,22 +481,24 @@ new Inspector(document.getElementById('propsPanel'), store, 'props', {
 const library = new Library(document.getElementById('library'), store, {
   onApplied: () => { if (!desktop.matches) closeSheet(); },
   openAEP: (f) => { closeSheet(); return openAEPFlow(f); }, // .aep escolhido em Presets abre como projeto
+  importAex: (files) => { openSheet('browser'); return fxBrowser.importAex(files); }, // .aex vira efeito em Efeitos › Meus plugins
 });
-new FxBrowser(document.getElementById('fxBrowser'), (type) => {
+const fxBrowser = new FxBrowser(document.getElementById('fxBrowser'), (type, extra = null) => {
   let layer = store.layer();
   if (!layer) {
     layer = LAYER_FACTORIES.adjustment(store.project);
-    layer.name = `Ajuste · ${getEffectDef(type).label}`;
+    layer.name = `Ajuste · ${extra?.label || getEffectDef(type).label}`;
     store.layers.unshift(layer);
     store.selectedLayerId = layer.id;
   }
   if ((getEffectDef(type).sourceSpeed || getEffectDef(type).sourceRemap) && layer.type !== 'video') toast('Velocidade (estilo Twixtor) só altera camadas de vídeo.', 'warn', 4000);
-  const inst = createEffectInstance(type);
+  const inst = createEffectInstance(type, extra?.params || {});
+  if (extra?.label) inst.label = extra.label; // plugin .aex instalado: aparece com o nome do plugin
   getEffectDef(type).init?.(inst, layer);
   layer.effects.push(inst);
   store.commit('structure');
   openSheet('effects');
-  toast(`${getEffectDef(type).label} adicionado em ${layer.name}`, 'ok', 2000);
+  toast(`${extra?.label || getEffectDef(type).label} adicionado em ${layer.name}`, 'ok', 2000);
 });
 keyTools = new KeyTools(document.getElementById('keyTools'), store);
 new TopazPanel(document.getElementById('topazPanel'), store);
@@ -1324,11 +1326,13 @@ function routeFiles(files) {
   const fonts = files.filter((f) => isFontFile(f.name));
   const xml = files.filter((f) => /\.(xml|fcpxml)$/i.test(f.name));
   const aep = files.filter((f) => /\.aep$/i.test(f.name));
-  const presets = files.filter((f) => /\.(ffx|frameify|rgx|cube|json|aex)$/i.test(f.name));
+  const aex = files.filter((f) => /\.aex$/i.test(f.name));
+  const presets = files.filter((f) => /\.(ffx|frameify|rgx|cube|json)$/i.test(f.name));
   const media = files.filter((f) => !/\.(ffx|frameify|rgx|cube|json|aex|xml|fcpxml|aep|ttf|otf|woff2?)$/i.test(f.name));
   if (fonts.length) importFontsFlow(fonts);
   if (xml.length) openXMLFlow(xml[0]);
   if (aep.length) openAEPFlow(aep[0]);
+  if (aex.length) { openSheet('browser'); fxBrowser.importAex(aex); }
   if (presets.length) { openSheet('presets'); library.importFiles(presets); }
   if (media.length) importMedia(media);
 }
@@ -1569,6 +1573,7 @@ const home = new HomeScreen({
   importProject: () => importProjectFile(),
   importAE: () => importAEFiles(),
   presets: async () => { await ensureSomeProject(); openSheet('presets'); },
+  plugins: async () => { await ensureSomeProject(); openSheet('browser'); fxBrowser.cat = 'Meus plugins'; fxBrowser.render(); },
   settings: async () => {
     const r = await settingsDialog(COMP_PRESETS);
     if (r?.help) showHelp();

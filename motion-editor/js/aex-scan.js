@@ -98,7 +98,7 @@ export function aexEquivalents(r, matchEffect, utility = null) {
   return items.map((p) => {
     if (utility && utility.test(`${p.matchName} ${p.name} ${file}`)) return { name: (p.name || file).trim(), category: p.category, matchName: (p.matchName || '').trim(), effect: null, label: null, kind: 'utility' };
     const m = matchEffect(p.matchName, `${p.category} ${p.name} ${file}`.trim()) || matchEffect('', file);
-    return { name: (p.name || file).trim(), category: p.category, matchName: (p.matchName || '').trim(), effect: m?.def?.type || null, label: m?.def?.label || null, kind: m?.kind || null };
+    return { name: (p.name || file).trim(), category: p.category, matchName: (p.matchName || '').trim(), effect: m?.def?.type || null, label: m?.def?.label || null, kind: m?.kind || null, set: m?.rule?.set ? { ...m.rule.set } : {} };
   });
 }
 

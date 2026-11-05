@@ -90,6 +90,7 @@ export class HomeScreen {
           <button data-h="importProject"><span>📂</span>Importar projeto</button>
           <button data-h="importAE"><span>Ae</span>Importar do After Effects</button>
           <button data-h="presets"><span>★</span>Meus presets</button>
+          <button data-h="plugins"><span>⤒</span>Plugins (.aex)</button>
         </div>
         <h3 class="home-h">Projetos <span class="muted small">${list.length}</span></h3>
         ${list.length ? `<div class="home-grid">${list.map((p) => `

@@ -94,7 +94,7 @@ export class Library {
         <button class="primary" data-act="import">⤒ Importar .ffx / .rgx / .cube / preset</button>
         <button data-act="save-layer">★ Salvar camada como preset</button>
         <button data-act="capture">◐ Capturar CC do After Effects (Looks, Colorista…)</button>
-        <button data-act="aex">⌕ Meus plugins (.aex)</button>
+        <button data-act="aex">⤒ Importar plugins (.aex)</button>
       </div>
       <label class="fit-toggle ${this.fit ? 'on' : ''}">
         <span class="switch"><input type="checkbox" data-act="fit" ${this.fit ? 'checked' : ''}><i></i></span>
@@ -132,7 +132,7 @@ export class Library {
     });
     r.querySelector('[data-act="save-layer"]').addEventListener('click', () => this.saveLayer());
     r.querySelector('[data-act="capture"]').addEventListener('click', () => this.captureAE());
-    r.querySelector('[data-act="aex"]').addEventListener('click', async () => { const f = await pickFiles('.aex,.plugin,application/octet-stream', true); if (f.length) this.scanPlugins(f); });
+    r.querySelector('[data-act="aex"]').addEventListener('click', async () => { const f = await pickFiles('.aex,.plugin,application/octet-stream', true); if (f.length) (this.hooks.importAex ? this.hooks.importAex(f) : this.scanPlugins(f)); });
     r.querySelector('[data-act="fit"]').addEventListener('change', (e) => { this.fit = e.target.checked; storage.set('motionframe.presetFit', this.fit); this.render(); });
     const search = r.querySelector('.lib-search');
     search.addEventListener('input', () => {
@@ -369,7 +369,7 @@ export class Library {
       }
     }
     if (errors.length) toast(errors.join('\n'), 'error', 6000);
-    if (aex.length) await this.scanPlugins(aex);
+    if (aex.length) await (this.hooks.importAex ? this.hooks.importAex(aex) : this.scanPlugins(aex));
     if (!imported.length) return;
     if (imported.length === 1 && imported[0]._parsed) { await this.showReport(imported[0], true); return; }
     for (const p of imported) this.addToLibrary(p);
