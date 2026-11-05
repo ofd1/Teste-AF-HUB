@@ -5,6 +5,7 @@
 // map.i = índice do parâmetro (sufixo -000N), map.n = nomes (minúsculos) — nomes têm prioridade.
 // Quando um parâmetro não está no map, tenta-se casar pelo rótulo do parâmetro do app.
 
+import { PK_IMPORT_RULES } from './import-map-pk.js';
 import { EFFECT_MAP } from './effects.js';
 
 const pct = (v) => (Math.abs(v) <= 1 ? v * 100 : v);
@@ -847,6 +848,7 @@ export const IMPORT_RULES = [
     [/kaleid/i, 'kaleida'], [/mirror/i, 'mirror'], [/pixel|mosaic/i, 'mosaic'], [/exposure/i, 'exposure'], [/curves|levels/i, 'levels'],
     [/color ?grade|lut|look/i, 'colorGrade'], [/speed|velocity|time ?remap/i, 'twixtor'], [/echo|trail/i, 'echo'],
   ].map(([test, to]) => ({ vendor: 'Desconhecido', plugin: 'por palavra-chave', to, test, keyword: true })),
+  ...PK_IMPORT_RULES, // plugins do inventário do usuário (Sapphire, BCC, Universe…) — por último
 ];
 
 const normalize = (s) => (s || '').toLowerCase().trim();

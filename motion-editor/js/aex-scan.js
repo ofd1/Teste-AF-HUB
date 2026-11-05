@@ -70,7 +70,7 @@ function readPiPL(b, dv, rsrc, off) {
 }
 
 const fourcc = (v) => String.fromCharCode((v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255);
-const pstr = (d, o) => { const n = d[o] || 0; let s = ''; for (let i = 0; i < n && o + 1 + i < d.length; i++) s += String.fromCharCode(d[o + 1 + i]); return s; };
+const pstr = (d, o) => { const n = d[o] || 0; let s = ''; for (let i = 0; i < n && o + 1 + i < d.length; i++) s += String.fromCharCode(d[o + 1 + i]); return s.replace(/\0[\s\S]*$/, '').trimEnd(); };
 
 /** PiPL: int16 versão, int32 reservado, int32 nº de propriedades; cada uma: vendor, chave, id, tamanho, dados (alinhado a 4). */
 export function parsePiPL(d) {
@@ -92,10 +92,11 @@ export function parsePiPL(d) {
 }
 
 /** Efeito do MotionFrame equivalente ao plugin (pelo match name do PiPL, categoria, nome ou nome do arquivo). */
-export function aexEquivalents(r, matchEffect) {
+export function aexEquivalents(r, matchEffect, utility = null) {
   const file = (r.path.split(/[\\/]/).pop() || '').replace(/\.aex$/i, '');
   const items = r.pipl.length ? r.pipl : [{ name: file, category: '', matchName: '' }];
   return items.map((p) => {
+    if (utility && utility.test(`${p.matchName} ${p.name} ${file}`)) return { name: (p.name || file).trim(), category: p.category, matchName: (p.matchName || '').trim(), effect: null, label: null, kind: 'utility' };
     const m = matchEffect(p.matchName, `${p.category} ${p.name} ${file}`.trim()) || matchEffect('', file);
     return { name: (p.name || file).trim(), category: p.category, matchName: (p.matchName || '').trim(), effect: m?.def?.type || null, label: m?.def?.label || null, kind: m?.kind || null };
   });

@@ -11,6 +11,7 @@ import { saveFile } from './platform.js';
 import { exportFFX } from './ffx-export-ui.js';
 import { scanAex, aexEquivalents, reportsToJSON } from './aex-scan.js';
 import { matchEffect } from './import-map.js';
+import { UTILITY_PLUGINS } from './import-map-pk.js';
 import { putMedia, getMedia } from './idb.js';
 
 const STORE_KEY = 'motionframe.presets.v1';
@@ -296,16 +297,16 @@ export class Library {
     const reports = [];
     for (const f of files) {
       const r = f.size > 512 * 1024 * 1024 ? { path: f.name, error: 'arquivo grande demais', pipl: [] } : scanAex(await f.arrayBuffer(), f.name);
-      r.motionframe = r.error && !r.valid_pe ? [] : aexEquivalents(r, matchEffect);
+      r.motionframe = r.error && !r.valid_pe ? [] : aexEquivalents(r, matchEffect, UTILITY_PLUGINS);
       reports.push(r);
     }
     const rows = reports.map((r) => {
       if (!r.valid_pe) return `<tr><td>${escapeHtml(r.path)}</td><td colspan="3" class="muted">${escapeHtml(r.error || 'não é um plugin')}</td></tr>`;
       return r.motionframe.map((m) => `<tr><td><b>${escapeHtml(m.name)}</b><br><small class="muted">${escapeHtml(r.path)} · ${r.architecture}${m.category ? ` · ${escapeHtml(m.category)}` : ''}</small></td>
         <td><small>${escapeHtml(m.matchName || '—')}</small></td>
-        <td>${m.effect ? `✔ ${escapeHtml(m.label)}${m.kind === 'approx' ? ' <small class="muted">(aproximado)</small>' : ''}` : '<span class="muted">sem equivalente ainda</span>'}</td></tr>`).join('');
+        <td>${m.effect ? `✔ ${escapeHtml(m.label)}${m.kind === 'approx' ? ' <small class="muted">(aproximado)</small>' : ''}` : (m.kind === 'utility' ? '<span class="muted">utilitário (não mexe na imagem)</span>' : '<span class="muted">sem equivalente ainda</span>')}</td></tr>`).join('');
     }).join('');
-    const ok = reports.reduce((n, r) => n + (r.motionframe || []).filter((m) => m.effect).length, 0), tot = reports.reduce((n, r) => n + Math.max(1, (r.motionframe || []).length), 0);
+    const ok = reports.reduce((n, r) => n + (r.motionframe || []).filter((m) => m.effect || m.kind === 'utility').length, 0), tot = reports.reduce((n, r) => n + Math.max(1, (r.motionframe || []).length), 0);
     const v = await modal('Meus plugins do After Effects', `
       <p>${ok} de ${tot} plugin(s) têm efeito equivalente no MotionFrame — presets .ffx que usam esses plugins já abrem com eles.
       <small class="muted">Leitura estática: o app só lê o cabeçalho do arquivo (nome, categoria, match name); plugins do AE não rodam fora do After Effects.
