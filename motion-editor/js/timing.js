@@ -137,14 +137,16 @@ export function blendFrames(layer, t, fps) {
   const st = sourceTime(layer, t);
   const sfps = layer.props.sourceFps || fps;
   const fr = st * sfps;
+  // meio do quadro quando o fps de origem é conhecido; sem ele, 1% do quadro (meio quadro errado pularia quadros)
+  const o = layer.props.sourceFps ? 0.5 : 0.01;
   const i = Math.floor(fr);
   const f = fr - i;
   // motion blur por vetores precisa sempre do quadro seguinte (para medir o movimento)
-  if (vectorBlur(layer, t) > 0) return { a: (i + 0.01) / sfps, b: (i + 1.01) / sfps, f: wantsInterp(layer, t) ? f : 0 };
-  if (!wantsInterp(layer, t)) return { a: (Math.floor(st * sfps + 1e-6) + 0.01) / sfps, b: null, f: 0 };
-  // +1% do quadro: buscar exatamente na borda faz alguns navegadores entregarem o quadro anterior
-  if (f < 0.02 || f > 0.98) return { a: (Math.round(fr) + 0.01) / sfps, b: null, f: 0 };
-  return { a: (i + 0.01) / sfps, b: (i + 1.01) / sfps, f };
+  if (vectorBlur(layer, t) > 0) return { a: (i + o) / sfps, b: (i + 1 + o) / sfps, f: wantsInterp(layer, t) ? f : 0 };
+  if (!wantsInterp(layer, t)) return { a: (Math.floor(st * sfps + 1e-6) + o) / sfps, b: null, f: 0 };
+  // meio do quadro: buscar perto da borda faz celulares (vídeo com fps variável) entregarem o quadro anterior
+  if (f < 0.02 || f > 0.98) return { a: (Math.round(fr) + o) / sfps, b: null, f: 0 };
+  return { a: (i + o) / sfps, b: (i + 1 + o) / sfps, f };
 }
 
 /** Duração de mídia necessária para cobrir [inPoint, outPoint]. */

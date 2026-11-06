@@ -119,12 +119,30 @@ function seek(v, time) {
 }
 
 /** Busca e espera o quadro ser realmente apresentado (o Safari às vezes entrega o quadro anterior logo após 'seeked'). */
-async function seekExact(v, time) {
-  const rvfc = 'requestVideoFrameCallback' in v;
-  let shown = null;
-  if (rvfc) shown = new Promise((r) => v.requestVideoFrameCallback(() => r()));
-  await seek(v, time);
-  if (shown) await Promise.race([shown, new Promise((r) => setTimeout(r, 90))]);
+/** Guarda o tempo (mediaTime) do último quadro que o vídeo realmente mostrou. */
+function trackFrames(v) {
+  if (v._trk || !('requestVideoFrameCallback' in v)) return;
+  v._trk = true;
+  const cb = (now, m) => { v._mt = m.mediaTime; v.requestVideoFrameCallback(cb); };
+  v.requestVideoFrameCallback(cb);
+}
+
+/**
+ * Busca exata (exportação): confere que o quadro mostrado é o pedido (tempo do quadro exibido) e tenta de novo se não
+ * for — celulares às vezes terminam a busca ainda com o quadro anterior na tela, o que fazia o clipe "voltar" no vídeo exportado.
+ */
+async function seekExact(v, time, fps = 30) {
+  if (!('requestVideoFrameCallback' in v)) { await seek(v, time); return true; }
+  trackFrames(v);
+  const tol = 0.75 / fps;
+  for (let k = 0; k < 4; k++) {
+    const shown = new Promise((r) => v.requestVideoFrameCallback(() => r()));
+    if (k === 0) await seek(v, time);
+    else { await seek(v, time + (k % 2 ? 0.002 : -0.002)); await seek(v, time); }
+    await Promise.race([shown, new Promise((r) => setTimeout(r, 120 + k * 300))]);
+    if (v._mt != null && Math.abs(v._mt - time) <= tol) return true;
+  }
+  return false;
 }
 
 function waitMeta(v) {
@@ -178,7 +196,7 @@ export function prepare(project, t, { exact = false, playing = false } = {}) {
           if (st === null) continue;
           const key = Math.round(st * 1000);
           if (e.snaps.has(key)) continue;
-          await seekExact(e.a, st);
+          await seekExact(e.a, st, l.props.sourceFps || project.fps || 30);
           if (e.a.readyState < 2) continue;
           let c = null;
           if (e.snaps.size >= 4) { const [k0, old] = e.snaps.entries().next().value; e.snaps.delete(k0); c = old; }
@@ -307,7 +325,7 @@ export function dedupeTimes(layer, st) {
   if (!dedupeOf(layer) || !c?.ready || c.key !== cacheKey(layer)) return null;
   const d = dedupeIndex(c, Math.max(0, (st - c.t0) * c.fps));
   if (!d) return null;
-  const tt = (k) => c.t0 + (k + 0.01) / c.fps;
+  const tt = (k) => c.t0 + (k + 0.5) / c.fps; // meio do quadro (como o cache foi decodificado)
   return { a: tt(d.ia), b: d.ib === null ? null : tt(d.ib), f: d.ib === null ? 0 : d.f };
 }
 
@@ -374,7 +392,7 @@ async function buildCache(project, layer) {
   for (let i = 0; i < n; i++) {
     while (exportBusy && !entry.cancelled) await new Promise((r) => setTimeout(r, 250));
     if (entry.cancelled) { releaseVideo(v); freeCache(entry); return; }
-    await seekExact(v, lo + (i + 0.01) / entry.fps); // quadro confirmado: sem quadros repetidos no cache
+    await seekExact(v, lo + (i + 0.5) / entry.fps, entry.fps); // quadro confirmado (meio do quadro): sem quadros repetidos/voltando no cache
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     c.getContext('2d').drawImage(v, 0, 0, w, h);
