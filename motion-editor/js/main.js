@@ -1,6 +1,6 @@
 import { Store, LAYER_FACTORIES, RESOLUTIONS, createProject, flatLayers } from './state.js';
 import { compDialog, COMP_PRESETS } from './comp-dialog.js';
-import { HomeScreen, saveProjectData, loadProjectData, loadProjectDataAsync, listProjects, allMediaIds, getSettings, settingsDialog } from './projects.js';
+import { HomeScreen, saveBackup, saveProjectData, loadProjectData, loadProjectDataAsync, listProjects, allMediaIds, getSettings, settingsDialog } from './projects.js';
 import { parseFFX } from './ffx.js';
 import { ffxToPreset } from './presets.js';
 import { TopazPanel } from './topaz-panel.js';
@@ -703,7 +703,7 @@ async function importMedia(files) {
     const { width, height } = store.project;
     if (isAudio) {
       const l = LAYER_FACTORIES.audio(store.project, src, name);
-      l.props.mediaId = mediaId;
+      l.props.mediaId = mediaId; l.props.fileName = f.name;
       try {
         const buf = await loadAudio(src);
         if (!store.project.layers.some((x) => x.type === 'audio' || x.type === 'video')) store.project.duration = Math.min(600, Math.max(1, Math.ceil(buf.duration * 10) / 10));
@@ -732,7 +732,7 @@ async function importMedia(files) {
     if (!dims) { toast(`Formato não suportado: ${f.name}`, 'error'); continue; }
     const fit = Math.max(width / dims.w, height / dims.h); // preenche a tela
     const l = LAYER_FACTORIES[isVideo ? 'video' : 'image'](store.project, src, Math.round(dims.w * fit), Math.round(dims.h * fit), name);
-    l.props.mediaId = mediaId;
+    l.props.mediaId = mediaId; l.props.fileName = f.name;
     if (isVideo) {
       detectFps(src).then((f) => { if (f) { l.props.sourceFps = f; store.commit(); } });
       // o vídeo já vem com o som dele (some sozinho quando tiver Velocidade/Twixtor)
@@ -748,6 +748,28 @@ async function importMedia(files) {
     store.addLayer(l);
   }
   if (!desktop.matches) closeSheet();
+}
+
+/** Camadas offline (mídia que sumiu do aparelho): escolha os arquivos originais e o app religa pelo nome. */
+async function relinkOfflineMedia() {
+  const off = flatLayers(store.project.layers).filter((l) => l.missing);
+  if (!off.length) { toast('Nenhuma mídia offline neste projeto.', 'ok'); return; }
+  const files = await pickFiles('video/*,image/*,audio/*', true);
+  if (!files.length) return;
+  const base = (s) => String(s || '').replace(/^⚠\s*/, '').replace(/\.[^.]+$/, '').toLowerCase().trim();
+  const left = [...files];
+  let n = 0;
+  for (const l of off) {
+    let i = left.findIndex((f) => base(f.name) === base(l.props.fileName || l.name));
+    if (i < 0 && off.length === 1 && left.length === 1) i = 0; // 1 camada e 1 arquivo: liga direto
+    if (i < 0) continue;
+    const [f] = left.splice(i, 1);
+    const id = uid('m'); putMedia(id, f);
+    l.props.mediaId = id; l.props.src = URL.createObjectURL(f); l.props.fileName = f.name; l.missing = false; n++;
+  }
+  store.commit('structure');
+  const rest = flatLayers(store.project.layers).filter((l) => l.missing).length;
+  toast(`${n} mídia(s) religada(s).${rest ? ` Faltam ${rest}: escolha os arquivos com o mesmo nome da camada, ou use Substituir mídia em cada camada.` : ''}`, n ? 'ok' : 'warn', 7000);
 }
 
 async function relinkMedia(project) {
@@ -896,6 +918,7 @@ async function showMenu() {
     <button data-m="lang">🌐 Idioma / Language: ${getLang() === 'en' ? 'English' : 'Português'}</button>
     <button data-m="font">🔤 Importar fontes (.ttf / .otf / .woff)</button>
     <button data-m="keys">⌨ Atalhos de teclado (After Effects)</button>
+    ${flatLayers(store.project.layers).some((l) => l.missing) ? '<button data-m="relinkOffline">⚠ Religar mídias offline (escolher os arquivos originais)</button>' : ''}
     ${flatLayers(store.project.layers).some((l) => l.props?.aeMedia) ? '<button data-m="relink">🔗 Conectar vídeos/fotos do projeto do AE</button><button data-m="relinksub">🔁 Usar outros vídeos/fotos no lugar dos que faltam</button>' : ''}
     <button data-m="about">ⓘ Sobre os efeitos e plugins</button>
   </div>`, [{ label: 'Fechar', value: null }], {
@@ -915,6 +938,7 @@ async function showMenu() {
   if (res === 'keys') showShortcuts();
   if (res === 'account') showAccount();
   if (res === 'apps') showApps();
+  if (res === 'relinkOffline') relinkOfflineMedia();
   if (res === 'relink') relinkAEMedia();
   if (res === 'relinksub') relinkAEMedia({ substitute: true });
   if (res === 'about') {
@@ -1411,6 +1435,7 @@ async function openProjectById(id) {
   const data = await loadProjectDataAsync(id);
   if (!data) { toast('Não consegui ler este projeto agora. Ele não foi apagado: tente abrir de novo.', 'error', 6000); home.render(); return; }
   data.id = id;
+  await saveBackup(data, true); // versão de segurança de como o projeto estava ao abrir
   await relinkMedia(data);
   const missing = flatLayers(data.layers).filter((l) => l.missing);
   if (missing.length) toast(`${missing.length} mídia(s) não encontrada(s) neste aparelho: as camadas continuam no projeto (marcadas como offline). Toque na camada › Substituir mídia para religar.`, 'warn', 8000);

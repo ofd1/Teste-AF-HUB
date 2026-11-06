@@ -61,3 +61,15 @@ export async function pruneMedia(keepIds) {
 export async function deleteMedia(id) {
   try { await tx('readwrite', (s) => s.delete(id)); return true; } catch { return false; }
 }
+
+/** Chaves guardadas que começam com o prefixo (ex.: '__bak_'). */
+export async function listKeys(prefix = '') {
+  try {
+    const d = await db();
+    return await new Promise((res) => {
+      const req = d.transaction('media', 'readonly').objectStore('media').getAllKeys();
+      req.onsuccess = () => res(req.result.map(String).filter((k) => k.startsWith(prefix)));
+      req.onerror = () => res([]);
+    });
+  } catch { return []; }
+}
