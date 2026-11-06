@@ -5,6 +5,7 @@ import { escapeHtml, uid } from './util.js';
 import { flatLayers } from './state.js';
 import { putMedia, getMedia, deleteMedia, listKeys } from './idb.js';
 
+export const APP_VERSION = 'v72';
 const INDEX = 'motionframe.projects.v1';
 const KEY = (id) => `motionframe.project.${id}`;
 const SETTINGS = 'motionframe.settings.v1';
@@ -139,7 +140,7 @@ export class HomeScreen {
     const list = listProjects();
     this.el.innerHTML = `
       <header class="home-top">
-        <div class="home-logo"><span class="logo-mark">◆</span> MotionFrame</div>
+        <div class="home-logo"><span class="logo-mark">◆</span> MotionFrame <span class="muted small" style="font-weight:400">${APP_VERSION}</span></div>
         <button class="icon" data-h="settings" aria-label="Configurações">⚙</button>
       </header>
       <div class="home-body">
@@ -237,6 +238,7 @@ export async function settingsDialog(presets) {
     <label class="row"><span>Miniaturas dos projetos</span><label class="switch"><input type="checkbox" data-f="autosaveThumb" ${s.autosaveThumb ? 'checked' : ''}><i></i></label></label>
     <label class="row"><span>Mostrar dicas na barra</span><label class="switch"><input type="checkbox" data-f="showTips" ${s.showTips ? 'checked' : ''}><i></i></label></label>
     <p class="muted small">Projetos e mídias ficam salvos só neste aparelho (nada é enviado para servidores). Exporte o projeto (.json) para levar para outro aparelho.</p>
+    <button class="wide" data-f="recover">🕘 Procurar projetos perdidos (recuperar)</button>
     <button class="wide" data-f="help">❓ Como usar</button>
     <button class="wide danger" data-f="clear">Limpar cache de quadros</button>`,
   [{ label: 'Cancelar', value: null }, { label: 'Salvar', primary: true, value: (w) => ({
@@ -245,9 +247,36 @@ export async function settingsDialog(presets) {
   }) }], {
     onMount: (w, close) => {
       w.querySelector('[data-f="help"]').addEventListener('click', () => close({ help: true }));
+      w.querySelector('[data-f="recover"]').addEventListener('click', () => close({ recover: true }));
       w.querySelector('[data-f="clear"]').addEventListener('click', () => close({ clear: true }));
     },
   });
+  if (res?.recover) { await recoveryDialog(); return null; }
   if (res && !res.help && !res.clear) setSettings({ ...s, ...res });
   return res;
+}
+
+/** Lista tudo o que está guardado neste aparelho (cópias grandes e versões automáticas) para restaurar como cópia. */
+export async function recoveryDialog() {
+  const idx = new Map(storage.get(INDEX, []).map((e) => [e.id, e]));
+  const rows = [];
+  for (const k of await listKeys('__')) {
+    const m = /^__(prj|bak)_(prj_[^_]+|.+?)(?:_(\d+))?$/.exec(k);
+    if (!m || (m[1] === 'bak' && !m[3])) continue;
+    try {
+      const raw = await getMedia(k); const d = JSON.parse(typeof raw === 'string' ? raw : await raw.text());
+      if (!Array.isArray(d.layers)) continue;
+      const cur = idx.has(d.id) ? await loadProjectDataAsync(d.id) : null;
+      rows.push({ k, d, when: m[3] ? +m[3] : 0, layers: countLayers(d), cur: cur ? countLayers(cur) : null });
+    } catch { /* ilegível */ }
+  }
+  rows.sort((a, b) => (b.layers - (b.cur ?? 0)) - (a.layers - (a.cur ?? 0)) || b.when - a.when);
+  const fmt = (t) => (t ? new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'cópia de projeto grande');
+  const pick = await modal('Projetos guardados neste aparelho', rows.length ? `<p class="muted small">Restaurar cria um projeto novo “(recuperado)”; nada é apagado. Projetos pequenos editados antes da versão v71 não tinham cópia extra — se o seu não aparece aqui, ele não ficou guardado neste aparelho/navegador.</p>
+    <div class="menu-list">${rows.map((r, i) => `<button data-r="${i}">${escapeHtml(r.d.name || 'Projeto')} · ${r.layers} camada(s) · ${fmt(r.when)}${r.cur != null ? ` <span class="muted">(atual: ${r.cur})</span>` : ' <span class="muted">(projeto não está mais na lista)</span>'}</button>`).join('')}</div>`
+    : '<p>Não há nenhuma cópia guardada neste aparelho/navegador. Se você editou em outro aparelho, no app (APK) ou no programa de PC, abra esta opção lá — cada um guarda os próprios projetos.</p>',
+  [{ label: 'Fechar', value: null }], { onMount: (w, close) => w.querySelectorAll('[data-r]').forEach((b) => b.addEventListener('click', () => close(+b.dataset.r))) });
+  if (pick == null || !rows[pick]) return;
+  const c = restoreAsCopy(rows[pick].d);
+  toast(`“${c.name}” restaurado. Ele está na lista de projetos.`, 'ok', 6000);
 }

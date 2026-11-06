@@ -82,5 +82,12 @@ export async function keepAwake(on) {
 
 export function registerServiceWorker() {
   if (isNative() || !('serviceWorker' in navigator) || location.protocol === 'file:') return;
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((r) => r.update?.()).catch(() => {});
+  // versão nova instalada: recarrega sozinho quando estiver na tela inicial (no meio da edição, só avisa)
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloaded) return;
+    if (document.body.classList.contains('at-home')) { reloaded = true; location.reload(); }
+    else window.dispatchEvent(new CustomEvent('app-updated'));
+  });
 }

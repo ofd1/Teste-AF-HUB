@@ -518,6 +518,7 @@ keyTools = new KeyTools(document.getElementById('keyTools'), store);
 new TopazPanel(document.getElementById('topazPanel'), store);
 const composer = new ComposerPanel(document.getElementById('composerPanel'), store, { onApplied: () => { if (!desktop.matches) closeSheet(); } });
 window.addEventListener('open-composer', () => openSheet('composer'));
+window.addEventListener('app-updated', () => toast('Versão nova do MotionFrame instalada. Volte para a tela inicial (⌂) para usar.', 'ok', 8000));
 if (dock.open.includes('composer')) setTimeout(() => composer.startPreview(), 300);
 
 // ---- tracker (painel estilo After Effects)
@@ -1628,6 +1629,7 @@ const home = new HomeScreen({
   plugins: async () => { await ensureSomeProject(); openSheet('browser'); fxBrowser.cat = 'Meus plugins'; fxBrowser.render(); },
   settings: async () => {
     const r = await settingsDialog(COMP_PRESETS);
+    home.render(); // (projeto recuperado aparece na lista)
     if (r?.help) showHelp();
     else if (r?.clear) { ensureCaches({ layers: [] }); toast('Cache de quadros limpo.', 'ok'); }
     else if (r) { applyResolution(getSettings().quality); renderToolbar(); }
