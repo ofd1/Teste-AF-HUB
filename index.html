@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0b0b12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MotionFrame">
+  <title>MotionFrame</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="topbar">
+      <button class="icon" data-cmd="home" aria-label="Projetos" title="Meus projetos">⌂</button>
+      <button class="icon" data-cmd="menu" aria-label="Menu">☰</button>
+      <div class="proj-title" id="projTitle" data-cmd="comp">Meu edit</div>
+      <button class="icon" data-cmd="undo" aria-label="Desfazer">↶</button>
+      <button class="icon" data-cmd="redo" aria-label="Refazer">↷</button>
+      <button class="export-btn" data-cmd="export">Exportar</button>
+    </header>
+
+    <main class="stage" id="stage">
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="view"></canvas>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div class="stage-empty" id="stageEmpty" hidden>
+        <h2>Comece seu edit</h2>
+        <p>1. Importe o clipe · 2. Aplique um preset ou efeitos · 3. Exportar</p>
+        <div class="se-btns">
+          <button class="primary" data-cmd="add-media">🎞 Importar vídeo / foto</button>
+          <button data-cmd="presets">★ Presets prontos</button>
+          <button data-cmd="add-text">T Texto</button>
+          <button data-cmd="open-any">⤒ Abrir .ffx / .aep / XML</button>
+        </div>
+        <p class="muted small">Dica: arraste arquivos para cá. No PC, aperte <b>?</b> para ver os atalhos.</p>
+      </div>
+      <div class="max-ctl">
+        <button id="maxPlay" class="max-only" aria-label="Tocar / pausar">▶</button>
+        <button id="maxBtn" title="Ampliar o preview (tela cheia)" aria-label="Ampliar o preview">⛶</button>
+      </div>
+      <div class="quality" title="Qualidade da prévia">
+        <select id="quality" aria-label="Qualidade da prévia"><option value="auto" selected>Auto</option><option value="1">Full</option><option value="0.5">½</option><option value="0.33">⅓</option></select>
+      </div>
+    </main>
+
+    <div class="transport">
+      <span class="tc" id="timecode">0:00.00</span>
+      <div class="tp-main">
+        <button class="icon" data-cmd="start" aria-label="Início">⏮</button>
+        <button class="play" data-cmd="play" aria-label="Reproduzir">▶</button>
+        <button class="icon" data-cmd="end" aria-label="Fim">⏭</button>
+      </div>
+      <div class="tp-tools">
+        <button data-cmd="add-key" title="Keyframe na transformação (posição, escala, rotação, opacidade)"><b>◆</b><small>Keyframe</small></button>
+        <button data-cmd="select-all-keys" title="Selecionar todos os keyframes"><b>◆◆</b><small>Todos keys</small></button>
+        <button data-cmd="stretch-keys" title="Esticar comprimento dos keyframes"><b>⟷</b><small>Esticar keys</small></button>
+        <button data-cmd="marker" title="Marcador de batida no playhead"><b>▾</b><small>Marcador</small></button>
+      </div>
+    </div>
+
+    <section class="timeline-wrap"><div id="timeline"></div></section>
+
+    <nav class="toolbar" id="toolbar"></nav>
+
+    <aside class="sheet" id="sheet" aria-hidden="true">
+      <div class="sheet-grip" id="sheetGrip"></div>
+      <header class="sheet-head">
+        <button class="icon back" id="sheetBack" aria-label="Voltar">‹</button>
+        <h3 id="sheetTitle">Propriedades</h3>
+        <button class="icon" id="sheetClose" aria-label="Fechar">✕</button>
+      </header>
+      <div class="dock-bar" id="dockBar"></div>
+      <div class="sheet-body">
+        <div class="pane" data-pane="effects"><div id="effectsPanel"></div></div>
+        <div class="pane" data-pane="browser"><div id="fxBrowser"></div></div>
+        <div class="pane" data-pane="props"><div id="propsPanel"></div></div>
+        <div class="pane" data-pane="presets"><div id="library"></div></div>
+        <div class="pane" data-pane="composer"><div id="composerPanel"></div></div>
+        <div class="pane" data-pane="keys"><div id="keyTools"></div></div>
+        <div class="pane" data-pane="topaz"><div id="topazPanel"></div></div>
+        <div class="pane" data-pane="add"><div id="addMenu"></div></div>
+        <div class="pane" data-pane="tracker"><div id="trackerDock"></div></div>
+      </div>
+    </aside>
+
+    <div class="drop-overlay" id="dropOverlay"><div>Solte vídeos, áudios, imagens, .ffx ou presets .json</div></div>
+  </div>
+  <script type="module" src="js/boot.js"></script>
+</body>
+</html>

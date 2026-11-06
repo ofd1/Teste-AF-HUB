@@ -1,0 +1,135 @@
+// Navegador de efeitos (grade com busca e categorias) + aba "Meus plugins (.aex)".
+import { EFFECTS, CATEGORIES, getEffectDef } from './effects.js';
+import { escapeHtml } from './util.js';
+import { ico } from './icons.js';
+import { fxMatch } from './i18n.js';
+import { installedPlugins, importAexFiles, removePlugin, clearPlugins } from './plugins-installed.js';
+import { toast, modal } from './ui.js';
+import { PANEL_PLUGINS } from './composer.js';
+
+const ICON = {
+  'Looks · Subject': 'adjust', 'Looks · Matte': 'matte', 'Looks · Lens': 'lens', 'Looks · Camera': 'camera', 'Looks · Post': 'sparkle',
+  'Luz e brilho': 'sun', Movimento: 'wave', Tempo: 'speed', Desfoque: 'blur', Estilizar: 'effects', Distorção: 'distort', Cor: 'color', '3D': 'cube', Transições: 'transition',
+};
+const MINE = 'Meus plugins';
+
+/** Escolhe arquivos .aex ou uma pasta inteira (o navegador lista tudo o que há dentro). */
+function pickAex(folder) {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.multiple = true;
+    if (folder) { input.webkitdirectory = true; input.setAttribute('webkitdirectory', ''); } else input.accept = '.aex,application/octet-stream';
+    input.addEventListener('change', () => resolve([...input.files]));
+    input.click();
+  });
+}
+
+export class FxBrowser {
+  constructor(root, onPick) {
+    this.root = root;
+    this.onPick = onPick;
+    this.cat = 'Todos';
+    this.q = '';
+    this.busy = null;
+    window.addEventListener('aex-plugins-changed', () => this.render());
+    this.render();
+  }
+
+  /** Importa .aex: lê, instala e mostra o resumo. Usado pelo botão da aba e por arrastar/abrir arquivos. */
+  async importAex(files) {
+    if (this.busy) { toast('Ainda lendo os plugins anteriores…', 'warn'); return null; }
+    const n = [...files].filter((f) => /\.aex$/i.test(f.name)).length;
+    if (!n) { toast('Nenhum arquivo .aex encontrado aí.', 'warn'); return null; }
+    this.cat = MINE; this.busy = { done: 0, total: n, file: '' }; this.render();
+    let res;
+    try {
+      res = await importAexFiles(files, (done, total, file) => { this.busy = { done, total, file }; this.updateProgress(); });
+    } finally { this.busy = null; }
+    this.render();
+    const items = res.reports.flatMap((r) => r.motionframe || []);
+    const ok = items.filter((m) => m.effect).length, util = items.filter((m) => m.kind === 'utility').length, bad = res.reports.filter((r) => !r.valid_pe).length;
+    toast(`${n} arquivo(s) lido(s): ${ok} efeito(s) instalado(s) em Efeitos › ${MINE}` + (util ? `, ${util} utilitário(s) sem efeito visual` : '') + (bad ? `, ${bad} não eram plugins válidos` : '') + '.', 'ok', 7000);
+    return res;
+  }
+
+  updateProgress() {
+    const el = this.root.querySelector('.aex-progress');
+    if (!el || !this.busy) return;
+    const { done, total, file } = this.busy;
+    el.querySelector('i').style.width = `${Math.round((done / Math.max(1, total)) * 100)}%`;
+    el.querySelector('span').textContent = `Lendo plugins ${done}/${total}${file ? ` · ${file}` : ''}`;
+  }
+
+  pluginTiles(list) {
+    return list.map((p) => {
+      const usable = !!p.effect && !!getEffectDef(p.effect)?.render;
+      if (!usable && PANEL_PLUGINS.test(`${p.name} ${p.matchName} ${p.file}`)) {
+        // plugin de painel (Animation Composer, AEJuice…): abre o painel Composer do MotionFrame
+        return `<button class="fx-tile" data-panel="1" title="${escapeHtml(p.file)}"><span class="fx-ico">${ico('composer')}</span><span class="fx-name">${escapeHtml(p.name)}</span><span class="fx-plugin">painel · abre o Composer (animações prontas)</span></button>`;
+      }
+      return `<button class="fx-tile ${usable ? '' : 'disabled'}" ${usable ? `data-plugin="${escapeHtml(p.id)}"` : 'disabled'} title="${escapeHtml(`${p.file} · ${p.matchName || p.name}`)}">
+        <span class="fx-ico">${ico(ICON[getEffectDef(p.effect)?.category] || 'presets')}</span>
+        <span class="fx-name">${escapeHtml(p.name)}</span>
+        <span class="fx-plugin">${usable ? `${escapeHtml(p.category || 'plugin')} · via ${escapeHtml(p.effectLabel || getEffectDef(p.effect).label)}` : '<span class="muted">utilitário – não mexe na imagem</span>'}</span>
+      </button>`;
+    }).join('');
+  }
+
+  render() {
+    const mine = installedPlugins();
+    const q = this.q.trim().toLowerCase();
+    const plugHits = (p) => !q || `${p.name} ${p.matchName} ${p.category} ${p.file}`.toLowerCase().includes(q);
+    let body;
+    if (this.cat === MINE) {
+      const list = mine.filter(plugHits);
+      const groups = [...new Set(list.map((p) => p.category || 'Outros'))];
+      body = `
+        <div class="aex-bar">
+          <button class="primary" data-aex="files">${ico('import')} Importar .aex</button>
+          <button data-aex="folder">${ico('folder')} Importar pasta de plugins</button>
+          ${mine.length ? '<button data-aex="clear" class="danger">Remover todos</button>' : ''}
+        </div>
+        ${this.busy ? '<div class="aex-progress" style="margin:8px 0"><div style="height:6px;background:#0003;border-radius:3px;overflow:hidden"><i style="display:block;height:100%;width:0;background:var(--accent,#2d8cf0)"></i></div><span class="muted" style="font-size:12px"></span></div>' : ''}
+        <p class="muted" style="font-size:12px;margin:6px 0 10px">O MotionFrame lê o plugin (nome e match name — o arquivo não é executado; plugins do AE só rodam dentro do After Effects)
+        e cria o efeito com a recriação equivalente já configurada. Presets .ffx que usam esses plugins também abrem com eles.
+        Pastas grandes (Sapphire, Continuum) levam alguns segundos.</p>
+        ${list.length ? groups.map((g) => `<div class="fx-group-title" style="margin:10px 0 4px;font-weight:600">${escapeHtml(g)} <small class="muted">(${list.filter((p) => (p.category || 'Outros') === g).length})</small></div>
+          <div class="fx-grid">${this.pluginTiles(list.filter((p) => (p.category || 'Outros') === g))}</div>`).join('') : `<div class="empty-note">${mine.length ? 'Nenhum plugin com esse nome.' : 'Nenhum plugin instalado ainda. Importe os .aex (ou a pasta Plug-ins do After Effects).'}</div>`}`;
+    } else {
+      const list = EFFECTS.filter((e) => (this.cat === 'Todos' || (this.cat === 'Plugins' ? e.plugin : e.category === this.cat)) && fxMatch(e, this.q));
+      const plugs = this.cat === 'Todos' && q ? mine.filter((p) => p.effect && plugHits(p)).slice(0, 24) : [];
+      body = `${plugs.length ? `<div class="fx-group-title" style="margin:4px 0;font-weight:600">${MINE}</div><div class="fx-grid">${this.pluginTiles(plugs)}</div><div class="fx-group-title" style="margin:10px 0 4px;font-weight:600">Efeitos</div>` : ''}
+        <div class="fx-grid">${list.map((e) => `
+        <button class="fx-tile" data-type="${e.type}">
+          <span class="fx-ico">${ico(ICON[e.category] || 'effects')}</span>
+          <span class="fx-name">${escapeHtml(e.label)}</span>
+          ${e.plugin ? `<span class="fx-plugin">estilo ${escapeHtml(e.plugin.split(' / ')[0])}</span>` : `<span class="fx-plugin muted">${e.category}</span>`}
+        </button>`).join('')}</div>
+      ${list.length || plugs.length ? '' : '<div class="empty-note">Nenhum efeito encontrado.</div>'}`;
+    }
+    this.root.innerHTML = `
+      <input type="search" class="fx-search" placeholder="Buscar efeito ou plugin (ex.: glow, twixtor, S_WipeStar)…" value="${escapeHtml(this.q)}">
+      <div class="chips">${['Todos', MINE, 'Plugins', ...CATEGORIES].map((c) => `<button class="chip ${c === this.cat ? 'on' : ''}" data-cat="${c}">${c === 'Plugins' ? `${ico('presets')} Plugins (recriados)` : c === MINE ? `${ico('import')} ${MINE} (.aex)${mine.length ? ` · ${mine.filter((p) => p.effect).length}` : ''}` : c}</button>`).join('')}</div>
+      ${body}`;
+    this.updateProgress();
+    const s = this.root.querySelector('.fx-search');
+    s.addEventListener('input', () => { this.q = s.value; this.render(); const n = this.root.querySelector('.fx-search'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); });
+    this.root.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => { this.cat = b.dataset.cat; this.render(); }));
+    this.root.querySelectorAll('[data-type]').forEach((b) => b.addEventListener('click', () => this.onPick(b.dataset.type)));
+    this.root.querySelectorAll('[data-plugin]').forEach((b) => b.addEventListener('click', () => {
+      const p = installedPlugins().find((x) => x.id === b.dataset.plugin);
+      if (p) this.onPick(p.effect, { label: p.name, params: p.set, plugin: p });
+    }));
+    this.root.querySelectorAll('[data-panel]').forEach((b) => b.addEventListener('click', () => window.dispatchEvent(new CustomEvent('open-composer'))));
+    this.root.querySelectorAll('[data-plugin]').forEach((b) => b.addEventListener('contextmenu', async (e) => {
+      e.preventDefault();
+      const p = installedPlugins().find((x) => x.id === b.dataset.plugin);
+      if (p && await modal('Remover plugin', `<p>Remover <b>${escapeHtml(p.name)}</b> da aba ${MINE}?</p>`, [{ label: 'Remover', value: 1, danger: true }, { label: 'Cancelar', value: null }])) removePlugin(p.id);
+    }));
+    this.root.querySelector('[data-aex="files"]')?.addEventListener('click', async () => { const f = await pickAex(false); if (f.length) this.importAex(f); });
+    this.root.querySelector('[data-aex="folder"]')?.addEventListener('click', async () => { const f = await pickAex(true); if (f.length) this.importAex(f); });
+    this.root.querySelector('[data-aex="clear"]')?.addEventListener('click', async () => {
+      if (await modal('Remover todos os plugins', '<p>Tirar todos os plugins da aba? (Os efeitos já aplicados nos projetos continuam funcionando.)</p>', [{ label: 'Remover todos', value: 1, danger: true }, { label: 'Cancelar', value: null }])) clearPlugins();
+    });
+  }
+}
