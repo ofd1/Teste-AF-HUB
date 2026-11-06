@@ -189,7 +189,7 @@ void main() {
 export default [
   {
     type: 'timeRemap', label: 'Time Remap (remapear tempo)', category: 'Tempo', plugin: 'Time Remapping (After Effects)',
-    description: 'Como o Time Remapping do AE: o valor "Tempo do vídeo" diz qual segundo do arquivo aparece em cada momento. Anime com keyframes para congelar, acelerar, voltar (reverse) ou repetir. Ao adicionar, já vem com 2 keyframes (início e fim) — mova-os ou crie novos.',
+    description: 'Como o Time Remapping do AE: o valor "Tempo do vídeo" diz qual segundo do arquivo (ou, numa pré-comp/grupo, qual segundo do conteúdo dela) aparece em cada momento. Anime com keyframes para congelar, acelerar, voltar (reverse) ou repetir. Ao adicionar, já vem com 2 keyframes (início e fim) — mova-os ou crie novos.',
     params: [num('time', 'Tempo do vídeo (s)', 0, 0, 3600, 0.01), bool('frameBlend', 'Interpolação (fluxo óptico)', true)],
     sourceRemap: true,
     init: (fx, layer) => {

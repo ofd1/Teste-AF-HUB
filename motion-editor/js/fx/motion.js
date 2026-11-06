@@ -324,7 +324,7 @@ export default [
   },
   {
     type: 'twixtor', label: 'Velocidade (estilo Twixtor)', category: 'Tempo', plugin: 'Twixtor / Timewarp',
-    description: 'Muda a velocidade do vídeo com rampas suaves (anime “Velocidade %” com keyframes). Valores negativos tocam ao contrário (reverse). A interpolação cria quadros intermediários por fluxo óptico (como o Twixtor) e o motion blur por vetores borra ao longo do movimento quando acelera (como Twixtor Pro / RSMB). Só afeta camadas de vídeo.',
+    description: 'Muda a velocidade do vídeo com rampas suaves (anime “Velocidade %” com keyframes). Valores negativos tocam ao contrário (reverse). A interpolação cria quadros intermediários por fluxo óptico (como o Twixtor) e o motion blur por vetores borra ao longo do movimento quando acelera (como Twixtor Pro / RSMB). Funciona em vídeos e em pré-comps/grupos (muda o tempo de tudo que está dentro, como o Twixtor numa pré-comp do AE).',
     params: [
       num('speed', 'Velocidade % (negativo = reverso)', 50, -1000, 1000, 1), bool('frameBlend', 'Interpolação (fluxo óptico)', true),
       num('motionBlur', 'Motion blur por vetores %', 0, 0, 300, 1),

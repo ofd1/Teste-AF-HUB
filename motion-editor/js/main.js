@@ -505,7 +505,8 @@ const fxBrowser = new FxBrowser(document.getElementById('fxBrowser'), (type, ext
     store.layers.unshift(layer);
     store.selectedLayerId = layer.id;
   }
-  if ((getEffectDef(type).sourceSpeed || getEffectDef(type).sourceRemap) && layer.type !== 'video') toast('Velocidade (estilo Twixtor) só altera camadas de vídeo.', 'warn', 4000);
+  if ((getEffectDef(type).sourceSpeed || getEffectDef(type).sourceRemap) && !TIMED.has(layer.type)) toast('Velocidade / Time Remap mudam vídeos e pré-comps/grupos (o conteúdo de dentro). Pré-componha esta camada para mudar a velocidade dela.', 'warn', 5000);
+  if (layer.type === 'group') ensureGroupTime(layer);
   const inst = createEffectInstance(type, extra?.params || {});
   if (extra?.label) inst.label = extra.label; // plugin .aex instalado: aparece com o nome do plugin
   getEffectDef(type).init?.(inst, layer);
@@ -571,8 +572,11 @@ async function replaceLayerMedia(layer) {
   toast(`Mídia substituída — efeitos, keyframes e ajustes mantidos ✓`, 'ok', 3000);
 }
 
+// camadas com tempo próprio: vídeo e pré-comp/grupo (velocidade/Time Remap mudam o conteúdo de dentro, como no AE)
+const TIMED = new Set(['video', 'group']);
 function ensureSpeedEffect(layer) {
-  if (!layer || layer.type !== 'video') { toast('Selecione uma camada de vídeo.', 'warn'); return; }
+  if (!layer || !TIMED.has(layer.type)) { toast('Selecione um vídeo ou uma pré-comp/grupo.', 'warn'); return; }
+  if (layer.type === 'group') ensureGroupTime(layer);
   if (!layer.effects.some((fx) => fx.type === 'twixtor')) {
     layer.effects.unshift(createEffectInstance('twixtor', { speed: 100 }));
     store.commit();
@@ -643,7 +647,7 @@ function renderToolbar() {
       ['deselect', '✕', 'Fechar'], ['sep'],
       ...(t === 'group' ? [['open-group', '📂', 'Abrir grupo', true]] : []),
       ['effects', '✦', 'Efeitos', true], ['presets', '★', 'Presets'], ['composer', '❖', 'Composer'],
-      ...(t === 'video' ? [['speed', '⏱', 'Velocidade', true], ['topaz', '✨', 'Topaz', true], ['freeze', '❄', 'Congelar quadro'], ['time-reverse', '⇆', 'Inverter (reverse)']] : []),
+      ...(t === 'video' || t === 'group' ? [['speed', '⏱', 'Velocidade', true], ...(t === 'video' ? [['topaz', '✨', 'Topaz', true]] : []), ['freeze', '❄', 'Congelar quadro'], ['time-reverse', '⇆', 'Inverter (reverse)'], ['time-remap', '⏱', 'Time Remap']] : []),
       ...(t === 'video' || t === 'audio' ? [['sound', '🔊', 'Som']] : []),
       ...(t === 'video' || t === 'image' ? [['bg-remove', '✂︎', 'Tirar fundo']] : []),
       ['calibrate', '🎯', 'Calibrar CC'], ['props', '☰', 'Propriedades'], ['keys', '📈', 'Keyframes / gráfico'],
@@ -1069,7 +1073,8 @@ async function sequenceLayers() {
 }
 /** Layer › Time › Freeze Frame: congela o quadro do playhead (Time Remap com valor fixo). */
 function freezeFrame(l) {
-  if (!l || l.type !== 'video') return;
+  if (!l || !TIMED.has(l.type)) return;
+  if (l.type === 'group') ensureGroupTime(l);
   l.effects = l.effects.filter((fx) => fx.type !== 'timeRemap' && fx.type !== 'twixtor');
   const fx = createEffectInstance('timeRemap');
   fx.params.time = { value: +sourceTime(l, Math.max(l.inPoint, Math.min(store.time, l.outPoint))).toFixed(4), keys: [] };
@@ -1079,7 +1084,8 @@ function freezeFrame(l) {
 }
 /** Layer › Time › Time-Reverse Layer: toca a camada de trás para frente (Time Remap do fim ao começo). */
 function timeReverse(l) {
-  if (!l || l.type !== 'video') return;
+  if (!l || !TIMED.has(l.type)) return;
+  if (l.type === 'group') ensureGroupTime(l);
   l.effects = l.effects.filter((fx) => fx.type !== 'timeRemap');
   const fx = createEffectInstance('timeRemap');
   const a = +sourceTime(l, l.inPoint).toFixed(4), b = +sourceTime(l, l.outPoint).toFixed(4);
@@ -1143,6 +1149,7 @@ const commands = {
   sequence: () => sequenceLayers(),
   freeze: () => freezeFrame(store.layer()),
   'time-reverse': () => timeReverse(store.layer()),
+  'time-remap': () => { addTimeRemap(); openSheet('effects'); },
   ungroup: ungroupLayer,
   home: () => goHome(),
   'open-group': () => { const l = store.layer(); if (l?.type === 'group' && store.openGroup(l.id)) { updateTitle(); toast(`Dentro de “${l.name}”. Toque em ◀ Sair do grupo para voltar.`, 'info', 3000); } },
@@ -1249,7 +1256,8 @@ function alignLayer(edge) {
 }
 function addTimeRemap() {
   const l = store.layer();
-  if (!l || l.type !== 'video') { toast('Time Remap funciona em camadas de vídeo.', 'warn'); return; }
+  if (!l || !TIMED.has(l.type)) { toast('Time Remap funciona em vídeos e pré-comps/grupos.', 'warn'); return; }
+  if (l.type === 'group') ensureGroupTime(l);
   if (l.effects.some((f) => f.type === 'timeRemap')) { openSheet('effects'); return; }
   const fx = createEffectInstance('timeRemap');
   getEffectDef('timeRemap').init?.(fx, l);
