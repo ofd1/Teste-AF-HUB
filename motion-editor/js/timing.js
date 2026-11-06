@@ -87,7 +87,7 @@ export function ensureGroupTime(g) {
 }
 export function groupContentTime(g, t) {
   ensureGroupTime(g);
-  return g.props.contentStart + sourceTimeRaw(g, t);
+  return g.props.contentStart + Math.max(0, sourceTimeRaw(g, t)); // reverse antes do começo: segura o 1º quadro (igual ao vídeo)
 }
 export const groupHasTimeFx = (g) => !!(speedEffect(g) || remapEffect(g));
 

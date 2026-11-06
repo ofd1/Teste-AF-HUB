@@ -4,7 +4,7 @@ import { parseCube, encodeCube, haldPixels, haldToCube, haldIsNeutral, HALD_SIZE
 import { frameifyToPreset } from './frameify.js';
 import { upgradeGenericEffects, BUILTIN_PRESETS, rgxToParsed, ffxToPreset, applyPreset, layerToPreset, serializePreset, parsePresetJSON } from './presets.js';
 import { LAYER_FACTORIES } from './state.js';
-import { sourceTimeRaw } from './timing.js';
+import { sourceTimeRaw, ensureGroupTime } from './timing.js';
 import { modal, toast, pickFiles, storage } from './ui.js';
 import { escapeHtml } from './util.js';
 import { saveFile } from './platform.js';
@@ -209,11 +209,13 @@ export class Library {
     const hasSpeed = (p.effects || []).some((e) => e.type === 'twixtor');
     const needsVideo = hasSpeed || (p.effects || []).some((e) => e.type === 'timeSlice');
     if (p.needsLayer && !layer) { toast('Selecione a camada (ex.: o recorte/silhueta do jogador) antes de aplicar este preset.', 'warn', 5000); return; }
-    if (needsVideo && layer?.type !== 'video') {
-      // Velocidade/Twixtor e Time Slice só fazem sentido no vídeo: usa o clipe de vídeo sob o playhead
+    // Velocidade/Twixtor (e os reverses) valem para vídeo e para pré-comp/grupo (muda o tempo do conteúdo, como no AE)
+    const timedOk = (l) => l && (l.type === 'video' || (hasSpeed && l.type === 'group'));
+    if (needsVideo && !timedOk(layer)) {
+      // nada (ou outra camada) selecionado: usa o vídeo/pré-comp sob o playhead, o de cima primeiro
       const t = this.store.time;
-      const v = this.store.project.layers.find((l) => l.type === 'video' && l.visible && t >= l.inPoint && t < l.outPoint);
-      if (!v) { toast(hasSpeed ? 'Este preset muda a velocidade do vídeo: coloque o playhead sobre um clipe de vídeo.' : 'Este preset precisa de um clipe de vídeo: coloque o playhead sobre o clipe.', 'warn', 5000); return; }
+      const v = this.store.layers.find((l) => timedOk(l) && l.visible && t >= l.inPoint && t < l.outPoint);
+      if (!v) { toast(hasSpeed ? 'Este preset muda a velocidade: selecione um vídeo ou uma pré-comp (ou coloque o playhead sobre um).' : 'Este preset precisa de um clipe de vídeo: coloque o playhead sobre o clipe.', 'warn', 5000); return; }
       layer = v;
       this.store.selectedLayerId = v.id;
     }
@@ -236,12 +238,13 @@ export class Library {
     const t0 = applyPreset(layer, p, this.store.time, { fit: canFit });
     this.store.commit('structure');
     toast(canFit ? `“${p.name}” sincronizado com ${layer.name}: ${(layer.outPoint - layer.inPoint).toFixed(2)}s (era ${p.duration.toFixed(2)}s)` : `“${p.name}” aplicado em ${layer.name} (${t0.toFixed(2)}s)`, 'ok');
-    if (hasSpeed && layer.type === 'video') {
+    if (hasSpeed && layer.type === 'group') ensureGroupTime(layer);
+    if (hasSpeed && (layer.type === 'video' || layer.type === 'group')) {
       // como no AE: o reverse volta no tempo a partir do ponto aplicado e precisa de vídeo antes dele
       let min = Infinity;
       const end = Math.min(layer.outPoint, t0 + (p.duration || 0));
       for (let t = t0; t <= end; t += 1 / this.store.project.fps) min = Math.min(min, sourceTimeRaw(layer, t));
-      if (min < -0.04) toast(`O reverse volta ${(-min).toFixed(2)}s antes do início do vídeo e vai congelar no 1º quadro. Aplique mais adiante no clipe (no momento do lance).`, 'warn', 7000);
+      if (min < -0.04) toast(layer.type === 'group' ? `O reverse volta ${(-min).toFixed(2)}s antes do começo da pré-comp e vai congelar no 1º quadro. Aplique mais adiante (no momento do lance).` : `O reverse volta ${(-min).toFixed(2)}s antes do início do vídeo e vai congelar no 1º quadro. Aplique mais adiante no clipe (no momento do lance).`, 'warn', 7000);
     }
     this.hooks.onApplied?.(layer, p);
   }
