@@ -25,6 +25,14 @@ export function formatTime(t, fps) {
   return `${String(mm).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}:${String(Math.min(f, fps - 1)).padStart(2, '0')}`;
 }
 
+/** Tempo simples (como nos apps de celular): 0:03.5 · 1:12.0 */
+export function formatSimple(t) {
+  const s = Math.max(0, t), m = Math.floor(s / 60), r = s - m * 60;
+  return `${m}:${r < 10 ? '0' : ''}${r.toFixed(1)}`;
+}
+/** Interface simples ligada? (classe no <body>, trocada nas configurações) */
+export const isSimpleUI = () => typeof document !== 'undefined' && document.body.classList.contains('ui-simple');
+
 export function deepClone(o) {
   return JSON.parse(JSON.stringify(o));
 }

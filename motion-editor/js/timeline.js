@@ -6,7 +6,7 @@ import { resolveProp } from './state.js';
 import { getEffectDef } from './effects.js';
 import { animProps } from './keyframes.js';
 import { peaks } from './audio.js';
-import { escapeHtml, formatTime } from './util.js';
+import { escapeHtml, formatTime, formatSimple, isSimpleUI } from './util.js';
 
 const TRANSFORM_LABELS = { position: 'Posição', scale: 'Escala', rotation: 'Rotação', opacity: 'Opacidade', anchor: 'Ponto de ancoragem', posZ: 'Posição Z', rotX: 'Rotação X', rotY: 'Rotação Y', poi: 'Ponto de interesse', poiZ: 'Ponto de interesse Z', zoom: 'Zoom', focusDist: 'Distância de foco', aperture: 'Abertura', blurLevel: 'Nível de desfoque' };
 const ICONS = { camera: '🎥', null: '✛', text: 'T', rect: '▭', ellipse: '◯', solid: '■', image: '▣', video: '▶', audio: '♪', adjustment: '◐' };
@@ -67,7 +67,7 @@ export class Timeline {
     this.render();
   }
 
-  get names() { return this.scroll.clientWidth < 600 ? 116 : 190; }
+  get names() { return isSimpleUI() ? (this.scroll.clientWidth < 600 ? 64 : 120) : (this.scroll.clientWidth < 600 ? 116 : 190); }
   tToX(t) { return t * this.pps; } // relativo à área de trilhas
   xToT(clientX) {
     const r = this.scroll.getBoundingClientRect();
@@ -166,7 +166,7 @@ export class Timeline {
     const { store } = this;
     const sel = store.isSelected(layer.id);
     const props = this.propsOf(layer);
-    const open = this.expanded.has(layer.id);
+    const open = !isSimpleUI() && this.expanded.has(layer.id); // modo simples: sem as linhas de propriedade do AE (keyframes ficam no clipe)
     const left = this.tToX(layer.inPoint);
     const width = Math.max(4, (layer.outPoint - layer.inPoint) * this.pps);
     const thumb = this.thumbFor(layer);
@@ -190,6 +190,7 @@ export class Timeline {
           <div class="clip" data-act="clip" style="left:${left}px;width:${width}px;--c:${color};${thumb ? `background-image:url('${thumb}')` : ''}">
             ${layer.type === 'audio' ? '<canvas class="wave"></canvas>' : ''}
             ${layer.effects.length ? `<span class="fxb">fx</span>` : ''}
+            <span class="cn">${ICONS[layer.type] || ''} ${escapeHtml(layer.name)}</span>
             ${sel ? '<div class="handle l" data-act="trim-in"></div><div class="handle r" data-act="trim-out"></div>' : ''}
           </div>
           ${!open ? [...times.values()].map((k) => `<span class="kf agg ${k.sel ? 'sel' : ''}" data-act="aggkey" data-t="${k.t}" style="left:${this.tToX(k.t)}px"></span>`).join('') : ''}
@@ -264,7 +265,7 @@ export class Timeline {
     const { time, fps } = { time: this.store.time, fps: this.store.project.fps };
     const x = this.names + this.tToX(time);
     this.cti.style.transform = `translateX(${x}px)`;
-    this.tc.textContent = `0:${formatTime(time, fps)}`;
+    this.tc.textContent = isSimpleUI() ? formatSimple(time) : `0:${formatTime(time, fps)}`;
     if (follow && this.store.playing) {
       const left = this.scroll.scrollLeft + this.names, right = this.scroll.scrollLeft + this.scroll.clientWidth - 10;
       if (x > right || x < left) this.scroll.scrollLeft = Math.max(0, x - this.names - 20);
@@ -293,7 +294,7 @@ export class Timeline {
       const t = t0 + i * step;
       const px = Math.round(t * this.pps - sl) + 0.5;
       x.beginPath(); x.moveTo(px, 14); x.lineTo(px, 24); x.stroke();
-      const label = step < 1 ? `${Math.floor(t + 1e-6)}:${String(Math.round(((t + 1e-6) % 1) * fps) % fps).padStart(2, '0')}f` : `${Math.round(t)}s`;
+      const label = isSimpleUI() ? (step < 1 ? `${(+t.toFixed(2))}s` : `${Math.round(t)}s`) : step < 1 ? `${Math.floor(t + 1e-6)}:${String(Math.round(((t + 1e-6) % 1) * fps) % fps).padStart(2, '0')}f` : `${Math.round(t)}s`;
       x.fillText(label, px + 3, 11);
     }
     // área além do fim da composição

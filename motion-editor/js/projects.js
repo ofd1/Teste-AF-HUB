@@ -5,12 +5,12 @@ import { escapeHtml, uid } from './util.js';
 import { flatLayers } from './state.js';
 import { putMedia, getMedia, deleteMedia, listKeys } from './idb.js';
 
-export const APP_VERSION = 'v80';
+export const APP_VERSION = 'v81';
 const INDEX = 'motionframe.projects.v1';
 const KEY = (id) => `motionframe.project.${id}`;
 const SETTINGS = 'motionframe.settings.v1';
 
-export const DEFAULT_SETTINGS = { compPreset: 'tiktok30', quality: 'auto', autosaveThumb: true, showTips: true, confirmDelete: true };
+export const DEFAULT_SETTINGS = { compPreset: 'tiktok30', quality: 'auto', autosaveThumb: true, showTips: true, confirmDelete: true, uiMode: 'simple' };
 export function getSettings() { return { ...DEFAULT_SETTINGS, ...storage.get(SETTINGS, {}) }; }
 export function setSettings(s) { storage.set(SETTINGS, s); }
 
@@ -236,6 +236,7 @@ export async function settingsDialog(presets) {
     <label class="row"><span>Formato padrão de novo projeto</span><select data-f="compPreset">${presets.map((p) => `<option value="${p.id}" ${p.id === s.compPreset ? 'selected' : ''}>${escapeHtml(p.label)}</option>`).join('')}</select></label>
     <label class="row"><span>Qualidade da prévia</span><select data-f="quality"><option value="auto" ${s.quality === 'auto' ? 'selected' : ''}>Auto (cheia parado, ½ tocando)</option><option value="1" ${s.quality === '1' ? 'selected' : ''}>Cheia (mais nítida, mais pesada)</option><option value="0.5" ${s.quality === '0.5' ? 'selected' : ''}>Metade (mais leve)</option></select></label>
     <label class="row"><span>Miniaturas dos projetos</span><label class="switch"><input type="checkbox" data-f="autosaveThumb" ${s.autosaveThumb ? 'checked' : ''}><i></i></label></label>
+    <label class="row"><span>Interface</span><select data-f="uiMode"><option value="simple" ${s.uiMode !== 'ae' ? 'selected' : ''}>Simples (estilo app de celular)</option><option value="ae" ${s.uiMode === 'ae' ? 'selected' : ''}>Avançada (After Effects)</option></select></label>
     <label class="row"><span>Mostrar dicas na barra</span><label class="switch"><input type="checkbox" data-f="showTips" ${s.showTips ? 'checked' : ''}><i></i></label></label>
     <p class="muted small">Projetos e mídias ficam salvos só neste aparelho (nada é enviado para servidores). Exporte o projeto (.json) para levar para outro aparelho.</p>
     <button class="wide" data-f="recover">🕘 Procurar projetos perdidos (recuperar)</button>
@@ -243,7 +244,7 @@ export async function settingsDialog(presets) {
     <button class="wide danger" data-f="clear">Limpar cache de quadros</button>`,
   [{ label: 'Cancelar', value: null }, { label: 'Salvar', primary: true, value: (w) => ({
     compPreset: w.querySelector('[data-f="compPreset"]').value, quality: w.querySelector('[data-f="quality"]').value,
-    autosaveThumb: w.querySelector('[data-f="autosaveThumb"]').checked, showTips: w.querySelector('[data-f="showTips"]').checked,
+    autosaveThumb: w.querySelector('[data-f="autosaveThumb"]').checked, showTips: w.querySelector('[data-f="showTips"]').checked, uiMode: w.querySelector('[data-f="uiMode"]').value,
   }) }], {
     onMount: (w, close) => {
       w.querySelector('[data-f="help"]').addEventListener('click', () => close({ help: true }));

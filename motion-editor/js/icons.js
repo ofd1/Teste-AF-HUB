@@ -1,6 +1,7 @@
 // Ícones de linha do MotionFrame (desenho próprio: traço fino arredondado, 24×24, cor do texto).
 // ico('nome') devolve o <svg>; ico() também aceita os símbolos antigos (emoji) e troca pelo ícone equivalente.
 const P = {
+  more: '<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>',
   home: '<path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/>',
@@ -82,7 +83,7 @@ const P = {
 // símbolos antigos → ícone
 const GLYPH = {
   '⌂': 'home', '☰': 'props', '↶': 'undo', '↷': 'redo', '▶': 'play', '❚❚': 'pause', '⏮': 'start', '⏭': 'end', '◆': 'key', '◆◆': 'keys', '⟷': 'stretch', '▾': 'marker',
-  '🎞': 'media', '♪': 'audio', 'T': 'text', '＋': 'plus', '★': 'presets', '❖': 'composer', '◐': 'adjust', '⊞': 'group', '⊟': 'ungroup', '⤒': 'import', '⤓': 'export', '⚙': 'settings',
+  '🎞': 'media', '♪': 'audio', 'T': 'text', '＋': 'plus', '★': 'presets', '❖': 'composer', '◐': 'adjust', '⊞': 'group', '⊟': 'ungroup', '⤒': 'import', '⤓': 'export', '⚙': 'settings', '⋯': 'more',
   '✦': 'effects', '📈': 'graph', '✂': 'split', '✂︎': 'bgremove', '⧉': 'dup', '▲': 'up', '▼': 'down', '👁': 'eye', '◌': 'eyeOff', '🗑': 'trash', '✕': 'close', '◀': 'back',
   '📂': 'folder', '⏱': 'speed', '✨': 'sparkle', '❄': 'freeze', '⇆': 'reverse', '🔊': 'sound', '🎯': 'target', '▭': 'rect', '◯': 'ellipse', '■': 'solid', '🎥': 'camera',
   '✛': 'null', '⌖': 'tracker', '⇶': 'sequence', '⛶': 'max', '?': 'help', '⎘': 'copy', '📋': 'paste', '🔑': 'account', '⬇': 'download', 'ⓘ': 'info', '🔗': 'link', '🔤': 'font',

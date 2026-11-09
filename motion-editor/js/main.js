@@ -1,6 +1,6 @@
 import { Store, LAYER_FACTORIES, RESOLUTIONS, createProject, flatLayers } from './state.js';
 import { compDialog, COMP_PRESETS } from './comp-dialog.js';
-import { HomeScreen, saveBackup, saveProjectData, loadProjectData, loadProjectDataAsync, listProjects, allMediaIds, getSettings, settingsDialog } from './projects.js';
+import { HomeScreen, saveBackup, saveProjectData, loadProjectData, loadProjectDataAsync, listProjects, allMediaIds, getSettings, setSettings, settingsDialog } from './projects.js';
 import { parseFFX } from './ffx.js';
 import { ffxToPreset } from './presets.js';
 import { TopazPanel } from './topaz-panel.js';
@@ -24,7 +24,7 @@ import { sourceTime, ensureGroupTime } from './timing.js';
 import { exportDialog } from './exporter.js';
 import { getEffectDef } from './effects.js';
 import { modal, toast, pickFiles, storage } from './ui.js';
-import { formatTime, uid, deepClone, escapeHtml } from './util.js';
+import { formatTime, formatSimple, uid, deepClone, escapeHtml } from './util.js';
 import { putMedia, getMedia, pruneMedia, flushMedia, pendingMediaCount, ensurePersistentStorage } from './idb.js';
 import { saveFile, registerServiceWorker } from './platform.js';
 import { getGL } from './gl.js';
@@ -216,7 +216,7 @@ function loop(now) {
       } else setTimeout(() => { dirty = true; }, 60); // GPU caiu: mantém o último quadro bom e refaz este
     }
     drawOverlay();
-    timecode.textContent = formatTime(store.time, store.project.fps).slice(1);
+    timecode.textContent = document.body.classList.contains('ui-simple') ? `${formatSimple(store.time)} / ${formatSimple(store.project.duration)}` : formatTime(store.time, store.project.fps).slice(1);
     dirty = false;
   }
   requestAnimationFrame(loop);
@@ -631,11 +631,54 @@ const TIPS = {
   sound: 'Volume e som da camada', ungroup: 'Desfazer a pré-composição', 'open-group': 'Entrar na pré-composição para editar', 'close-group': 'Voltar para a composição principal',
   deselect: 'Tirar a seleção (F2)', sequence: 'Colocar as camadas uma depois da outra',
 };
+/** Modo da interface: 'simple' (estilo app de celular, padrão) ou 'ae' (After Effects). */
+function applyUIMode() {
+  document.body.classList.toggle('ui-simple', getSettings().uiMode !== 'ae');
+}
+let toolbarMore = false; // modo simples: "Mais" mostra as ferramentas avançadas
+
+/** Barra do modo simples: poucas ferramentas com nomes do dia a dia; o resto fica em "Mais". */
+function simpleItems(layer, t, many) {
+  if (many > 1) return [['deselect', '✕', 'Fechar'], ['sep'], ['presets', '★', 'Preset em todas', true], ['effects', '✦', 'Efeitos'], ['props', '☰', 'Ajustar juntas'], ['group', '⊞', 'Juntar em grupo'], ['dup', '⧉', 'Duplicar'], ['del', '🗑', 'Excluir']];
+  if (layer) {
+    const main = [
+      ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
+      ['deselect', '✕', 'Fechar'], ['sep'],
+      ...(t === 'group' ? [['open-group', '📂', 'Abrir grupo', true]] : []),
+      ['presets', '★', 'Presets', true], ['effects', '✦', 'Efeitos', true],
+      ...(t === 'video' || t === 'group' ? [['speed', '⏱', 'Velocidade', true]] : []),
+      ['props', '☰', 'Editar'], ['keys', '📈', 'Animar'],
+      ...(t === 'video' || t === 'audio' ? [['sound', '🔊', 'Volume']] : []),
+      ['split', '✂', 'Dividir'], ['dup', '⧉', 'Duplicar'], ['del', '🗑', 'Excluir'],
+      ['more', '⋯', 'Mais'],
+    ];
+    if (!toolbarMore) return main;
+    return [
+      ['composer', '❖', 'Animações prontas'],
+      ...(t === 'video' || t === 'group' ? [['time-reverse', '⇆', 'Reverse'], ['freeze', '❄', 'Congelar quadro'], ['time-remap', '⏱', 'Controle de tempo']] : []),
+      ...(t === 'video' ? [['topaz', '✨', 'Melhorar qualidade']] : []),
+      ...(t === 'video' || t === 'image' ? [['bg-remove', '✂︎', 'Tirar fundo']] : []),
+      ['calibrate', '🎯', 'Igualar cor'],
+      t === 'group' ? ['ungroup', '⊟', 'Desfazer grupo'] : ['group', '⊞', 'Juntar em grupo'],
+      ['up', '▲', 'Para frente'], ['down', '▼', 'Para trás'],
+      ['toggle-visible', layer.visible ? '👁' : '◌', layer.visible ? 'Ocultar' : 'Mostrar']];
+  }
+  const main = [
+    ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
+    ['add-media', '🎞', 'Vídeo / Foto', true], ['add-audio', '♪', 'Música'], ['add-text', 'T', 'Texto'], ['presets', '★', 'Presets'], ['add', '＋', 'Mais camadas'],
+    ['more', '⋯', 'Mais'],
+  ];
+  if (!toolbarMore) return main;
+  return [ ['composer', '❖', 'Animações prontas'], ['add-adjustment', '◐', 'Camada de cor'], ['group', '⊞', 'Agrupar'], ['import-ffx', '⤒', 'Importar .ffx'], ['marker', '▾', 'Marcar batida'], ['comp', '⚙', 'Tamanho e FPS']];
+}
+
 function renderToolbar() {
   const layer = store.layer();
   const t = layer?.type;
   const many = store.selectedLayers().length;
-  const items = many > 1
+  applyUIMode();
+  const simple = document.body.classList.contains('ui-simple');
+  const items = simple ? simpleItems(layer, t, many) : many > 1
     ? [
       ['deselect', '✕', 'Limpar seleção'], ['sep'],
       ['group', '⊞', `Pré-compor (${many})`, true], ['props', '☰', `Ajustar ${many} juntas`, true], ['presets', '★', 'Preset em todas'], ['effects', '✦', 'Efeitos'],
@@ -666,7 +709,7 @@ function renderToolbar() {
   // faixa de ajuda: diz o que está selecionado e o próximo passo
   hintBar.hidden = !getSettings().showTips;
   if (!store.project.layers.length) hintBar.innerHTML = 'Comece tocando em <b>Vídeo / Foto</b> para importar seu clipe.';
-  else if (!layer) hintBar.innerHTML = 'Toque numa camada (na timeline ou na prévia) para editar. Arraste a régua azul para mudar o tempo.';
+  else if (!layer) hintBar.innerHTML = simple ? 'Toque num clipe para editar. Arraste a linha azul para andar no vídeo.' : 'Toque numa camada (na timeline ou na prévia) para editar. Arraste a régua azul para mudar o tempo.';
   else if (many > 1) hintBar.innerHTML = `<b>${many} camadas selecionadas</b> — mudanças em Propriedades valem para todas · Pré-compor junta em um grupo · Shift/Ctrl+clique (ou toque longo) adiciona/remove`;
   else hintBar.innerHTML = `<b>${escapeHtml(layer.name)}</b> · ${TYPE_LABEL[t] || t}${layer.effects.length ? ` · ${layer.effects.length} efeito(s)` : ''} — ${t === 'video' ? 'use <b>Presets</b> para CC/shake/reverse ou <b>Velocidade</b> para câmera lenta' : t === 'group' ? 'efeitos e presets valem para o grupo inteiro' : 'use <b>Efeitos</b> ou <b>Presets</b>'}`;
 }
@@ -909,6 +952,7 @@ function showApps() {
 
 async function showMenu() {
   const res = await modal('Menu', `<div class="menu-list">
+    <button data-m="ui">🎚 Interface: ${getSettings().uiMode === 'ae' ? 'Avançada (After Effects) → trocar para Simples' : 'Simples → trocar para Avançada (After Effects)'}</button>
     <button data-m="home">⌂ Meus projetos</button>
     <button data-m="account">🔑 Conta e acesso</button>
     <button data-m="apps">⬇ Baixar o app (PC Windows / Android)</button>
@@ -930,6 +974,7 @@ async function showMenu() {
     onMount: (w, close) => w.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => close(b.dataset.m))),
   });
   if (res === 'help') showHelp();
+  if (res === 'ui') commands['ui-mode']();
   if (res === 'home') goHome();
   if (res === 'new') commands.new();
   if (res === 'open') openProject();
@@ -1098,6 +1143,17 @@ function timeReverse(l) {
 const commands = {
   'open-any': async () => { const files = await pickFiles('.ffx,.aep,.xml,.fcpxml,.json,.rgx,.cube,.aex,.ttf,.otf,.woff,.woff2,video/*,image/*,audio/*'); if (files.length) routeFiles(files); },
   menu: showMenu,
+  more: async () => {
+    // modo simples: as ferramentas avançadas aparecem numa grade (como o "Mais" dos apps de celular)
+    const layer = store.layer();
+    toolbarMore = true; const items = simpleItems(layer, layer?.type, store.selectedLayers().length); toolbarMore = false;
+    const cmd = await modal('Mais ferramentas', `<div class="more-grid">${items.filter((i) => i[0] !== 'sep').map(([c, icon, label]) => `<button data-mc="${c}"><span class="ti">${ico(icon)}</span><span>${escapeHtml(label)}</span></button>`).join('')}</div>
+      <button class="wide" data-mc="ui-mode" style="margin-top:10px">🎚 Usar a interface avançada (After Effects)</button>`, [{ label: 'Fechar', value: null }], {
+      onMount: (w, close) => w.querySelectorAll('[data-mc]').forEach((b) => b.addEventListener('click', () => close(b.dataset.mc))),
+    });
+    if (cmd) commands[cmd]?.();
+  },
+  'ui-mode': () => { const s0 = getSettings(); setSettings({ ...s0, uiMode: s0.uiMode === 'ae' ? 'simple' : 'ae' }); toolbarMore = false; renderToolbar(); timeline.render(); toast(getSettings().uiMode === 'ae' ? 'Interface avançada (After Effects) ligada.' : 'Interface simples ligada.', 'ok'); },
   new: () => createProjectFlow(),
   undo: () => store.undo(),
   redo: () => store.redo(),
@@ -1640,7 +1696,7 @@ const home = new HomeScreen({
     home.render(); // (projeto recuperado aparece na lista)
     if (r?.help) showHelp();
     else if (r?.clear) { ensureCaches({ layers: [] }); toast('Cache de quadros limpo.', 'ok'); }
-    else if (r) { applyResolution(getSettings().quality); renderToolbar(); }
+    else if (r) { applyResolution(getSettings().quality); renderToolbar(); timeline.render(); }
   },
   exportJSON: (p) => saveFile(`${(p.name || 'projeto').replace(/[^\w-]+/g, '_')}.motionframe.json`, new Blob([JSON.stringify(p)], { type: 'application/json' })),
 });
@@ -1655,6 +1711,7 @@ const home = new HomeScreen({
   }
   try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* ok */ }
   applyResolution(getSettings().quality);
+  applyUIMode();
   store.load(createProject(1080, 1920));
   updateTitle(); renderToolbar(); layoutCanvas();
   registerServiceWorker();
