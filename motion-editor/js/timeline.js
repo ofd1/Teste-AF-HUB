@@ -332,7 +332,19 @@ export class Timeline {
     const tol = 8 / this.pps;
     let best = t, bd = tol;
     for (const c of candidates) { const d = Math.abs(c - t); if (d < bd) { bd = d; best = c; } }
+    if (best !== t) this.lastSnap = best;
     return best;
+  }
+
+  /** Linha amarela + vibração curta quando o clipe encaixa (como no CapCut). */
+  showSnap(t) {
+    let g = this.snapGuide;
+    if (!g) { g = this.snapGuide = document.createElement('div'); g.className = 'tl-snap'; }
+    const host = this.scroll.querySelector('.tl-inner') || this.scroll;
+    if (g.parentNode !== host) host.appendChild(g);
+    if (t == null) { g.style.display = 'none'; this.snapShown = null; return; }
+    g.style.display = 'block'; g.style.left = `${this.names + this.tToX(t)}px`;
+    if (this.snapShown !== t) { this.snapShown = t; try { navigator.vibrate?.(8); } catch { /* ok */ } }
   }
 
   onDown(e, row) {
@@ -442,6 +454,7 @@ export class Timeline {
       const dt = (ev.clientX - x0) / this.pps;
       if (Math.abs(ev.clientX - x0) > 3) moved = true;
       if (!moved) return;
+      this.lastSnap = null;
       if (act === 'clip') {
         const len = out0 - in0;
         let ni = frame(in0 + dt);
@@ -467,9 +480,11 @@ export class Timeline {
       }
       clip.style.left = `${this.tToX(layer.inPoint)}px`;
       clip.style.width = `${Math.max(4, (layer.outPoint - layer.inPoint) * this.pps)}px`;
+      this.showSnap(this.lastSnap);
       this.hooks.onPreview?.();
     };
     row.onpointerup = () => {
+      this.showSnap(null);
       row.onpointermove = null;
       row.onpointerup = null;
       if (moved) store.commit();

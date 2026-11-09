@@ -615,3 +615,16 @@ a.btn.primary { background: var(--accent); border-color: var(--accent); color: #
 .more-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .more-grid button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; font-size: 11.5px; line-height: 1.15; border-radius: 12px; white-space: normal; }
 .more-grid .ti svg { width: 24px; height: 24px; }
+
+/* ---------- Exportar (estilo CapCut / Alight Motion) ---------- */
+.exp-sheet { display: flex; flex-direction: column; gap: 12px; }
+.exp-row { display: flex; flex-direction: column; gap: 6px; }
+.exp-row > span { font-size: 13px; color: #bbb; }
+.exp-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.exp-chips button { flex: 1; min-width: 52px; padding: 9px 6px; border-radius: 10px; font-size: 13.5px; background: #2a2a2a; border: 1px solid #3a3a3a; }
+.exp-chips button.on { background: #2d8ceb; border-color: #2d8ceb; color: #fff; font-weight: 600; }
+.exp-fmt .exp-chips button { padding: 7px 6px; font-size: 12.5px; }
+.exp-info { font-variant-numeric: tabular-nums; color: #ddd !important; font-size: 13px !important; }
+
+.tl-inner { position: relative; }
+.tl-snap { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -0.5px; background: #ffd23f; box-shadow: 0 0 4px #ffd23f; pointer-events: none; z-index: 6; display: none; }

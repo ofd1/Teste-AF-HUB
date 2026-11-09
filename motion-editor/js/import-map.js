@@ -205,7 +205,7 @@ export function looksFromTools(tools, strength = 100) {
         // Optical Diffusion → Glow/Diffusion com os mesmos números que o Frameify usa para este preset:
         // intensidade = 1,5 × Density, raio = Size ÷ 2, limiar 30 (galego: 34 / 260,6 → 51 / 130,3)
         if ((v[0] || 0) > 0) {
-          p.diffusion = Math.max(p.diffusion, (v[0] || 0) * 3);
+          p.diffusion = Math.max(p.diffusion, (v[0] || 0) * 1.5);
           p.diffusionRadius = Math.max(p.diffusionRadius === 60 ? 0 : p.diffusionRadius, (v[1] ?? 50) / 2);
           p.diffusionThreshold = clampN(v[4] ?? 50, 0, 100); // Highlights Only
           // Color R/G/B do Optical Diffusion (Looks3.aex: Density, Size, Falloff, Glow, Highlights Only, Luster, Color R, G, B…)
@@ -240,8 +240,7 @@ export function looksFromTools(tools, strength = 100) {
           p.fade += (v[4] || 0) * 0.5 * k; // Fade It: levanta os pretos
           if (v[5] > 0) p.mojoCool = clampN(25 + v[5] * 0.5, 0, 100); // Blue Squeeze: no AE (Galego CC) a grama continua verde
           if (v[6] > 0) p.mojoSkin = clampN(50 + v[6], 0, 100);
-          // Exposure do Mojo II: no print do AE (Galego CC, −0,5) os brancos continuam estourados — o efeito real é bem menor que −0,5 stop
-          p.exposure += (v[7] || 0) * k * (v[7] < 0 ? 0.3 : 1);
+          p.exposure += (v[7] || 0) * k;
           p.temperature += (v[8] || 0) * 0.35 * k; // Cool/Warm do Mojo II: negativo = frio (conferido com o Vampy CC renderizado no Frameify)
           p.tint -= (v[9] || 0) * 0.5 * k; // Green/Magenta positivo deixa esverdeado no AE (ZAZ Dark: cinza-esverdeado)
           p.mojoTint = (v[1] || 0) * k;

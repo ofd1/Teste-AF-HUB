@@ -261,20 +261,45 @@ export async function exportPNG(store) {
 }
 
 export async function exportDialog(store) {
+  // Exportar no estilo CapCut / Alight Motion: resolução, fps e qualidade em botões, com o tamanho estimado do arquivo.
+  const P = store.project, short = Math.min(P.width, P.height);
+  const RES = [[480, '480p'], [720, '720p'], [1080, '1080p'], [1440, '2K'], [2160, '4K']].filter(([r]) => r <= short * 4);
+  const last = (() => { try { return JSON.parse(localStorage.getItem('motionframe.exportPrefs') || 'null'); } catch { return null; } })() || {};
+  const st = { res: last.res && RES.some(([r]) => r === last.res) ? last.res : (RES.find(([r]) => r === short)?.[0] || 1080), fps: last.fps || P.fps, q: last.q || 'rec', fmt: 'video' };
+  if (P.exportScale > 1) st.res = Math.min(2160, Math.round(short * P.exportScale)); // Topaz upscale escolhido no painel
+  const scaleOf = () => st.res / short;
+  const QK = { low: 0.5, rec: 1, high: 1.6 };
+  const rate = (sc, fps, q) => Math.round(Math.max(4, Math.min(150, P.width * sc * P.height * sc * fps * 0.35 / 1e6 * QK[q])));
+  const mbps = () => rate(scaleOf(), st.fps, st.q);
+  const sizeMB = () => Math.max(1, Math.round((mbps() * P.duration) / 8 + (P.duration * 0.024)));
+  const chips = (key, items) => `<div class="exp-chips" data-k="${key}">${items.map(([v, l]) => `<button data-v="${v}" class="${String(st[key]) === String(v) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   const res = await modal('Exportar', `
-    <label class="row"><span>Formato</span><select data-f="fmt"><option value="video">Vídeo MP4</option><option value="png">Quadro atual (PNG)</option><option value="project">Projeto (.json)</option></select></label>
-    <label class="row"><span>Resolução</span><select data-f="scale" data-def="${store.project.exportScale || 1}"><option value="1">100% (${store.project.width}×${store.project.height})</option><option value="1.5">150% upscale (${even(store.project.width * 1.5)}×${even(store.project.height * 1.5)})</option><option value="2">2× upscale (${store.project.width * 2}×${store.project.height * 2})</option><option value="4">4× upscale (${store.project.width * 4}×${store.project.height * 4})</option><option value="8">8× upscale (${store.project.width * 8}×${store.project.height * 8})</option><option value="0.6667">66%</option><option value="0.5">50%</option></select></label>
-    <label class="row"><span>FPS</span><select data-f="fps">${[24, 25, 30, 50, 60].map((f) => `<option ${f === store.project.fps ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
-    <label class="row"><span>Qualidade (Mbps)</span><input type="number" data-f="bitrate" value="${autoBitrate(store.project, store.project.exportScale || 1)}" min="4" max="200"></label>
-    <p class="muted small">Edits com shake, glitch, grão e flashes precisam de bitrate alto para não “quadricular”. O valor já vem calculado pela resolução e fps; aumente se ainda ver blocos.</p>`,
-  [{ label: 'Cancelar', value: null }, { label: 'Exportar', primary: true, value: (w) => ({ fmt: w.querySelector('[data-f="fmt"]').value, scale: +w.querySelector('[data-f="scale"]').value, fps: +w.querySelector('[data-f="fps"]').value, bitrate: +w.querySelector('[data-f="bitrate"]').value }) }], { onMount: (w) => {
-    const sel = w.querySelector('[data-f="scale"]'), fpsSel = w.querySelector('[data-f="fps"]'), br = w.querySelector('[data-f="bitrate"]');
-    sel.value = sel.dataset.def; if (!sel.value) sel.value = '1';
-    let touched = false;
-    br.addEventListener('input', () => { touched = true; });
-    const upd = () => { if (!touched) br.value = autoBitrate(store.project, Math.min(+sel.value, 4), +fpsSel.value); };
-    sel.addEventListener('change', upd); fpsSel.addEventListener('change', upd); upd();
+    <div class="exp-sheet">
+      <div class="exp-fmt">${chips('fmt', [['video', 'Vídeo'], ['png', 'Foto (quadro)'], ['project', 'Projeto']])}</div>
+      <div class="exp-video">
+        <div class="exp-row"><span>Resolução</span>${chips('res', RES.map(([r, l]) => [r, l + (r > short ? ' ✦' : '')]))}</div>
+        <div class="exp-row"><span>Quadros por segundo</span>${chips('fps', [24, 25, 30, 50, 60].map((f) => [f, String(f)]))}</div>
+        <div class="exp-row"><span>Qualidade</span>${chips('q', [['low', 'Menor'], ['rec', 'Recomendada'], ['high', 'Maior']])}</div>
+        <p class="muted small exp-info"></p>
+        <p class="muted small">✦ acima do tamanho do projeto: a imagem é ampliada (use o Topaz para ampliar com detalhe). Edits com shake/grão pedem qualidade Recomendada ou Maior.</p>
+      </div>
+    </div>`,
+  [{ label: 'Cancelar', value: null }, { label: 'Exportar', primary: true, value: () => ({ ...st }) }], { onMount: (w) => {
+    const info = w.querySelector('.exp-info');
+    const upd = () => {
+      w.querySelectorAll('.exp-chips').forEach((g) => g.querySelectorAll('button').forEach((b) => b.classList.toggle('on', String(st[g.dataset.k]) === b.dataset.v)));
+      w.querySelector('.exp-video').style.display = st.fmt === 'video' ? '' : 'none';
+      const W = even(P.width * scaleOf()), H = even(P.height * scaleOf());
+      info.textContent = `${W}×${H} · ${st.fps} fps · ${mbps()} Mbps · ≈ ${sizeMB()} MB (${P.duration.toFixed(1)} s)`;
+    };
+    w.querySelectorAll('.exp-chips').forEach((g) => g.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      st[g.dataset.k] = g.dataset.k === 'res' || g.dataset.k === 'fps' ? +b.dataset.v : b.dataset.v; upd();
+    }));
+    upd();
   } });
+  if (res) { try { localStorage.setItem('motionframe.exportPrefs', JSON.stringify({ res: res.res, fps: res.fps, q: res.q })); } catch { /* ok */ } }
+  if (res) Object.assign(res, { scale: res.res / short, bitrate: rate(res.res / short, res.fps, res.q) });
   if (!res) return null;
   if (res.fmt === 'png') await exportPNG(store);
   else if (res.fmt === 'video') {
