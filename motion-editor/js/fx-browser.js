@@ -3,7 +3,7 @@ import { EFFECTS, CATEGORIES, getEffectDef } from './effects.js';
 import { escapeHtml } from './util.js';
 import { ico } from './icons.js';
 import { fxMatch } from './i18n.js';
-import { installedPlugins, importAexFiles, removePlugin, clearPlugins } from './plugins-installed.js';
+import { installedPlugins, allPlugins, importAexFiles, removePlugin, clearPlugins } from './plugins-installed.js';
 import { toast, modal } from './ui.js';
 import { PANEL_PLUGINS } from './composer.js';
 
@@ -62,7 +62,9 @@ export class FxBrowser {
 
   pluginTiles(list) {
     return list.map((p) => {
-      const usable = !!p.effect && !!getEffectDef(p.effect)?.render;
+      // efeitos de tempo (Twixtor, RSMB, Echo, Time Remap…) não têm "render" de imagem, mas funcionam: contam como aplicáveis
+      const def = p.effect ? getEffectDef(p.effect) : null;
+      const usable = !!def && def.type !== 'generic';
       if (!usable && PANEL_PLUGINS.test(`${p.name} ${p.matchName} ${p.file}`)) {
         // plugin de painel (Animation Composer, AEJuice…): abre o painel Composer do MotionFrame
         return `<button class="fx-tile" data-panel="1" title="${escapeHtml(p.file)}"><span class="fx-ico">${ico('composer')}</span><span class="fx-name">${escapeHtml(p.name)}</span><span class="fx-plugin">painel · abre o Composer (animações prontas)</span></button>`;
@@ -76,7 +78,7 @@ export class FxBrowser {
   }
 
   render() {
-    const mine = installedPlugins();
+    const mine = allPlugins();
     const q = this.q.trim().toLowerCase();
     const plugHits = (p) => !q || `${p.name} ${p.matchName} ${p.category} ${p.file}`.toLowerCase().includes(q);
     let body;
@@ -93,8 +95,10 @@ export class FxBrowser {
         <p class="muted" style="font-size:12px;margin:6px 0 10px">O MotionFrame lê o plugin (nome e match name — o arquivo não é executado; plugins do AE só rodam dentro do After Effects)
         e cria o efeito com a recriação equivalente já configurada. Presets .ffx que usam esses plugins também abrem com eles.
         Pastas grandes (Sapphire, Continuum) levam alguns segundos.</p>
-        ${list.length ? groups.map((g) => `<div class="fx-group-title" style="margin:10px 0 4px;font-weight:600">${escapeHtml(g)} <small class="muted">(${list.filter((p) => (p.category || 'Outros') === g).length})</small></div>
-          <div class="fx-grid">${this.pluginTiles(list.filter((p) => (p.category || 'Outros') === g))}</div>`).join('') : `<div class="empty-note">${mine.length ? 'Nenhum plugin com esse nome.' : 'Nenhum plugin instalado ainda. Importe os .aex (ou a pasta Plug-ins do After Effects).'}</div>`}`;
+        <p class="muted" style="font-size:12px;margin:0 0 8px">${mine.length} plugins: ${mine.filter((p) => p.pack).length} do seu pacote (já instalados) + ${mine.filter((p) => !p.pack).length} importados por você.</p>
+        ${list.length ? groups.map((g) => { const items = list.filter((p) => (p.category || 'Outros') === g); const open = q || this.openGroups?.has(g) || groups.length === 1;
+          return `<details class="aex-group" data-g="${escapeHtml(g)}" ${open ? 'open' : ''} style="margin:6px 0"><summary style="cursor:pointer;font-weight:600;padding:6px 0">${escapeHtml(g)} <small class="muted">(${items.length})</small></summary>
+          <div class="fx-grid">${open ? this.pluginTiles(items) : ''}</div></details>`; }).join('') : `<div class="empty-note">${mine.length ? 'Nenhum plugin com esse nome.' : 'Nenhum plugin instalado ainda. Importe os .aex (ou a pasta Plug-ins do After Effects).'}</div>`}`;
     } else {
       const list = EFFECTS.filter((e) => (this.cat === 'Todos' || (this.cat === 'Plugins' ? e.plugin : e.category === this.cat)) && fxMatch(e, this.q));
       const plugs = this.cat === 'Todos' && q ? mine.filter((p) => p.effect && plugHits(p)).slice(0, 24) : [];
@@ -117,13 +121,18 @@ export class FxBrowser {
     this.root.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => { this.cat = b.dataset.cat; this.render(); }));
     this.root.querySelectorAll('[data-type]').forEach((b) => b.addEventListener('click', () => this.onPick(b.dataset.type)));
     this.root.querySelectorAll('[data-plugin]').forEach((b) => b.addEventListener('click', () => {
-      const p = installedPlugins().find((x) => x.id === b.dataset.plugin);
+      const p = allPlugins().find((x) => x.id === b.dataset.plugin);
       if (p) this.onPick(p.effect, { label: p.name, params: p.set, plugin: p });
+    }));
+    // grupos recolhíveis: as miniaturas só são montadas quando o grupo abre (são ~800 plugins)
+    this.root.querySelectorAll('details.aex-group').forEach((d) => d.addEventListener('toggle', () => {
+      this.openGroups = this.openGroups || new Set();
+      if (d.open) { this.openGroups.add(d.dataset.g); if (!d.querySelector('.fx-tile')) this.render(); } else this.openGroups.delete(d.dataset.g);
     }));
     this.root.querySelectorAll('[data-panel]').forEach((b) => b.addEventListener('click', () => window.dispatchEvent(new CustomEvent('open-composer'))));
     this.root.querySelectorAll('[data-plugin]').forEach((b) => b.addEventListener('contextmenu', async (e) => {
       e.preventDefault();
-      const p = installedPlugins().find((x) => x.id === b.dataset.plugin);
+      const p = installedPlugins().find((x) => x.id === b.dataset.plugin); // só os importados por você podem ser removidos
       if (p && await modal('Remover plugin', `<p>Remover <b>${escapeHtml(p.name)}</b> da aba ${MINE}?</p>`, [{ label: 'Remover', value: 1, danger: true }, { label: 'Cancelar', value: null }])) removePlugin(p.id);
     }));
     this.root.querySelector('[data-aex="files"]')?.addEventListener('click', async () => { const f = await pickAex(false); if (f.length) this.importAex(f); });

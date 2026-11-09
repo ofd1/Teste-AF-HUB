@@ -5,12 +5,32 @@ import { scanAex, aexEquivalents } from './aex-scan.js';
 import { matchEffect } from './import-map.js';
 import { UTILITY_PLUGINS } from './import-map-pk.js';
 import { storage } from './ui.js';
+import { AEX_CATALOG } from './aex-catalog.js';
 
 const KEY = 'motionframe.aexPlugins';
 const MAX_BYTES = 512 * 1024 * 1024;
 let cache = null;
 
 export function installedPlugins() { if (!cache) cache = storage.get(KEY, []); return cache; }
+
+/** Plugins do pacote que já vêm instalados (catálogo), com o efeito equivalente calculado na hora. */
+let packCache = null;
+function packPlugins() {
+  if (packCache) return packCache;
+  packCache = AEX_CATALOG.map(([name, matchName, category, file]) => {
+    const r = { path: file, pipl: [{ name, category, matchName }] };
+    const [m] = aexEquivalents(r, matchEffect, UTILITY_PLUGINS);
+    const e = { id: '', name, matchName, category, file, effect: m.effect, effectLabel: m.label, kind: m.kind, set: m.set || {}, pack: true };
+    e.id = pluginId(e);
+    return e;
+  });
+  return packCache;
+}
+/** Tudo o que aparece em Meus plugins: os que você importou + os do pacote (os seus têm prioridade). */
+export function allPlugins() {
+  const mine = installedPlugins(), ids = new Set(mine.map((p) => p.id));
+  return [...mine, ...packPlugins().filter((p) => !ids.has(p.id))];
+}
 const save = () => { storage.set(KEY, cache); window.dispatchEvent(new CustomEvent('aex-plugins-changed')); };
 const pluginId = (e) => `${(e.matchName || e.name).toLowerCase().replace(/\s+/g, ' ').trim()}|${e.category || ''}`;
 
@@ -47,6 +67,6 @@ const norm = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 /** Plugin instalado com esse match name (ou nome) — usado na importação de .ffx. */
 export function findInstalled(matchName, name) {
   const mn = norm(matchName), nm = norm(name);
-  const list = installedPlugins();
+  const list = allPlugins();
   return (mn && list.find((p) => p.effect && norm(p.matchName) === mn)) || (nm && list.find((p) => p.effect && !p.matchName && norm(p.name) === nm)) || null;
 }
