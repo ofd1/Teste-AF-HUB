@@ -745,7 +745,12 @@ async function importMedia(files) {
     const isImage = f.type.startsWith('image/');
     if (!isVideo && !isAudio && !isImage) continue;
     const mediaId = uid('m');
-    putMedia(mediaId, f);
+    // vídeo grande: confere o espaço antes e avisa se não der para guardar (senão o projeto reabre com "mídia não encontrada")
+    try {
+      const est = await navigator.storage?.estimate?.();
+      if (est?.quota && f.size > (est.quota - (est.usage || 0)) * 0.95) toast(`Pouco espaço para guardar “${f.name}” (${Math.round(f.size / 1048576)} MB) no aparelho. Ele funciona agora, mas pode não reabrir depois — libere espaço ou use um arquivo menor.`, 'warn', 9000);
+    } catch { /* sem estimativa */ }
+    putMedia(mediaId, f).then((ok) => { if (!ok) toast(`Não deu para guardar “${f.name}” no aparelho (falta de espaço?). O vídeo funciona agora, mas some ao fechar o app.`, 'warn', 9000); });
     const src = URL.createObjectURL(f);
     const name = f.name.replace(/\.[^.]+$/, '');
     const { width, height } = store.project;

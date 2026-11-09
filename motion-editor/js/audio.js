@@ -1,4 +1,5 @@
 // Áudio: camadas de música e o som dos vídeos, com reprodução sincronizada (WebAudio), forma de onda e mixagem offline.
+import { extractAudioADTS } from './mp4audio.js';
 import { flatLayers } from './state.js';
 import { speedEffect, groupHasTimeFx, ensureGroupTime } from './timing.js';
 const buffers = new Map(); // src -> AudioBuffer
@@ -26,10 +27,29 @@ if (typeof document !== 'undefined') {
   for (const ev of ['touchend', 'click']) document.addEventListener(ev, unlock, { capture: true, passive: true });
 }
 
+const IOS = typeof navigator !== 'undefined' && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+const BIG = 24 * 1024 * 1024;                              // acima disso, tira só a trilha de áudio (sem ler o vídeo todo)
+const HUGE = (IOS ? 160 : 1200) * 1024 * 1024;             // sem extração possível, não lê arquivos maiores que isso (crash no iPhone)
+const pending = new Map();
+
 export async function loadAudio(src) {
   if (buffers.has(src)) return buffers.get(src);
-  const data = await (await fetch(src)).arrayBuffer();
-  const buf = await audioCtx().decodeAudioData(data);
+  if (pending.has(src)) return pending.get(src);
+  const job = (async () => {
+    const blob = await (await fetch(src)).blob();
+    let data = null;
+    if (blob.size > BIG) {
+      const adts = await extractAudioADTS(blob).catch(() => null);
+      if (adts === false) throw new Error('sem trilha de áudio');
+      if (adts) data = adts.buffer.slice(adts.byteOffset, adts.byteOffset + adts.byteLength);
+      else if (blob.size > HUGE) throw new Error('arquivo grande demais para tirar o som neste aparelho');
+    }
+    if (!data) data = await blob.arrayBuffer();
+    return audioCtx().decodeAudioData(data);
+  })();
+  pending.set(src, job);
+  let buf;
+  try { buf = await job; } finally { pending.delete(src); }
   buffers.set(src, buf);
   return buf;
 }
