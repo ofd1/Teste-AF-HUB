@@ -451,6 +451,30 @@ function looksExpand(fx, raw) {
 }
 
 export const IMPORT_RULES = [
+  // Continuum (BCC) com os controles reais (doc da Boris FX + índices dos .ffx): vêm antes das regras genéricas
+  { vendor: 'BCC', plugin: 'BCC Directional Blur', to: 'bccDirBlur', match: ['BCC3Directional Blur', 'BCC Directional Blur', 'BCC+Directional Blur'], test: /bcc.*directional ?blur/i,
+    map: { amount: { i: 2, n: ['blur amount'] }, angle: { i: 3, n: ['angle'] }, thin: { i: 4, n: ['thin'] }, spread: { i: 5, n: ['spread'] }, threshold: { i: 6, n: ['blur threshold'] },
+      maxDev: { i: 15, n: ['maximum deviation'] }, displace: { i: 8, n: ['displace pixels'] }, applyMode: { i: 9, n: ['apply mode'], conv: (v) => (v > 15 ? 1 : v) },
+      applyMix: { i: 10, n: ['apply mix'] }, channels: { i: 11, n: ['channels'] }, mix: { i: 13, n: ['mix with original'] } } },
+  { vendor: 'BCC', plugin: 'BCC Lens Blur', to: 'bccLensBlur', match: ['BCC6LensBlur', 'BCC Lens Blur', 'BCC Fast Lens Blur'], test: /bcc.*lens ?blur/i,
+    map: { irisScale: { n: ['iris scale'] }, quality: { n: ['quality'] }, scaleX: { n: ['scale x'] }, scaleY: { n: ['scale y'] }, gamma: { n: ['gamma'] }, irisShape: { n: ['iris shape'] },
+      curvature: { n: ['iris curvature'] }, irisRot: { n: ['iris rotation'] }, boostMode: { n: ['boost/sup mode'] }, boost: { n: ['highlight boost'] }, hThreshold: { n: ['highlight threshold'] }, mix: { n: ['mix with original'] } } },
+  { vendor: 'BCC', plugin: 'BCC Unsharp Mask', to: 'bccUnsharp', match: ['BCC3Unsharp Mask', 'BCC Unsharp Mask'], test: /bcc.*unsharp/i,
+    map: { radius: { i: 2, n: ['radius'] }, amount: { i: 3, n: ['amount'] }, threshold: { i: 4, n: ['threshold'] }, channels: { i: 5, n: ['output channels'] }, flicker: { i: 7, n: ['reduce flicker'] }, mix: { i: 6, n: ['mix with original'] } } },
+  { vendor: 'BCC', plugin: 'BCC Magic Sharp', to: 'bccMagicSharp', match: ['BCC Magic Sharp', 'BCC+Magic Sharp'], test: /bcc.*magic ?sharp/i,
+    map: { amount: { n: ['sharpen amount'] }, threshold: { n: ['sharpen threshold'] }, radius: { n: ['sharpen radius'] }, noise: { n: ['noise suppression'] },
+      fineOn: { n: ['fine pass'] }, fine: { n: ['fine sharpen'] }, smallOn: { n: ['small pass'] }, small: { n: ['small sharpen'] }, medOn: { n: ['medium pass'] }, med: { n: ['medium sharpen'] },
+      coarseOn: { n: ['coarse pass'] }, coarse: { n: ['coarse sharpen'] }, lumaS: { n: ['luma sharpen'] }, chromaS: { n: ['chroma sharpen'] }, redS: { n: ['red sharpen'] }, greenS: { n: ['green sharpen'] }, blueS: { n: ['blue sharpen'] },
+      hiR: { n: ['highlight range'] }, mhR: { n: ['midtone high range'] }, mlR: { n: ['midtone low range'] }, shR: { n: ['shadow range'] }, rangeOn: { n: ['high/mid/shad sharpen on'] },
+      hiS: { n: ['highlight sharpen'] }, midS: { n: ['midtone sharpen'] }, shS: { n: ['shadow sharpen'] }, mix: { n: ['mix with original'] } } },
+  { vendor: 'BCC', plugin: 'BCC Glow', to: 'bccGlow', match: ['BCC Glow', 'BCC+Glow', 'BCC3Glow'],
+    map: { blend: { n: ['blend'] }, brightness: { n: ['brightness', 'glow intensity'] }, blurX: { n: ['blur x', 'glow radius', 'radius'] }, blurY: { n: ['blur y'] }, gang: { n: ['blur gang'] },
+      color: { n: ['color', 'glow color'] }, position: { n: ['position'] }, range: { n: ['range'] }, under: { n: ['glow under source'] }, mix: { n: ['mix with original'] } } },
+  { vendor: 'BCC', plugin: 'BCC Blur', to: 'bccBlur', match: ['BCC_BLUR', 'BCC Blur', 'BCC3Blur'],
+    map: { h: { n: ['horizontal blur', 'blur amount'] }, v: { n: ['vertical blur'] }, lock: { n: ['lock blur'] }, channels: { n: ['channels'] }, mix: { n: ['mix with original'] } } },
+  { vendor: 'BCC', plugin: 'BCC Temporal Blur', to: 'bccTemporalBlur', match: ['BCC3Temporal Blur', 'BCC Temporal Blur'], test: /bcc.*temporal ?blur/i,
+    map: { amount: { n: ['amount (frames)', 'amount'] }, lockWhole: { n: ['lock to whole frames'] }, separation: { n: ['frame separation'] }, offset: { n: ['frame offset'] },
+      direction: { n: ['blur direction'] }, shape: { n: ['blur shape'] }, spread: { n: ['spread'] }, mix: { n: ['mix with original'] } } },
   // efeitos que apareceram nos projetos do usuário (lumus wm, not sure who i am…)
   { vendor: 'BCC', plugin: 'BCC Hue-Sat-Lightness', to: 'hueSat', test: /bcc.*hue.?sat/i, map: { hue: { n: ['hue', 'master hue'] }, saturation: { n: ['saturation', 'master saturation'] }, lightness: { n: ['lightness', 'master lightness'] } } },
   { vendor: 'Omino', plugin: 'Omino Diffusion', to: 'glow', test: /omino_diffusion/i, map: { radius: { n: ['radius', 'blur radius'] } }, set: { threshold: 40, intensity: 0.6 } },

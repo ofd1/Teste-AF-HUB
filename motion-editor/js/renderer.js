@@ -453,36 +453,59 @@ function drawLayerImage(ctx, img, m, scale, alpha = 1) {
  * o quadro relativo k − ⌊N/2⌋ + Frame Offset. Interp Frames: mistura os dois quadros inteiros mais próximos (senão, o mais próximo).
  */
 function drawSapphireTimeSlice(ctx, layer, t, scale, extra, p, m, fps) {
+  // Sapphire S_TimeSlice: o número do quadro relativo varia de forma CONTÍNUA ao longo da Slice Direction,
+  // de −N/2 (início) a +N/2 (fim), + Frame Offset; o quadro atual fica no meio.
+  //  • Interp Frames desligado: cada ponto usa o quadro inteiro mais próximo → faixas com bordas visíveis.
+  //  • Interp Frames ligado: cada ponto mistura os dois quadros inteiros vizinhos pelo peso exato (sem emendas).
   const { w, h } = contentSize(layer);
-  const N = Math.max(1, Math.round(p.number));
+  const N = Math.max(1, +p.number || 1), off = +p.offset || 0;
   const th = ((p.direction || 0) * Math.PI) / 180, dx = Math.cos(th), dy = Math.sin(th);
   const proj = [[0, 0], [w, 0], [0, h], [w, h]].map(([x, y]) => x * dx + y * dy);
-  const smin = Math.min(...proj), smax = Math.max(...proj), ds = (smax - smin) / N, sc = (w / 2) * dx + (h / 2) * dy, L = Math.hypot(w, h);
-  // quadro (inteiro) → fatias que usam esse quadro, com o peso
-  const uses = new Map();
-  const add = (fr, k, a) => { if (!uses.has(fr)) uses.set(fr, []); uses.get(fr).push([k, a]); };
-  for (let k = 0; k < N; k++) {
-    const rel = k - Math.floor(N / 2) + (p.offset || 0);
-    if (p.interp) { const f0 = Math.floor(rel), fr = rel - f0; add(f0, k, 1); if (fr > 0.001) add(f0 + 1, k, fr); }
-    else add(Math.round(rel), k, 1);
-  }
-  for (const fr of [...uses.keys()].sort((a, b) => a - b)) { // do quadro menor ao maior: a mistura cai por cima do quadro de baixo
+  const smin = Math.min(...proj), smax = Math.max(...proj), span = Math.max(1e-6, smax - smin);
+  const relAt = (s) => -N / 2 + N * s + off;           // s = 0..1 ao longo da direção
+  const sOf = (rel) => (rel - off + N / 2) / N;        // inverso
+  const P = (s) => { const q = smin + s * span; return [dx * q * scale, dy * q * scale]; }; // ponto (px do conteúdo) na posição s
+  const cw = Math.max(1, Math.ceil(w * scale)), ch = Math.max(1, Math.ceil(h * scale));
+  const acc = document.createElement('canvas'); acc.width = cw; acc.height = ch;
+  const ac = acc.getContext('2d');
+  const tmp = document.createElement('canvas'); tmp.width = cw; tmp.height = ch;
+  const tc = tmp.getContext('2d');
+  const f0 = Math.floor(Math.min(relAt(0), relAt(1))) - (p.interp ? 1 : 0), f1 = Math.ceil(Math.max(relAt(0), relAt(1))) + (p.interp ? 1 : 0);
+  for (let fr = f0; fr <= f1; fr++) {
+    const sc = sOf(fr), hw = p.interp ? 1 / N : 0.5 / N; // meia largura da área desse quadro (em s)
+    if (sc + hw < 0 || sc - hw > 1) continue;
     const te = Math.max(layer.inPoint, Math.min(layer.outPoint - 1e-3, t + fr / fps));
     const img = renderLayerImage(layer, te, scale, { ...extra, offTime: Math.abs(te - t) > 1e-6 });
     const kk = img.k || 1;
-    for (const [k, a] of uses.get(fr)) {
-      ctx.save();
-      ctx.globalAlpha = m.opacity * a;
-      ctx.translate(m.x * scale, m.y * scale); ctx.rotate((m.rot * Math.PI) / 180); ctx.scale(m.sx, m.sy);
-      ctx.translate(-(w / 2 + m.anchor[0]) * scale, -(h / 2 + m.anchor[1]) * scale);
-      // faixa da fatia k (no espaço do conteúdo), um pouco sobreposta para não aparecer fresta
-      ctx.save(); ctx.translate((w / 2) * scale, (h / 2) * scale); ctx.rotate(th);
-      ctx.beginPath(); ctx.rect((smin + k * ds - sc) * scale - 0.5, -L * scale, ds * scale + 1, 2 * L * scale); ctx.restore();
-      ctx.clip();
-      ctx.drawImage(img.src, 0, 0, img.sw, img.sh, -img.pad / kk, -img.pad / kk, img.sw / kk, img.sh / kk);
-      ctx.restore();
+    tc.globalCompositeOperation = 'source-over'; tc.clearRect(0, 0, cw, ch);
+    tc.drawImage(img.src, 0, 0, img.sw, img.sh, -img.pad / kk, -img.pad / kk, img.sw / kk, img.sh / kk);
+    // máscara do quadro: faixa dura (sem interp) ou triângulo de peso 0→1→0 (com interp; os pesos somam 1)
+    const [ax, ay] = P(sc - hw), [bx, by] = P(sc + hw);
+    const g = tc.createLinearGradient(ax, ay, bx, by);
+    if (p.interp) { g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.5, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); }
+    else { g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,1)'); }
+    tc.globalCompositeOperation = 'destination-in';
+    tc.fillStyle = g;
+    if (p.interp) tc.fillRect(0, 0, cw, ch);
+    else {
+      // faixa: polígono perpendicular à direção, um pouco sobreposto para não aparecer fresta
+      const ex = -dy * (cw + ch) * 2, ey = dx * (cw + ch) * 2, e = 0.5 / Math.max(1, span * scale);
+      const [px0, py0] = P(sc - hw - e), [px1, py1] = P(sc + hw + e);
+      const ox = sc - hw <= 0 ? -dx * (cw + ch) : 0, oy = sc - hw <= 0 ? -dy * (cw + ch) : 0;
+      const qx = sc + hw >= 1 ? dx * (cw + ch) : 0, qy = sc + hw >= 1 ? dy * (cw + ch) : 0;
+      tc.beginPath();
+      tc.moveTo(px0 + ox - ex, py0 + oy - ey); tc.lineTo(px0 + ox + ex, py0 + oy + ey);
+      tc.lineTo(px1 + qx + ex, py1 + qy + ey); tc.lineTo(px1 + qx - ex, py1 + qy - ey); tc.closePath(); tc.fill();
     }
+    ac.globalCompositeOperation = p.interp ? 'lighter' : 'source-over';
+    ac.drawImage(tmp, 0, 0);
   }
+  ctx.save();
+  ctx.globalAlpha = m.opacity;
+  ctx.translate(m.x * scale, m.y * scale); ctx.rotate((m.rot * Math.PI) / 180); ctx.scale(m.sx, m.sy);
+  ctx.translate(-(w / 2 + m.anchor[0]) * scale, -(h / 2 + m.anchor[1]) * scale);
+  ctx.drawImage(acc, 0, 0, cw, ch, 0, 0, w * scale, h * scale);
+  ctx.restore();
 }
 
 function drawTimeSlices(ctx, layer, t, scale, extra, p, m, fps) {
@@ -578,6 +601,38 @@ function drawWideTime(ctx, layer, t, scale, extra, img, m, p, fps) {
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.drawImage(wtA, 0, 0); ctx.restore();
 }
 
+/** BCC Temporal Blur: média ponderada de quadros vizinhos (Amount em quadros, separação, offset, direção, Gaussian/Flat). */
+let tblurCanvas = null;
+function drawTemporalBlur(ctx, layer, t, scale, extra, p, fps, baseTf) {
+  const amt = p.lockWhole ? Math.round(p.amount) : p.amount;
+  const sep = Math.max(1, Math.round(p.separation || 1));
+  const half = p.direction === 1 ? amt / 2 : amt;           // Bidirectional: metade para cada lado
+  const lo = p.direction === 2 ? 0 : -half, hi = p.direction === 3 ? 0 : half;
+  const offs = [];
+  for (let k = Math.ceil(lo / sep) * sep; k <= hi + 1e-6; k += sep) offs.push(k);
+  if (!offs.includes(0)) offs.push(0);
+  // quadro fracionário na ponta (Amount não inteiro): entra com peso parcial
+  const frac = (x) => (Math.abs(x) <= half ? 1 : Math.max(0, 1 - (Math.abs(x) - half)));
+  const sig = Math.max(0.5, half / 2) * (1 + (p.spread || 0) / 50);
+  const ws = offs.map((k) => frac(k) * (p.shape === 2 ? 1 : Math.exp(-(k * k) / (2 * sig * sig))));
+  const W = ws.reduce((a, b) => a + b, 0) || 1;
+  if (!tblurCanvas) tblurCanvas = makeCanvas(ctx.canvas.width, ctx.canvas.height);
+  if (tblurCanvas.width !== ctx.canvas.width || tblurCanvas.height !== ctx.canvas.height) { tblurCanvas.width = ctx.canvas.width; tblurCanvas.height = ctx.canvas.height; }
+  const ac = tblurCanvas.getContext('2d');
+  ac.setTransform(1, 0, 0, 1, 0, 0); ac.globalCompositeOperation = 'source-over'; ac.globalAlpha = 1; ac.clearRect(0, 0, tblurCanvas.width, tblurCanvas.height);
+  ac.setTransform(baseTf);
+  if (layer.parent) applyParents(ac, layer, t, scale);
+  ac.globalCompositeOperation = 'lighter';
+  const mix = (p.mix || 0) / 100;
+  offs.forEach((k, i) => {
+    const te = Math.max(layer.inPoint, Math.min(layer.outPoint - 1e-3, t + (k + (p.offset || 0)) / fps));
+    const img = renderLayerImage(layer, te, scale, { ...extra, offTime: Math.abs(te - t) > 1e-6 });
+    const w = (ws[i] / W) * (1 - mix) + (k === 0 ? mix : 0); // Mix with Original: volta ao quadro atual
+    if (w > 1e-4) drawLayerImage(ac, img, layerTransform(layer, t), scale, w);
+  });
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.drawImage(tblurCanvas, 0, 0); ctx.restore();
+}
+
 function findFx(layer, type) {
   return layer.effects.find((fx) => fx.enabled && fx.type === type) || null;
 }
@@ -605,7 +660,11 @@ export function renderLayer(ctx, layer, t, scale, extra, fps = 30) {
 
   const ts = findFx(layer, 'timeSlice');
   const sts = findFx(layer, 'sTimeSlice');
-  if (sts && m.opacity > 0.001) {
+  const tbl = findFx(layer, 'bccTemporalBlur');
+  const tbp = tbl ? evalParams(tbl, layerTime(layer, t)) : null;
+  if (tbp && tbp.amount > 0.01 && m.opacity > 0.001) {
+    drawTemporalBlur(ctx, layer, t, scale, extra, tbp, fps, baseTf);
+  } else if (sts && m.opacity > 0.001) {
     drawSapphireTimeSlice(ctx, layer, t, scale, extra, evalParams(sts, layerTime(layer, t)), m, fps);
   } else if (ts && m.opacity > 0.001) {
     drawTimeSlices(ctx, layer, t, scale, extra, evalParams(ts, layerTime(layer, t)), m, fps);

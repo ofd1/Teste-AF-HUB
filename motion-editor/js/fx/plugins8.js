@@ -164,7 +164,7 @@ export default [
   },
   {
     type: 'sTimeSlice', label: 'S_TimeSlice', category: 'Tempo', plugin: 'Sapphire S_TimeSlice',
-    description: 'Como o S_TimeSlice do Sapphire: a camada vira fatias na direção escolhida e cada fatia mostra um quadro diferente (de −metade a +metade do número de fatias, mais o Frame Offset). Interp Frames suaviza misturando os quadros vizinhos.',
+    description: 'Como o S_TimeSlice do Sapphire: o quadro mostrado muda ao longo da Slice Direction, de −Slice Number/2 a +Slice Number/2 (+ Frame Offset), com o quadro atual no meio. Sem Interp Frames cada ponto usa o quadro inteiro mais próximo (faixas com borda); com Interp Frames mistura os dois quadros vizinhos pelo peso exato (passagem contínua, sem emendas).',
     params: [ang('direction', 'Slice Direction', 90), num('number', 'Slice Number', 12, 1, 500, 1), num('offset', 'Frame Offset', 0, -100, 100, 0.01), bool('interp', 'Interp Frames', false)],
     temporal: 'sTimeSlice',
   },

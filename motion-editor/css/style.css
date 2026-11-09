@@ -413,6 +413,24 @@ input[type="number"], input[type="text"], input[type="search"], select, textarea
 .graph-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 6px 0; }
 .graph-presets button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px; font-size: 10.5px; white-space: normal; line-height: 1.1; }
 .graph-presets svg { width: 34px; height: 24px; color: #2d8ceb; overflow: visible; }
+.graph-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+.graph-tabs button { flex: 1; padding: 6px 4px; font-size: 12.5px; }
+.graph-tabs button.on { background: #2d8ceb; color: #fff; border-color: #2d8ceb; }
+.graph.ae .graph-svg { max-height: 34dvh; }
+.g-lbl { fill: #8a8a8a; font: 9px ui-monospace, Menlo, monospace; }
+.g-zero { stroke: #555; stroke-width: 1; stroke-dasharray: 2 3; }
+.g-curve.g-d0 { stroke: #e5484d; } .g-curve.g-d1 { stroke: #46a758; } .g-curve.g-d2 { stroke: #3e8ef7; }
+.graph.ae .g-curve { stroke-width: 2; }
+.g-key { fill: #d8d8d8; stroke: #111; stroke-width: 1; cursor: pointer; }
+.g-key.on { fill: #ffd166; }
+.g-arm2 { stroke: #ffd166; stroke-width: 1.5; }
+.g-handle2 { fill: #ffd166; stroke: #111; stroke-width: 1.5; cursor: grab; }
+.g-vel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; font-size: 12px; }
+.g-vel > div { display: flex; flex-direction: column; gap: 3px; }
+.g-vel label { display: flex; justify-content: space-between; align-items: center; gap: 4px; color: #b8b8b8; }
+.g-vel input { width: 72px; }
+.g-acts button { font-size: 12px; padding: 5px 7px; }
+.g-acts button.on { border-color: #ffd166; color: #ffd166; }
 .graph-empty { padding: 10px; border: 1px dashed var(--line); border-radius: 6px; font-size: 13px; color: #b8b8b8; margin-bottom: 10px; }
 .app.docked ~ .toasts { top: calc(60px + var(--safe-t)); bottom: auto; }
 

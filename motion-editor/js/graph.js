@@ -1,6 +1,7 @@
 // Editor de gráfico de keyframes (como o "Gráfico" do Alight Motion): curva de velocidade com 2 alças,
 // predefinições, copiar e colar o gráfico entre keyframes. A curva vale do keyframe selecionado até o próximo.
-import { curveOf, evalCurve, valueAt } from './anim.js';
+import { curveOf, evalCurve, valueAt, rawValueAt } from './anim.js';
+import { aeGraphHtml, bindAeGraph, graphMode, setGraphMode } from './graph-ae.js';
 import { resolveProp } from './state.js';
 
 export const CURVE_PRESETS = [
@@ -45,7 +46,7 @@ function editable(store) {
   return out;
 }
 
-export function graphHtml(store) {
+function curveHtml(store) {
   const list = editable(store);
   if (!list.length) {
     return `<div class="graph-empty">📈 <b>Gráfico</b>: toque num keyframe ◆ na timeline (que tenha outro depois dele) para editar a curva de velocidade entre os dois.</div>`;
@@ -77,7 +78,7 @@ export function graphHtml(store) {
 }
 
 /** Liga os controles do gráfico. onChange(final) é chamado ao mexer (final=true ao soltar). */
-export function bindGraph(root, store, { toast } = {}) {
+function bindCurve(root, store, { toast } = {}) {
   const svg = root.querySelector('[data-graph]');
   const list = editable(store);
   if (!svg || !list.length) return;
@@ -143,3 +144,15 @@ export function bindGraph(root, store, { toast } = {}) {
 
 /** Valor atual de exemplo (para mostrar de-para no cabeçalho, se necessário). */
 export function sampleValue(prop, t) { return valueAt(prop, t); }
+
+/** Painel do gráfico: abas Velocidade / Valor (Graph Editor do After Effects) e Curva (estilo Alight Motion). */
+export function graphHtml(store) {
+  const m = graphMode();
+  const tabs = `<div class="graph-tabs">${[['speed', 'Velocidade'], ['value', 'Valor'], ['curve', 'Curva']].map(([k, l]) => `<button data-gmode="${k}" class="${m === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  return `<div class="graph-wrap">${tabs}${m === 'curve' ? curveHtml(store) : aeGraphHtml(store, m)}</div>`;
+}
+
+export function bindGraph(root, store, opts = {}) {
+  root.querySelectorAll('[data-gmode]').forEach((b) => b.addEventListener('click', () => { setGraphMode(b.dataset.gmode); store.emit('keys'); }));
+  return graphMode() === 'curve' ? bindCurve(root, store, opts) : bindAeGraph(root, store, graphMode(), opts);
+}
