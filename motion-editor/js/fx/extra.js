@@ -205,7 +205,7 @@ void main() {
     float k = u_mojo * (warmSide > 0.5 ? 0.45 * u_skin : 0.6 * u_cool) * smoothstep(0.04, 0.2, mh.y);
     mh.x = fract((hd + dh * clamp(k, 0.0, 0.9)) / 360.0);
     // pele mais rica; o fundo frio vira teal mantendo a cor (antes perdia até 36% e ficava cinza)
-    mh.y = clamp(mh.y * (warmSide > 0.5 ? 1.0 + 0.12 * u_mojo * min(u_skin, 1.6) : 1.0 + 0.05 * u_mojo), 0.0, 1.0);
+    mh.y = clamp(mh.y * (warmSide > 0.5 ? 1.0 + 0.12 * u_mojo * min(u_skin, 1.6) : 1.0 + 0.2 * u_mojo), 0.0, 1.0);
     r = hsv2rgb(mh);
   }
   vec3 cool = r + vec3(-0.055, 0.008, 0.06) * (1.0 - hiW) * (1.0 - skin * 0.8);
@@ -224,7 +224,7 @@ void main() {
   // no Mojo II a pele fica protegida do Bleach: o fundo perde a cor, o rosto continua com tom de pele
   float skinB = smoothstep(26.0, 8.0, abs(mod(rgb2hsv(clamp(r, 0.0, 1.0)).x * 360.0 - 28.0 + 180.0, 360.0) - 180.0)) * smoothstep(0.08, 0.3, rgb2hsv(clamp(r, 0.0, 1.0)).y);
   // (o Bleach do Mojo II também tira cor da pele — no print do AE do Galego CC o rosto fica neutro)
-  r = mix(vec3(bl), r, 1.0 - 0.6 * u_bleach * (u_bleach > 0.0 ? 1.0 - 0.15 * max(skin, skinB) : 1.0));
+  r = mix(vec3(bl), r, 1.0 - 0.3 * u_bleach * (u_bleach > 0.0 ? 1.0 - 0.15 * max(skin, skinB) : 1.0));
   // bleach bypass de verdade: a prata que fica no filme = cópia P&B em "overlay" → mais escuro e mais contraste
   if (u_bleach > 0.0) {
     vec3 L = vec3(luma(clamp(r, 0.0, 1.0)));
