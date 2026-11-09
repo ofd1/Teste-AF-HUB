@@ -448,6 +448,43 @@ function drawLayerImage(ctx, img, m, scale, alpha = 1) {
 }
 
 /** Time Slice: cada faixa da camada mostra um tempo diferente. Agrupa as faixas por atraso (poucos renders). */
+/**
+ * S_TimeSlice (Sapphire): fatias perpendiculares à direção (0° = esquerda→direita, 90° = cima→baixo); a fatia k mostra
+ * o quadro relativo k − ⌊N/2⌋ + Frame Offset. Interp Frames: mistura os dois quadros inteiros mais próximos (senão, o mais próximo).
+ */
+function drawSapphireTimeSlice(ctx, layer, t, scale, extra, p, m, fps) {
+  const { w, h } = contentSize(layer);
+  const N = Math.max(1, Math.round(p.number));
+  const th = ((p.direction || 0) * Math.PI) / 180, dx = Math.cos(th), dy = Math.sin(th);
+  const proj = [[0, 0], [w, 0], [0, h], [w, h]].map(([x, y]) => x * dx + y * dy);
+  const smin = Math.min(...proj), smax = Math.max(...proj), ds = (smax - smin) / N, sc = (w / 2) * dx + (h / 2) * dy, L = Math.hypot(w, h);
+  // quadro (inteiro) → fatias que usam esse quadro, com o peso
+  const uses = new Map();
+  const add = (fr, k, a) => { if (!uses.has(fr)) uses.set(fr, []); uses.get(fr).push([k, a]); };
+  for (let k = 0; k < N; k++) {
+    const rel = k - Math.floor(N / 2) + (p.offset || 0);
+    if (p.interp) { const f0 = Math.floor(rel), fr = rel - f0; add(f0, k, 1); if (fr > 0.001) add(f0 + 1, k, fr); }
+    else add(Math.round(rel), k, 1);
+  }
+  for (const fr of [...uses.keys()].sort((a, b) => a - b)) { // do quadro menor ao maior: a mistura cai por cima do quadro de baixo
+    const te = Math.max(layer.inPoint, Math.min(layer.outPoint - 1e-3, t + fr / fps));
+    const img = renderLayerImage(layer, te, scale, { ...extra, offTime: Math.abs(te - t) > 1e-6 });
+    const kk = img.k || 1;
+    for (const [k, a] of uses.get(fr)) {
+      ctx.save();
+      ctx.globalAlpha = m.opacity * a;
+      ctx.translate(m.x * scale, m.y * scale); ctx.rotate((m.rot * Math.PI) / 180); ctx.scale(m.sx, m.sy);
+      ctx.translate(-(w / 2 + m.anchor[0]) * scale, -(h / 2 + m.anchor[1]) * scale);
+      // faixa da fatia k (no espaço do conteúdo), um pouco sobreposta para não aparecer fresta
+      ctx.save(); ctx.translate((w / 2) * scale, (h / 2) * scale); ctx.rotate(th);
+      ctx.beginPath(); ctx.rect((smin + k * ds - sc) * scale - 0.5, -L * scale, ds * scale + 1, 2 * L * scale); ctx.restore();
+      ctx.clip();
+      ctx.drawImage(img.src, 0, 0, img.sw, img.sh, -img.pad / kk, -img.pad / kk, img.sw / kk, img.sh / kk);
+      ctx.restore();
+    }
+  }
+}
+
 function drawTimeSlices(ctx, layer, t, scale, extra, p, m, fps) {
   const { w, h } = contentSize(layer);
   const n = Math.max(1, Math.round(p.slices));
@@ -567,7 +604,10 @@ export function renderLayer(ctx, layer, t, scale, extra, fps = 30) {
   if (echo && evalParams(echo, t).behind) drawEchoes();
 
   const ts = findFx(layer, 'timeSlice');
-  if (ts && m.opacity > 0.001) {
+  const sts = findFx(layer, 'sTimeSlice');
+  if (sts && m.opacity > 0.001) {
+    drawSapphireTimeSlice(ctx, layer, t, scale, extra, evalParams(sts, layerTime(layer, t)), m, fps);
+  } else if (ts && m.opacity > 0.001) {
     drawTimeSlices(ctx, layer, t, scale, extra, evalParams(ts, layerTime(layer, t)), m, fps);
   } else if (m.opacity > 0.001 || mb) {
     const img = renderLayerImage(layer, t, scale, extra);

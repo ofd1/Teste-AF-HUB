@@ -520,12 +520,12 @@ export const IMPORT_RULES = [
   // recriações novas (antes das regras genéricas de s_film / s_glow / bcc.*film / bcc.*glow)
   { vendor: 'Sapphire / BCC', plugin: 'S_FilmDamage / BCC Film Damage', to: 'filmDamage', test: /s_filmdamage|bcc.*(film ?damage|old ?film)/i,
     // S_FilmDamage: a parte de cor (grão, vinheta, pretos, flicker) continua no Film Look calibrado;
-    // riscos, poeira, cabelos e tremor viram o Film Damage
+    // um efeito do AE = um efeito no app: com riscos/poeira/tremor vira o Film Damage (grão e flicker juntos); sem, o Film Look
     expand: (fx, raw) => {
-      const out = [{ type: 'filmLook', label: fx.name, params: { grain: Math.min(100, (raw('grain amp') || 0) * 30), scratch: 0, vignette: Math.min(100, (raw('vignette darkness') || 0) * 100), flicker: Math.min(100, ((raw('flicker amp') ?? raw('flicker')) || 0) * 100), warmth: 0, fade: Math.min(60, Math.max(0, -(raw('offset darks') || 0)) * 20) } }];
       const scr = (raw('scratches') ?? raw('scratch amount') ?? 0), dust = (raw('dust density') ?? raw('dust') ?? 0) + (raw('hairs') || 0) * 0.5, shk = raw('shake amplitude') || 0;
-      if (scr > 0 || dust > 0 || shk > 0) out.push({ type: 'filmDamage', label: `${fx.name} (danos)`, params: { scratches: Math.min(100, scr * 50), dust: Math.min(100, dust * 25), flicker: 0, jitter: Math.min(40, shk * 10), grain: 0, sepia: 0, fps: 24, seed: (raw('seed') || 1) % 100 } });
-      return out;
+      const grain = Math.min(100, (raw('grain amp') || 0) * 30), flick = Math.min(100, ((raw('flicker amp') ?? raw('flicker') ?? 0)) * 100);
+      if (scr > 0 || dust > 0 || shk > 0) return [{ type: 'filmDamage', label: fx.name, params: { scratches: Math.min(100, scr * 50), dust: Math.min(100, dust * 25), flicker: flick, jitter: Math.min(40, shk * 10), grain } }];
+      return [{ type: 'filmLook', label: fx.name, params: { grain, scratch: 0, vignette: Math.min(100, (raw('vignette darkness') || 0) * 100), flicker: flick } }];
     } },
   { vendor: 'Sapphire / BCC', plugin: 'S_Bokeh / BCC Bokeh', to: 'bokeh', test: /s_bokeh|bcc.*bokeh/i, map: { radius: { n: ['bokeh size', 'size', 'radius'] }, threshold: { n: ['threshold'], conv: (v) => (v <= 1 ? v * 100 : v) } } },
   { vendor: 'Sapphire / BCC', plugin: 'S_Zap / BCC Lightning', to: 'zap', test: /s_zap|bcc.*lightning/i, map: { width: { n: ['width', 'core width'] }, glow: { n: ['glow brightness', 'glow'] }, color: { n: ['color', 'glow color'] } } },
@@ -661,7 +661,9 @@ export const IMPORT_RULES = [
   { vendor: 'Sapphire', plugin: 'S_ZoomBlur', to: 'radialBlur', test: /s_zoomblur|s_blurzoom|s_radialblur/i, set: { mode: 1 },
     map: { amount: { n: ['zoom amount', 'blur amount', 'amount', 'length'], conv: (v) => (v <= 2 ? v * 100 : v) }, center: { n: ['center', 'center xy'] } } },
   { vendor: 'Sapphire', plugin: 'S_Blur', to: 'blur', test: /s_blur/i, map: { radius: { n: ['width', 'blur amount'], conv: (v) => (v < 5 ? v * 100 : v) } } },
-  { vendor: 'Sapphire', plugin: 'S_WarpChroma', to: 'rgbSplit', test: /s_warpchroma|s_chroma/i, set: { mode: 2 }, map: { amount: { n: ['amount', 'shift', 'warp amount'], conv: (v) => (v < 5 ? v * 60 : v) } } },
+  // S_WarpChroma: efeito próprio com os mesmos controles (nomes iguais aos do plugin); Center XY fica no centro (unidade do Sapphire)
+  { vendor: 'Sapphire', plugin: 'S_WarpChroma', to: 'sWarpChroma', match: ['S_WarpChroma'], test: /s_warpchroma/i, map: { center: { n: ['__nao_importa'] } } },
+  { vendor: 'Sapphire', plugin: 'S_Chroma*', to: 'rgbSplit', test: /s_chroma/i, set: { mode: 2 }, map: { amount: { n: ['amount', 'shift'], conv: (v) => (v < 5 ? v * 60 : v) } } },
   { vendor: 'Sapphire', plugin: 'S_LensFlare', to: 'lensFlare', test: /s_lensflare|s_flare/i,
     map: { position: { n: ['flare pos', 'flare position', 'position', 'center'] }, brightness: { n: ['brightness'], conv: (v) => (v <= 5 ? v * 100 : v) }, size: { n: ['scale', 'flare scale', 'size'], conv: (v) => (v <= 5 ? v * 220 : v) }, color: { n: ['color', 'flare color'] } } },
   { vendor: 'Sapphire', plugin: 'S_Rays', to: 'lightRays', test: /s_rays/i,
@@ -768,7 +770,9 @@ export const IMPORT_RULES = [
     // Força 2 só conta se tiver intensidade; no AE a simulação começa no início da camada
     post: (p, raw) => { p.force2On = Math.abs(p.strength2 ?? 0) > 0.01; p.zPush = 0.25; if (p.fill === undefined) p.fill = false; },
   },
-  { vendor: 'Sapphire / BCC', plugin: 'Time Slice', to: 'timeSlice', test: /time ?slice|s_timeslice|slit ?scan/i },
+  // S_TimeSlice: efeito próprio com os controles do Sapphire (Slice Direction, Slice Number, Frame Offset, Interp Frames)
+  { vendor: 'Sapphire', plugin: 'S_TimeSlice', to: 'sTimeSlice', match: ['S_TimeSlice'], test: /s_timeslice/i },
+  { vendor: 'Sapphire / BCC', plugin: 'Time Slice', to: 'timeSlice', test: /time ?slice|slit ?scan/i },
   { vendor: ADOBE, plugin: 'Warp', to: 'warp', match: ['ADBE WRPMESH'], map: { style: { i: 1 }, axis: { i: 2 }, bend: { i: 3 }, hDist: { i: 4 }, vDist: { i: 5 } } },
   { vendor: ADOBE, plugin: 'Photo Filter', to: 'photoFilter', match: ['ADBE Photo Filter'], map: { color: { n: ['color'] }, density: { n: ['density'] }, preserve: { n: ['preserve luminosity'] } } },
   { vendor: ADOBE, plugin: 'Gaussian / Fast / Box Blur', to: 'blur', match: ['ADBE Gaussian Blur 2', 'ADBE Gaussian Blur', 'ADBE Fast Blur', 'ADBE Box Blur2', 'ADBE Box Blur', 'ADBE Camera Lens Blur', 'ADBE Compound Blur'],

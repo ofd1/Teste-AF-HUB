@@ -353,7 +353,7 @@ export function cacheStatus() {
 export function ensureCaches(project) {
   const ids = new Set();
   for (const l of flatLayers(project.layers)) {
-    if (l.type !== 'video' || !l.props.src || !(speedEffect(l) || remapEffect(l) || l.props.interpolate || dedupeOf(l) || l.effects.some((fx) => fx.enabled && (fx.type === 'timeSlice' || fx.type === 'echo')))) continue;
+    if (l.type !== 'video' || !l.props.src || !(speedEffect(l) || remapEffect(l) || l.props.interpolate || dedupeOf(l) || l.effects.some((fx) => fx.enabled && (fx.type === 'timeSlice' || fx.type === 'sTimeSlice' || fx.type === 'echo')))) continue;
     ids.add(l.id);
     const c = caches.get(l.id);
     if (c && c.key === cacheKey(l)) continue;

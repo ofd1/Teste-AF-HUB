@@ -24,10 +24,10 @@ const EXPECTED = {
   'Velocity & Reverse/Sonhei Reverse.ffx': ['twixtor', 'blurMoCurves'],
   'CC (Color Correction)/Sonhei CC.ffx': ['looks', 'lkExposure', 'lkGradient', 'lkLensVignette', 'lkExposure', 'lkLensVignette', 'lkEdgeSoftness', 'looks', 'lkEdgeSoftness', 'lkLensVignette', 'looks', 'sSharpen', 'fourColor', 'levels', 'filmLook', 'sSharpen', 'looks', 'exposure'], // S_Sharpen → nitidez em faixas
   'CC (Color Correction)/Sonhei New CC.ffx': ['looks', 'lkEdgeSoftness', 'lkHaze', 'looks', 'lkChannelMixer', 'sSharpen'],
-  'CC (Color Correction)/Galego CC.ffx': ['lkDiffusion', 'lkChroma', 'lkSaturation', 'lkSpotExposure', 'lkMojo', 'sSharpen', 'flicker', 'levels', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
+  'CC (Color Correction)/Galego CC.ffx': ['lkDiffusion', 'lkChroma', 'lkSaturation', 'lkSpotExposure', 'lkMojo', 'sSharpen', 'flicker', 'levels', 'filmDamage', 'hueSat', 'brightnessContrast'], // S_FilmDamage com riscos = 1 efeito (Film Damage)
   'CC (Color Correction)/FTB Main CC.ffx': ['looks', 'lkGradient', 'lkLensVignette', 'lkEdgeSoftness', 'curves', 'sSharpen', 'sharpen', 'hueSat', 'sharpen', 'lkDiffusion', 'lkEdgeSoftness', 'looks', 'lkMojo', 'lkChannelMixer', 'looks', 'looks', 'lkChroma', 'looks', 'lkHaze', 'looks'], // Optical Diffusion → glow
   'CC (Color Correction)/FTB AEP CC.ffx': ['lkDiffusion', 'lkMojo', 'looks', 'lkExposure', 'lkGradient', 'lkLensVignette', 'lkExposure', 'lkLensVignette', 'looks', 'lkEdgeSoftness', 'fourColor', 'lkExposure', 'curves', 'lkDiffusion', 'lkChroma', 'lkHaze', 'looks', 'hueSat', 'looks', 'lkExposure', 'lkGradient', 'lkExposure', 'lkLensVignette', 'looks', 'lkHaze', 'lkEdgeSoftness', 'lkExposure', 'curves', 'brightnessContrast'],
-  'CC (Color Correction)/ZAZ Reverse Dark CC.ffx': ['lkDiffusion', 'lkChroma', 'lkSaturation', 'lkSpotExposure', 'lkMojo', 'sSharpen', 'filmLook', 'filmDamage', 'hueSat', 'brightnessContrast'],
+  'CC (Color Correction)/ZAZ Reverse Dark CC.ffx': ['lkDiffusion', 'lkChroma', 'lkSaturation', 'lkSpotExposure', 'lkMojo', 'sSharpen', 'filmDamage', 'hueSat', 'brightnessContrast'],
   'Warp/ZAZ Warp.ffx': ['motionTile', 'warp'],
 };
 

@@ -146,7 +146,8 @@ test('presets nativos usam só efeitos/parâmetros existentes (inclui Shatter e 
     for (const k of Object.keys(fx.params || {})) assert.ok(def.params.some((x) => x.key === k), `${p.name}: ${fx.type}.${k}`);
   }
   assert.equal(matchEffect('ADBE Shatter').def.type, 'shatter');
-  assert.equal(matchEffect('S_TimeSlice').def.type, 'timeSlice');
+  assert.equal(matchEffect('S_TimeSlice').def.type, 'sTimeSlice'); // controles iguais aos do Sapphire
+  assert.equal(matchEffect('BCC Time Slice').def.type, 'timeSlice');
 });
 
 test('Shatter do AE (APC Shatter) é convertido com raio animado e duas forças', async () => {
