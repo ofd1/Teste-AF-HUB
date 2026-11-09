@@ -162,8 +162,8 @@ void main() {
   r += vec3(u_temp, u_temp * 0.15, -u_temp) * 0.09 + vec3(u_tint * 0.05, -u_tint * 0.07, u_tint * 0.05);
   // Channel Mixer do Looks
   if (u_mixamt > 0.0) r = mix(r, max(vec3(dot(r, u_mixr), dot(r, u_mixg), dot(r, u_mixb)), 0.0), u_mixamt);
-  // Colorista 3 vias
-  r = u_gain * (r + u_lift * (1.0 - r));
+  // Colorista 3 vias (o Looks trabalha em luz linear: o Gain multiplica a luz, então no valor da tela vale gain^(1/2,2))
+  r = pow(max(u_gain, vec3(0.0)), vec3(1.0 / 2.2)) * (r + u_lift * (1.0 - r));
   r = pow(max(r, 0.0), 1.0 / max(u_gamma, vec3(0.01)));
   // HSL por cor (vermelho, laranja, amarelo, verde, ciano, azul, roxo, magenta)
   vec3 hv = rgb2hsv(clamp(r, 0.0, 1.0));

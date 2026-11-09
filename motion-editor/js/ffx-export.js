@@ -183,6 +183,17 @@ export async function effectsToFFX(effects, { fps = 30, name = 'MotionFrame' } =
         const k = parT.kids[i];
         if (k.id === 'tdmn') { const m = cstr(k.data).match(/-(\d{4})$/); const pd = parT.kids[i + 1]; if (m && pd?.id === 'pard') names[+m[1]] = cstr(pd.data.slice(16, 48)).toLowerCase().trim(); }
       }
+      // moldes sem lista de parâmetros (parT vazio, ex.: S_FilmDamage): os nomes vêm do tdsn de cada valor (Utf8 + tamanho + texto)
+      if (!Object.keys(names).length) {
+        for (let i = 0; i < tdgp.kids.length - 1; i++) {
+          const k = tdgp.kids[i], nx = tdgp.kids[i + 1];
+          if (k.id !== 'tdmn' || nx?.type !== 'tdbs') continue;
+          const m = cstr(k.data).match(/-(\d{4})$/); const sn = nx.kids?.find((x) => x.id === 'tdsn');
+          if (!m || !sn || sn.data.length < 8) continue;
+          const len = new DataView(sn.data.buffer, sn.data.byteOffset + 4).getUint32(0);
+          names[+m[1]] = new TextDecoder().decode(sn.data.slice(8, 8 + len)).replace(/\0/g, '').toLowerCase().trim();
+        }
+      }
       const tdbsAt = (n) => { for (let i = 0; i < tdgp.kids.length - 1; i++) if (tdgp.kids[i].id === 'tdmn' && cstr(tdgp.kids[i].data) === `${mn}-${pad4(n)}` && tdgp.kids[i + 1].type === 'tdbs') return tdgp.kids[i + 1]; return null; };
       const used = new Set(), writes = [];
       for (const pd of def.params) {

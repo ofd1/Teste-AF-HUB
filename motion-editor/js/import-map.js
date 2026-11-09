@@ -41,6 +41,23 @@ export function looksCurveLUT(v, str = 1) {
   return [...id, ...ch, ...ch, ...ch];
 }
 
+/** Curva do S Curve do Looks em 17 pontos (master; R, G, B neutros), misturada pela força da ferramenta. */
+export function sCurveLut(v, str = 1) {
+  const c = Math.max(0, v[0] ?? 0), m = clampN(v[1] ?? 0.5, 0.02, 0.98), b = clampN(v[2] ?? 0.5, 0.02, 0.98);
+  const bp = v[3] || 0, wp = v[4] ?? 1;
+  const g = Math.log(m) / Math.log(b); // gama que leva o Brightness (entrada) ao Midpoint (saída)
+  const k = Math.log1p(c) * 0.6;       // Contrast → expoente do S (0 = reto; calibrado no print do AE, Wdzik CC)
+  const f = (x0) => {
+    let x = clampN((x0 - bp) / Math.max(1e-3, wp - bp), 0, 1);
+    x = x ** g;
+    const y = x < m ? m * (x / m) ** (1 + k) : 1 - (1 - m) * ((1 - x) / (1 - m)) ** (1 + k);
+    return x0 + (y - x0) * str;
+  };
+  const master = Array.from({ length: 17 }, (_, i) => +f(i / 16).toFixed(4));
+  const id = Array.from({ length: 17 }, (_, i) => +(i / 16).toFixed(4));
+  return [...master, ...id, ...id, ...id];
+}
+
 export function looksFromTools(tools, strength = 100) {
   const p = {
     strength, exposure: 0, temperature: 0, tint: 0, filter: [1, 1, 1, 1], filterDensity: 0,
@@ -74,7 +91,7 @@ export function looksFromTools(tools, strength = 100) {
         break;
       }
       // Vignette (Looks): [Center X, Center Y, Size, Softness, Falloff, Amount, Exposure Comp., R, G, B, Aspect]
-      case 'vign': p.vignette = Math.max(p.vignette, clampN(v[5] ?? 0, 0, 100) * 0.8); p.vignetteSize = clampN(60 - ((v[2] ?? 1) - 1) * 50, 15, 85); p.exposure += v[6] || 0; break;
+      case 'vign': /* calibrado com o print do AE (Rafa CC): Amount × 1, tamanho 45 */ p.vignette = Math.max(p.vignette, clampN(v[5] ?? 0, 0, 100)); p.vignetteSize = clampN(45 - ((v[2] ?? 1) - 1) * 50, 5, 85); p.exposure += v[6] || 0; break;
       // Gradient (Looks): [X1, Y1, X2, Y2, Falloff, Tint %, Exposure Comp., R, G, B] — tinge em degradê
       case 'grad': {
         const a = clampN((v[5] ?? 0) / 100, 0, 1);
@@ -337,11 +354,9 @@ export function looksFromTools(tools, strength = 100) {
       // a média de verde+azul → pele rosada/natural, azuis e verdes viram ciano (não é um Mojo laranja)
       case '2stp': p.twoStrip = clampN((p.twoStrip || 0) + (v[0] || 0), 0, 100); p.exposure += v[1] || 0; break;
       // S Curve: [Contrast (1 = neutro), Midpoint, Brightness (0,5 = neutro), Black Point, White Point, Log]
-      case 'logc':
-        p.contrast += clampN(((v[0] ?? 1) - 1) * 25, -60, 80);
-        p.exposure += Math.log2(Math.max(0.05, (v[2] ?? 0.5) / 0.5)) * 0.5;
-        p.fade += (v[3] || 0) * 60;
-        break;
+      // S Curve: [Contrast (0 = neutro — preset "Zeroed Out" do Looks), Midpoint, Brightness, Black Point, White Point, Log]
+      // A curva leva o Brightness (entrada) até o Midpoint (saída) — 0,5 → 0,5 = sem mudança — e o Contrast dá o S em volta desse ponto.
+      case 'logc': extra.push({ type: 'curves', label: 'Looks · S Curve', params: { lut: sCurveLut(v, (p.strength ?? 100) / 100) } }); break;
       case 'spex':
         // Spot Exposure (Looks3.aex): [Stops, Center X, Center Y, Radius, Spread, Falloff, Strength, R, G, B, Aspect, Invert]
         p.spotExposure += (v[0] || 0) * ((v[6] ?? 100) / 100);
@@ -542,9 +557,14 @@ export const IMPORT_RULES = [
     post: (p) => { p.slideDir = p.slideAngle !== undefined ? 4 : 1; } },
   // S_Shake: deslocamento = Amplitude (mestre) × X/Y Rand Amp (px); motion blur, wrap e rajadas (Stillness) do próprio plugin
   // recriações novas (antes das regras genéricas de s_film / s_glow / bcc.*film / bcc.*glow)
-  { vendor: 'Sapphire / BCC', plugin: 'S_FilmDamage / BCC Film Damage', to: 'filmDamage', test: /s_filmdamage|bcc.*(film ?damage|old ?film)/i,
-    // S_FilmDamage: a parte de cor (grão, vinheta, pretos, flicker) continua no Film Look calibrado;
-    // um efeito do AE = um efeito no app: com riscos/poeira/tremor vira o Film Damage (grão e flicker juntos); sem, o Film Look
+  { vendor: 'Sapphire', plugin: 'S_FilmDamage', to: 'sFilmDamage', match: ['S_FilmDamage'],
+    map: { grain: { n: ['grain amp'] }, grainR: { n: ['grain amp red'] }, grainG: { n: ['grain amp green'] }, grainB: { n: ['grain amp blue'] },
+      sat: { n: ['saturation'] }, scale: { n: ['scale lights'] }, offset: { n: ['offset darks'] }, tintL: { n: ['tint lights'] }, tintD: { n: ['tint darks'] },
+      dust: { n: ['dust density'] }, dustOp: { n: ['dust opacity'] }, dust1: { n: ['dust color1'] }, dust2: { n: ['dust color2'] },
+      scratches: { n: ['scratches'] }, scrOp: { n: ['scratch opacity'] },
+      vig: { n: ['vignette darkness'] }, vigR: { n: ['vignette radius'] }, vigSoft: { n: ['vignette edge softness'] }, vigRH: { n: ['vignette rel height'] },
+      flicker: { n: ['flicker'] }, flickFreq: { n: ['flicker rand freq'] }, seed: { n: ['seed'] } } },
+  { vendor: 'BCC', plugin: 'BCC Film Damage', to: 'filmDamage', test: /bcc.*(film ?damage|old ?film)/i,
     expand: (fx, raw) => {
       const scr = (raw('scratches') ?? raw('scratch amount') ?? 0), dust = (raw('dust density') ?? raw('dust') ?? 0) + (raw('hairs') || 0) * 0.5, shk = raw('shake amplitude') || 0;
       const grain = Math.min(100, (raw('grain amp') || 0) * 30), flick = Math.min(100, ((raw('flicker amp') ?? raw('flicker') ?? 0)) * 100);

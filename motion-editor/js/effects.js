@@ -21,9 +21,9 @@ import plugins6 from './fx/plugins6.js';
 import plugins7 from './fx/plugins7.js';
 import plugins8 from './fx/plugins8.js';
 import plugins9 from './fx/plugins9.js';
-import plugins10 from './fx/plugins10.js';
+import plugins10, { EXTRA_DEFS as plugins10x } from './fx/plugins10.js';
 
-export const EFFECTS = [...blurLight, ...color, ...extra, ...distort, ...stylize, ...motion, ...shatter, ...ai, ...more, ...topaz, ...plugins2, ...plugins3, ...plugins4, ...element3d, ...lut, ...plugins5, ...plugins6, ...plugins7, ...plugins8, ...plugins9, ...plugins10, ...looksTools];
+export const EFFECTS = [...blurLight, ...color, ...extra, ...distort, ...stylize, ...motion, ...shatter, ...ai, ...more, ...topaz, ...plugins2, ...plugins3, ...plugins4, ...element3d, ...lut, ...plugins5, ...plugins6, ...plugins7, ...plugins8, ...plugins9, ...plugins10, ...plugins10x(), ...looksTools];
 // Como no After Effects: escalas, amplitudes, deslocamentos, rotações e distorções aceitam valores negativos
 // (ex.: escala −100 espelha, amplitude negativa inverte o sentido). O controle deslizante vai de −máx a +máx.
 const SIGNED = /^(scale|scale[XYWH]|ampX|ampY|amp|amplitude|rotation|rot|zoom|drift|offset[XY]?|shift[XY]?|twist|bulge|distort|skew|stretch|speed|spin|swirl|lensDistort|curvature|wave|phase|evolution)$/;

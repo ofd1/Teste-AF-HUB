@@ -176,6 +176,7 @@ const APPLY_MODES = ['Normal', 'Lighten', 'Darken', 'Multiply', 'Screen', 'Diffe
 const mixP = () => num('mix', 'Mix with Original', 0, 0, 100);
 
 export default [
+  // (S_FilmDamage exato definido no fim do arquivo)
   {
     type: 'bccDirBlur', label: 'BCC Directional Blur', category: 'Desfoque', plugin: 'BCC Directional Blur',
     description: 'Como no BCC: desfoque numa direção (Angle 0 = direita). Thin usa menos pontos (visão dupla), Spread dá mais peso aos pontos longe, Blur Threshold preserva detalhes sutis, Displace Pixels também desloca a imagem.',
@@ -289,3 +290,66 @@ export default [
     temporal: 'bccTemporalBlur',
   },
 ];
+export const EXTRA_DEFS = () => [SFILM_DEF];
+
+// ---------------------------------------------------------------- S_FilmDamage (Sapphire) com base NEUTRA
+// Os controles são os do plugin (lidos dos .ffx do usuário). Com os valores dos presets (Grain 0, Vignette 0,1,
+// poeira e flicker) o resultado é quase a imagem original — a versão antiga punha um "visual de filme" fixo
+// (esquentava, escurecia e tirava saturação) que não existe no AE.
+const SFILM = frag(`
+uniform float u_grain, u_sat, u_scale, u_off, u_dust, u_dustOp, u_scr, u_scrOp, u_vig, u_vigR, u_vigSoft, u_vigRH, u_gain, u_seed, u_fr;
+uniform vec3 u_tl, u_td, u_d1, u_d2, u_ga;
+void main() {
+  vec4 s = texture2D(u_tex, v_uv);
+  vec3 c = s.a > 0.0 ? s.rgb / s.a : vec3(0.0);
+  c = mix(u_td, u_tl, c);                                 // Tint Darks / Tint Lights (padrão preto/branco = sem mudança)
+  c = c * u_scale + u_off;                                // Scale Lights / Offset Darks
+  c = mix(vec3(luma(c)), c, u_sat);                       // Saturation
+  vec2 px = v_uv * u_size;
+  float fr = u_fr + u_seed * 17.0;
+  if (u_grain > 0.0) c += (vec3(hash(px + fr), hash(px + fr + 3.1), hash(px + fr + 7.7)) - 0.5) * u_grain * u_ga * 0.25;
+  // poeira: pontinhos que mudam a cada 2 quadros (Dust Density ~ quantidade, Dust Opacity, Dust Color1/2)
+  if (u_dust > 0.0) {
+    vec2 cell = floor(px / 18.0);
+    float h = hash(cell + floor(fr / 2.0) * 1.37);
+    if (h < u_dust * 0.004) {
+      vec2 ctr = (cell + vec2(hash(cell + 9.1), hash(cell + 4.3))) * 18.0;
+      float d = length(px - ctr), r = 0.8 + hash(cell + 2.2) * 2.2;
+      float k = (1.0 - smoothstep(r * 0.5, r, d)) * u_dustOp;
+      c = mix(c, mix(u_d1, u_d2, hash(cell + 5.5)), k);
+    }
+  }
+  // riscos verticais finos
+  if (u_scr > 0.0) {
+    float col = floor(px.x / 3.0), on = step(1.0 - u_scr * 0.002, hash(vec2(col, floor(fr / 3.0))));
+    c = mix(c, vec3(0.0), on * u_scrOp * 0.6 * (0.6 + 0.4 * hash(vec2(col, floor(px.y / 40.0)))));
+  }
+  // vinheta (Darkness, Radius, Edge Softness, Rel Height)
+  if (u_vig > 0.0) {
+    vec2 q = (v_uv - 0.5) * vec2(1.0, 1.0 / max(0.1, u_vigRH)) * 2.0;
+    float d = length(q) / max(0.05, u_vigR * 1.414);
+    c *= 1.0 - u_vig * smoothstep(1.0 - u_vigSoft, 1.0 + u_vigSoft * 0.5, d);
+  }
+  c *= u_gain;                                            // Flicker
+  gl_FragColor = pre(vec4(clamp(c, 0.0, 1.0), s.a));
+}`);
+const hashJS = (n) => { const x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); };
+export const SFILM_DEF = {
+  type: 'sFilmDamage', label: 'S_FilmDamage', category: 'Estilizar', plugin: 'Sapphire S_FilmDamage',
+  description: 'Como o S_FilmDamage: grão, poeira, riscos, vinheta, flicker e tons (Tint Lights/Darks, Scale Lights, Offset Darks, Saturation). Com os valores padrão não muda a cor da imagem.',
+  params: [num('grain', 'Grain Amp', 0, 0, 4, 0.01), num('grainR', 'Grain Amp Red', 0.9, 0, 4, 0.01), num('grainG', 'Grain Amp Green', 1, 0, 4, 0.01), num('grainB', 'Grain Amp Blue', 1.6, 0, 4, 0.01),
+    num('sat', 'Saturation', 1, 0, 4, 0.01), num('scale', 'Scale Lights', 1, 0, 4, 0.01), num('offset', 'Offset Darks', 0, -1, 1, 0.01), col('tintL', 'Tint Lights', [1, 1, 1, 1]), col('tintD', 'Tint Darks', [0, 0, 0, 1]),
+    num('dust', 'Dust Density', 0, 0, 50, 0.1), num('dustOp', 'Dust Opacity', 0.8, 0, 1, 0.01), col('dust1', 'Dust Color1', [1, 1, 1, 1]), col('dust2', 'Dust Color2', [1, 1, 1, 1]),
+    num('scratches', 'Scratches', 0, 0, 20, 0.1), num('scrOp', 'Scratch Opacity', 1, 0, 1, 0.01),
+    num('vig', 'Vignette Darkness', 0.1, 0, 1, 0.01), num('vigR', 'Vignette Radius', 1, 0.1, 4, 0.01), num('vigSoft', 'Vignette Edge Softness', 0.5, 0, 1, 0.01), num('vigRH', 'Vignette Rel Height', 0.75, 0.1, 4, 0.01),
+    num('flicker', 'Flicker', 0, 0, 2, 0.01), num('flickFreq', 'Flicker Rand Freq', 10, 0, 60, 0.1), num('seed', 'Seed', 0.123, 0, 1000, 0.001)],
+  render: (src, p, env) => {
+    const f = Math.floor(env.t * (p.flickFreq || 10));
+    const fl = p.flicker > 0 ? 1 + (hashJS(f * 1.7 + p.seed) - 0.5) * p.flicker * 0.5 : 1;
+    return env.gl.pass(SFILM, {
+      u_tex: src, u_grain: p.grain, u_ga: [p.grainR, p.grainG, p.grainB], u_sat: p.sat, u_scale: p.scale, u_off: p.offset, u_tl: rgb(p.tintL), u_td: rgb(p.tintD),
+      u_dust: p.dust, u_dustOp: p.dustOp, u_d1: rgb(p.dust1), u_d2: rgb(p.dust2), u_scr: p.scratches, u_scrOp: p.scrOp,
+      u_vig: p.vig, u_vigR: p.vigR, u_vigSoft: p.vigSoft, u_vigRH: p.vigRH, u_gain: fl, u_seed: p.seed % 97, u_fr: Math.floor(env.t * (env.fps || 30)),
+    });
+  },
+};
