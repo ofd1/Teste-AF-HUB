@@ -1,5 +1,5 @@
 // Service worker: rede primeiro (sempre a versão mais nova do app), cache só quando estiver sem internet (PWA offline).
-const CACHE = 'motionframe-v82';
+const CACHE = 'motionframe-v83';
 const SHELL = ['./', './index.html', './css/style.css', './js/main.js', './manifest.webmanifest', './icons/icon.svg'];
 
 self.addEventListener('install', (e) => {

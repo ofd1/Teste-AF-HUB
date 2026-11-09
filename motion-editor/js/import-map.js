@@ -208,6 +208,8 @@ export function looksFromTools(tools, strength = 100) {
           p.diffusion = Math.max(p.diffusion, (v[0] || 0) * 1.5);
           p.diffusionRadius = Math.max(p.diffusionRadius === 60 ? 0 : p.diffusionRadius, (v[1] ?? 50) / 2);
           p.diffusionThreshold = 30;
+          // Color R/G/B do Optical Diffusion (Looks3.aex: Density, Size, Falloff, Glow, Highlights Only, Luster, Color R, G, B…)
+          if (v.length >= 9) p.diffusionTint = [clampN(v[6] ?? 1, 0, 2), clampN(v[7] ?? 1, 0, 2), clampN(v[8] ?? 1, 0, 2), 1];
         }
         break;
       case 'diff':
@@ -248,7 +250,7 @@ export function looksFromTools(tools, strength = 100) {
       case 'haze':
         p.hazeSpill = clampN(v[0] ?? 50, 0, 100); p.hazeSoftness = clampN(v[1] ?? 60, 0, 100);
         // Haze/Flare (nomes dos .rgx): [Spillage, Softness, Reach, Exposure, Reflection Exposure, Reflection, Matte Box Size, Matte Box Shade, Tint RGB]
-        p.hazeExposure = clampN(v[3] ?? -1, -10, 4); p.hazeTint = [v[8] ?? 1, v[9] ?? 1, v[10] ?? 1, 1]; p.hazeReach = clampN(v[2] ?? 50, 0, 100);
+        p.hazeExposure = clampN(v[3] ?? -1, -10, 4); p.hazeTint = [v[8] ?? 1, v[9] ?? 1, v[10] ?? 1, 1]; p.hazeReach = clampN(v[2] ?? 50, 0, 100); p.hazeMBSize = clampN(v[6] || 0, 0, 100); p.hazeMBShade = clampN(v[7] || 0, 0, 100);
         break;
       // Anamorphic Flare (manual: Size, Boost, Threshold, …, cor)
       // Anamorphic Flare (Looks3.aex): [Size, Threshold, Threshold Softness, Boost, Reflection, Reflection Boost, …]
@@ -435,10 +437,10 @@ export function looksToolEffect(t, strength) {
   else if (only(changed, ['saturation', 'hue'])) e = { type: 'lkHLS', params: { str, hue: q.hue, light: 0, sat: q.saturation / 100 - 1 } };
   else if (only(changed, ['exposure'])) e = { type: 'lkExposure', params: { str, stops: q.exposure, con: 0, pivot: 50, gamma: 1 } };
   else if (only(changed, ['vignette', 'vignetteSize'])) e = { type: 'lkLensVignette', params: { str, amount: q.vignette, size: q.vignetteSize } };
-  else if (only(changed, ['diffusion', 'diffusionRadius', 'diffusionThreshold'])) e = { type: 'lkDiffusion', params: { str, amount: q.diffusion, radius: q.diffusionRadius, threshold: q.diffusionThreshold } };
+  else if (only(changed, ['diffusion', 'diffusionRadius', 'diffusionThreshold', 'diffusionTint'])) e = { type: 'lkDiffusion', params: { str, amount: q.diffusion, radius: q.diffusionRadius, threshold: q.diffusionThreshold, tint: q.diffusionTint || [1, 1, 1, 1] } };
   else if (only(changed, ['chroma'])) e = { type: 'lkChroma', params: { str, amount: q.chroma } };
   else if (only(changed, ['edgeBlur', 'edgeSize', 'edgeSoft', 'edgeCenter', 'edgeAspect'])) e = { type: 'lkEdgeSoftness', params: { str, blur: q.edgeBlur, size: q.edgeSize, soft: q.edgeSoft, center: q.edgeCenter } };
-  else if (only(changed, ['hazeExposure', 'hazeSpill', 'hazeSoftness', 'hazeReach', 'hazeTint'])) e = { type: 'lkHaze', params: { str, exposure: q.hazeExposure, spill: q.hazeSpill, soft: q.hazeSoftness, reach: q.hazeReach ?? 50, tint: q.hazeTint || [1, 0.92, 0.82, 1] } };
+  else if (only(changed, ['hazeExposure', 'hazeSpill', 'hazeSoftness', 'hazeReach', 'hazeTint', 'hazeMBSize', 'hazeMBShade'])) e = { type: 'lkHaze', params: { str, exposure: q.hazeExposure, spill: q.hazeSpill, soft: q.hazeSoftness, reach: q.hazeReach ?? 50, tint: q.hazeTint || [1, 0.92, 0.82, 1], mbSize: q.hazeMBSize || 0, mbShade: q.hazeMBShade || 0 } };
   else if (only(changed, ['anamSize', 'anamBoost', 'anamThreshold'])) e = { type: 'lkAnamorphic', params: { str, size: q.anamSize, boost: q.anamBoost, threshold: q.anamThreshold, color: [0.35, 0.6, 1, 1] } };
   else if (only(changed, ['spotExposure', 'spotCenter', 'spotSize', 'spotSoft', 'spotInvert'])) e = { type: 'lkSpotExposure', params: { str, stops: q.spotExposure, center: q.spotCenter, size: q.spotSize, soft: q.spotSoft, invert: q.spotInvert } };
   else if (only(changed, ['gradTwoPoint', 'gradExposure', 'gradColor', 'gradP1', 'gradP2', 'gradSoft'])) e = { type: 'lkGradient', params: { str, stops: q.gradExposure, color: q.gradColor, p1: q.gradP1 || [0.5, 0], p2: q.gradP2 || [0.5, 0.5], soft: q.gradSoft } };
