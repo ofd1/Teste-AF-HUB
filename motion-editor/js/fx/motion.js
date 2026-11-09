@@ -26,6 +26,7 @@ const isFull = (layer) => !layer || FULL.has(layer.type);
 
 const BMC = frag(`
 uniform vec2 u_c; uniform float u_s0, u_s1, u_r0, u_r1; uniform vec2 u_sh0, u_sh1; uniform float u_n, u_jit; uniform vec2 u_wrap;
+uniform float u_bias; uniform float u_bright; // Exposure Bias (0.5 = igual) e Brightness do S_BlurMoCurves (outros usos: 0 → padrão)
 float wrap1(float v, float mode) {
   if (mode > 2.5) { float m = mod(v, 2.0); return m > 1.0 ? 2.0 - m : m; } // espelhar
   if (mode > 1.5) return fract(v);                                        // repetir
@@ -42,7 +43,7 @@ vec4 sampleAt(float s, float r, vec2 sh) {
   return texture2D(u_tex, fromContent(cu));
 }
 void main() {
-  vec4 acc = vec4(0.0);
+  vec4 acc = vec4(0.0); float wsum = 0.0;
   float n = max(1.0, u_n);
   // amostras com deslocamento aleatório por pixel (jitter): quando o movimento é enorme o rastro vira um
   // borrão contínuo em vez de várias cópias nítidas ("quadros de baixa qualidade")
@@ -50,9 +51,11 @@ void main() {
   for (int i = 0; i < 64; i++) {
     if (float(i) >= n) break;
     float f = n > 1.0 ? clamp((float(i) + j) / (n - 1.0), 0.0, 1.0) : 1.0;
-    acc += sampleAt(mix(u_s0, u_s1, f), mix(u_r0, u_r1, f), mix(u_sh0, u_sh1, f));
+    // Exposure Bias: 0 favorece o início (From), 1 o fim (To), 0.5 distribui igual
+    float w = u_bias > 0.0 ? exp((u_bias - 0.5) * 6.0 * (f - 0.5)) : 1.0;
+    acc += sampleAt(mix(u_s0, u_s1, f), mix(u_r0, u_r1, f), mix(u_sh0, u_sh1, f)) * w; wsum += w;
   }
-  gl_FragColor = acc / n;
+  gl_FragColor = acc / max(wsum, 1e-4) * (u_bright > 0.0 ? u_bright : 1.0);
 }`);
 
 // Inclinação 3D da câmera (tilt X/Y em perspectiva): cada pixel vira um raio que é girado e volta ao plano da imagem
@@ -206,7 +209,7 @@ export default [
       const c = sap ? at(env.t + (p.shutter ?? 1) / fps) : at(env.t), q = sap ? at(env.t) : at(env.t - (p.shutter ?? 1) / fps);
       const moving = (p.shutter ?? 1) > 0 && (Math.abs(c.dx - q.dx) + Math.abs(c.dy - q.dy) > 0.3 || Math.abs(c.rot - q.rot) > 0.05 || Math.abs(c.s - q.s) > 1e-3);
       const n = moving ? blurSamples(env, q, c, Math.round(p.samples ?? 12)) : 1;
-      let out = env.gl.pass(BMC, {
+      let out = env.gl.pass(BMC, { u_bias: 0, u_bright: 1,
         u_tex: src, u_c: cuv(env, [0.5, 0.5]), u_s0: q.s, u_s1: c.s, u_r0: rad(q.rot), u_r1: rad(c.rot),
         u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: n, u_jit: jitterFor(env, q, c, n), u_wrap: isFull(env.layer) ? [p.wrap ?? 3, p.wrap ?? 3] : [1, 1],
       });
@@ -231,7 +234,9 @@ export default [
     params: [
       pos('center', 'Centro'), num('zDist', 'Distância Z (1 = normal, <1 aproxima)', 1, 0.1, 5, 0.005), ang('rotate', 'Rotação', 0),
       num('shiftX', 'Deslocamento X (px)', 0, -5000, 5000, 1), num('shiftY', 'Deslocamento Y (px)', 0, -5000, 5000, 1),
-      num('shutter', 'Duração do obturador (quadros)', 1, 0, 4, 0.05), num('samples', 'Amostras', 16, 1, 32, 1),
+      sel('mode', 'Mode', ['Transform and Blur', 'Blur Only'], 1),
+      num('shutter', 'Shutter Duration (quadros)', 1, 0, 4, 0.05), num('shutterShift', 'Shutter Shift (quadros)', 0, -4, 4, 0.05),
+      num('bias', 'Exposure Bias', 0.5, 0, 1, 0.01), num('brightness', 'Brightness', 1, 0, 4, 0.01), num('samples', 'Amostras', 16, 1, 32, 1),
       sel('wrap', 'Bordas X (horizontal)', ['Transparente', 'Repetir', 'Espelhar'], 3), sel('wrapY', 'Bordas Y (vertical)', ['Transparente', 'Repetir', 'Espelhar'], 3),
     ],
     usesPrev: true,
@@ -241,12 +246,22 @@ export default [
       const px = (v, size) => (Math.abs(v) <= 2 && v !== 0 && !Number.isInteger(v) ? v * size : v);
       const sx0 = px(q.shiftX, env.w), sy0 = px(q.shiftY, env.h), sx1 = px(p.shiftX, env.w), sy1 = px(p.shiftY, env.h);
       const moving = Math.abs(q.zDist - p.zDist) > 1e-4 || Math.abs(q.rotate - p.rotate) > 1e-3 || Math.abs(sx0 - sx1) > 0.05 || Math.abs(sy0 - sy1) > 0.05;
-      const a0 = { dx: sx0, dy: sy0, s: 1 / Math.max(0.01, q.zDist), rot: q.rotate }, a1 = { dx: sx1, dy: sy1, s: 1 / Math.max(0.01, p.zDist), rot: p.rotate };
-      const n = moving && p.shutter > 0 ? blurSamples(env, a0, a1, Math.round(p.samples)) : 1;
+      const P0 = { dx: sx0, dy: sy0, s: 1 / Math.max(0.01, q.zDist), rot: q.rotate }, P1 = { dx: sx1, dy: sy1, s: 1 / Math.max(0.01, p.zDist), rot: p.rotate };
+      // Sapphire: janela do obturador = [Shift − Duração/2, Shift + Duração/2] em quadros (Shift 0 → de −0,5 a +0,5 com Duração 1).
+      // O estado em u quadros é estimado pela velocidade entre o quadro anterior e o atual.
+      const D = Math.max(0, p.shutter ?? 1), S = p.shutterShift || 0;
+      const at = (u) => ({ dx: P1.dx + (P1.dx - P0.dx) * u, dy: P1.dy + (P1.dy - P0.dy) * u, s: Math.max(0.01, P1.s + (P1.s - P0.s) * u), rot: P1.rot + (P1.rot - P0.rot) * u });
+      let a0 = moving && D > 0 ? at(S - D / 2) : P1, a1 = moving && D > 0 ? at(S + D / 2) : P1;
+      if ((p.mode | 0) === 2) {
+        // Blur Only: só o borrão do movimento, sem aplicar a transformação (relativo ao estado atual)
+        const rel = (a) => ({ dx: a.dx - P1.dx, dy: a.dy - P1.dy, s: a.s / P1.s, rot: a.rot - P1.rot });
+        a0 = rel(a0); a1 = rel(a1);
+      }
+      const n = moving && D > 0 ? blurSamples(env, a0, a1, Math.round(p.samples)) : 1;
       return env.gl.pass(BMC, {
         u_tex: src, u_c: cuv(env, p.center), u_s0: a0.s, u_s1: a1.s,
-        u_r0: rad(q.rotate), u_r1: rad(p.rotate), u_sh0: [sx0 / env.w, sy0 / env.h], u_sh1: [sx1 / env.w, sy1 / env.h],
-        u_n: n, u_jit: jitterFor(env, a0, a1, n), u_wrap: [p.wrap ?? 3, p.wrapY ?? 3],
+        u_r0: rad(a0.rot), u_r1: rad(a1.rot), u_sh0: [a0.dx / env.w, a0.dy / env.h], u_sh1: [a1.dx / env.w, a1.dy / env.h],
+        u_n: n, u_jit: jitterFor(env, a0, a1, n), u_wrap: [p.wrap ?? 3, p.wrapY ?? 3], u_bias: p.bias ?? 0.5, u_bright: p.brightness ?? 1,
       });
     },
   },
@@ -295,7 +310,7 @@ export default [
       let out = src;
       if (moving || c.s > 1.0005 || Math.abs(c.dx) + Math.abs(c.dy) > 0.5) {
         const n = moving && (p.slideBlur ?? 100) > 0 ? blurSamples(env, q, c, 12) : 1;
-        out = gl.pass(BMC, {
+        out = gl.pass(BMC, { u_bias: 0, u_bright: 1,
           u_tex: src, u_c: cuv(env, p.scaleOrigin || [0.5, 0.5]), u_s0: q.s, u_s1: c.s, u_r0: 0, u_r1: 0,
           u_sh0: [q.dx / env.w, q.dy / env.h], u_sh1: [c.dx / env.w, c.dy / env.h], u_n: n, u_jit: jitterFor(env, q, c, n),
           // Border: Mirror (espelha), Tile (repete), Ignore (transparente), Expand (espelha)

@@ -45,6 +45,31 @@ void main() {
   gl_FragColor = fixpre(s + g);
 }`);
 
+// Deep Glow: composição com Blend Mode (Screen/Add), aberração cromática do glow, Tint (Standard/Overlay/Soft Light) e Source Opacity
+const DG_COMP = frag(`
+uniform sampler2D u_tex2; uniform float u_amount; uniform float u_add; uniform float u_ca; uniform float u_cach;
+uniform vec3 u_tint; uniform float u_tmode; uniform float u_tmix; uniform float u_srcop;
+void main() {
+  vec4 s = texture2D(u_tex, v_uv) * u_srcop;
+  vec2 d = (v_uv - 0.5) * u_ca * 8.0;
+  vec4 g = texture2D(u_tex2, v_uv);
+  if (u_ca > 0.0) {
+    vec4 ga = texture2D(u_tex2, v_uv + d), gb = texture2D(u_tex2, v_uv - d);
+    if (u_cach < 0.5) { g.r = ga.r; g.g = gb.g; } else if (u_cach < 1.5) { g.r = ga.r; g.b = gb.b; } else { g.g = ga.g; g.b = gb.b; }
+  }
+  g *= u_amount;
+  if (u_tmode > 0.5) {
+    float l = dot(g.rgb, vec3(0.2126, 0.7152, 0.0722));
+    vec3 t;
+    if (u_tmode < 1.5) t = u_tint * l * 1.6;
+    else if (u_tmode < 2.5) t = mix(2.0 * g.rgb * u_tint, 1.0 - 2.0 * (1.0 - clamp(g.rgb, 0.0, 1.0)) * (1.0 - u_tint), step(0.5, g.rgb)) ;
+    else t = (1.0 - 2.0 * u_tint) * g.rgb * g.rgb + 2.0 * u_tint * g.rgb;
+    g.rgb = mix(g.rgb, t, u_tmix);
+  }
+  vec3 o = u_add > 0.5 ? s.rgb + g.rgb : s.rgb + g.rgb - s.rgb * clamp(g.rgb, 0.0, 1.0);
+  gl_FragColor = fixpre(vec4(o, max(s.a, clamp(max(g.a, max(g.r, max(g.g, g.b))), 0.0, 1.0))));
+}`);
+
 const RAYS = frag(`
 uniform vec2 u_center; uniform float u_len; uniform float u_int; uniform vec3 u_color; uniform float u_thr;
 void main() {
@@ -192,24 +217,37 @@ export default [
   },
   {
     type: 'deepGlow', label: 'Deep Glow', category: 'Luz e brilho', plugin: 'Deep Glow',
-    description: 'Glow físico em várias escalas com decaimento exponencial (sem o “anel” do glow comum).',
-    params: [num('radius', 'Raio', 120, 0, 1500), num('exposure', 'Exposição', 1, 0, 10, 0.05), num('threshold', 'Limiar %', 0, 0, 100), col('tint', 'Cor do tint', [1, 0.6, 0.2, 1]), bool('useTint', 'Usar tint', false), num('aspect', 'Aspecto (H/V)', 1, 0.1, 10, 0.05), num('knee', 'Suavidade do limiar %', 15, 1, 100)],
+    description: 'Glow físico em várias escalas com decaimento exponencial (sem o “anel” do glow comum). Controles iguais ao Deep Glow: Radius, Exposure, Threshold/Smooth, Blend Mode, Aspect Ratio, Spread, Chromatic Aberration, Tint (Standard/Overlay/Soft Light) e Source Opacity.',
+    params: [num('radius', 'Radius', 120, 0, 1500), num('exposure', 'Exposure', 1, 0, 10, 0.05), num('threshold', 'Threshold %', 0, 0, 100),
+      num('knee', 'Threshold Smooth %', 15, 1, 100), sel('blendMode', 'Blend Mode', ['Screen', 'Add'], 1),
+      num('aspect', 'Aspect Ratio', 1, 0.1, 10, 0.05), num('spread', 'Spread', 33, 0, 100),
+      bool('caEnable', 'Chromatic Aberration › Enable', false), sel('caChannels', 'Chromatic Aberration › Channels', ['Red & Green', 'Red & Blue', 'Green & Blue'], 2), num('caAmount', 'Chromatic Aberration › Amount', 0.25, 0, 2, 0.01),
+      bool('useTint', 'Tint › Enable', false), col('tint', 'Tint › Color', [1, 0.6, 0.2, 1]), sel('tintMode', 'Tint › Mode', ['Standard', 'Overlay', 'Soft Light'], 1), num('tintMix', 'Tint › Mix %', 100, 0, 100),
+      num('iterations', 'Glow Iterations', 6, 1, 8, 1), num('sourceOpacity', 'Source Opacity %', 100, 0, 100)],
     pad: (p) => p.radius * 1.2,
     render: (src, p, env) => {
       const { gl } = env;
-      const th = gl.pass(THRESH, { u_tex: src, u_thr: p.threshold / 100, u_color: rgb(p.tint), u_useColor: p.useTint ? 0.85 : 0, u_knee: (p.knee ?? 15) / 100 });
+      const th = gl.pass(THRESH, { u_tex: src, u_thr: p.threshold / 100, u_color: [1, 1, 1], u_useColor: 0, u_knee: (p.knee ?? 15) / 100 });
       const r = p.radius * 0.5 * env.scale;
-      let acc;
-      if (Math.abs(p.aspect - 1) < 0.01) acc = glowLayers(gl, th, r, [0.02, 0.06, 0.15, 0.35, 0.7, 1]);
-      else {
-        const h = Math.min(1, p.aspect), v = Math.min(1, 1 / p.aspect);
-        acc = null;
-        for (const f of [0.03, 0.1, 0.3, 0.7, 1]) {
-          const b = gl.blur(gl.blur(th, r * f * h, 2), r * f * v, 3);
-          acc = acc ? gl.add(acc, b, 1) : b;
-        }
-      }
-      return gl.pass(GLOW_COMP, { u_tex: src, u_tex2: acc, u_amount: p.exposure * 0.45 });
+      const all = [0.02, 0.06, 0.15, 0.35, 0.7, 1, 1.4, 1.9];
+      const n = Math.max(1, Math.min(8, Math.round(p.iterations ?? 6)));
+      const levels = all.slice(Math.max(0, 6 - n), Math.max(6, n)).slice(0, n);
+      // Spread: 33 = decaimento padrão; mais alto dá peso às camadas largas, mais baixo concentra no núcleo
+      const k = ((p.spread ?? 33) - 33) / 33;
+      const h = Math.min(1, p.aspect ?? 1), v = Math.min(1, 1 / (p.aspect ?? 1));
+      let acc = null, wsum = 0;
+      levels.forEach((f, i) => {
+        const w = Math.pow(f, k);
+        const b = Math.abs((p.aspect ?? 1) - 1) < 0.01 ? gl.blur(th, Math.max(0.5, r * f)) : gl.blur(gl.blur(th, r * f * h, 2), r * f * v, 3);
+        acc = acc ? gl.add(acc, b, w) : (w === 1 ? b : gl.add(b, b, w - 1));
+        wsum += w;
+      });
+      const norm = levels.length / wsum;
+      return gl.pass(DG_COMP, {
+        u_tex: src, u_tex2: acc, u_amount: p.exposure * 0.45 * norm, u_add: (p.blendMode ?? 2) === 2 ? 1 : 0,
+        u_ca: p.caEnable ? (p.caAmount ?? 0.25) * r * 0.08 / Math.max(env.w, env.h) : 0, u_cach: (p.caChannels ?? 2) - 1,
+        u_tint: rgb(p.tint), u_tmode: p.useTint ? (p.tintMode ?? 1) : 0, u_tmix: (p.tintMix ?? 100) / 100, u_srcop: (p.sourceOpacity ?? 100) / 100,
+      });
     },
   },
   {

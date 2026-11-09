@@ -564,7 +564,7 @@ export const IMPORT_RULES = [
     },
     post: (p, raw) => { p.sapphire = true; p.drift = (raw('drift') ?? 0); if (!raw('motion blur')) p.shutter = 0; if (p.ampX === undefined) p.ampX = 100; if (p.ampY === undefined) p.ampY = 100; } },
   { vendor: 'Sapphire', plugin: 'S_BlurMoCurves', to: 'blurMoCurves', test: /s_blurmocurves/i,
-    map: { center: { n: ['center xy'] }, zDist: { n: ['z dist'] }, rotate: { n: ['rotate'] }, shiftX: { n: ['shift x'] }, shiftY: { n: ['shift y'] }, shutter: { n: ['shutter duration'] }, wrap: { n: ['wrap x'], conv: (v) => Math.min(3, Math.max(1, v)) }, wrapY: { n: ['wrap y'], conv: (v) => Math.min(3, Math.max(1, v)) } } },
+    map: { center: { n: ['center xy'] }, zDist: { n: ['z dist'] }, rotate: { n: ['rotate'] }, shiftX: { n: ['shift x'] }, shiftY: { n: ['shift y'] }, shutter: { n: ['shutter duration'] }, shutterShift: { i: 56, n: ['shutter shift'] }, bias: { i: 57, n: ['exposure bias'] }, brightness: { i: 58, n: ['brightness'] }, mode: { n: ['effect', 'mode'] }, wrap: { n: ['wrap x'], conv: (v) => Math.min(3, Math.max(1, v)) }, wrapY: { n: ['wrap y'], conv: (v) => Math.min(3, Math.max(1, v)) } } },
   // S_Sharpen: nitidez em faixas de detalhe + Sharpen Width (contraste local largo); Opacity pode passar de 1 (amplifica)
   { vendor: 'Sapphire', plugin: 'S_Sharpen', to: 'sSharpen', test: /s_sharpen/i,
     map: {
@@ -572,8 +572,7 @@ export const IMPORT_RULES = [
       tiny: { n: ['scale tiny details'] }, small: { n: ['scale small details'] }, medium: { n: ['scale medium details'] }, large: { n: ['scale large details'] },
       edgeThr: { n: ['edge threshold'] }, luma: { n: ['sharpen luma'] }, chroma: { n: ['sharpen chroma'] }, opacity: { n: ['opacity'] },
     } },
-  { vendor: 'Sapphire', plugin: 'S_HueSatBright', to: 'looks', test: /s_huesat/i,
-    expand: (fx, raw) => [{ type: 'looks', label: 'S_HueSatBright', params: { hue: (raw('hue shift') || 0) * 360, saturation: (raw('saturation') ?? 1) * 100, exposure: Math.log2(Math.max(0.01, raw('brightness') ?? 1)) } }] },
+  { vendor: 'Sapphire', plugin: 'S_HueSatBright', to: 'sHueSatBright', match: ['S_HueSatBright'], test: /s_huesatbright/i },
   // S_MathOps: A × Lights + Darks direto no valor da imagem (não em luz linear) → Níveis
   { vendor: 'Sapphire', plugin: 'S_MathOps', to: 'levels', test: /s_mathops/i,
     expand: (fx, raw) => {
@@ -585,10 +584,7 @@ export const IMPORT_RULES = [
     } },
   { vendor: 'Sapphire', plugin: 'S_FilmDamage / S_FilmEffect', to: 'filmLook', test: /s_film/i,
     expand: (fx, raw) => [{ type: 'filmLook', label: fx.name, params: { grain: Math.min(100, (raw('grain amp') || 0) * 30), scratch: Math.min(100, (raw('dust density') || 0) * 10 + (raw('scratch density') || 0) * 10), vignette: Math.min(100, (raw('vignette darkness') || 0) * 100), flicker: Math.min(100, ((raw('flicker amp') ?? raw('flicker')) || 0) * 100), warmth: 0, fade: Math.min(60, Math.max(0, -(raw('offset darks') || 0)) * 20) } }] }, // S_FilmEffect: Vignette Darkness, Offset Darks; S_FilmDamage: Flicker
-  { vendor: 'Sapphire', plugin: 'S_Flicker', to: 'flicker', test: /s_flicker/i,
-    map: { amount: { n: ['amplitude'], conv: (v) => v * 100 }, frequency: { n: ['rand freq'], conv: (v) => Math.min(60, v) }, colorAmount: { n: ['rand color amp'], conv: (v) => v * 100 }, brightness: { n: ['brightness'] } },
-    // S_Flicker: a variação de brilho é Amplitude × Rand Luma Amp (Amplitude é o mestre), não só Amplitude
-    post: (p, raw) => { const a = raw('amplitude') ?? 1, l = raw('rand luma amp') ?? 0.5, c = raw('rand color amp') ?? 0; p.amount = a * l * 100; p.colorAmount = l > 0 ? Math.min(100, (c / l) * 100) : 0; } },
+  { vendor: 'Sapphire', plugin: 'S_Flicker', to: 'sFlicker', match: ['S_Flicker'], test: /s_flicker/i },
   { vendor: 'BCC', plugin: 'BCC Directional Blur', to: 'dirBlur', test: /bcc.*(directional|motion).*blur/i,
     map: { length: { i: 2, n: ['blur amount'], conv: (v) => v }, angle: { i: 3, n: ['angle'] } } },
   { vendor: 'BCC', plugin: 'BCC Brightness-Contrast', to: 'brightnessContrast', test: /bcc.*bright(ness)?[- ]?contrast/i,
@@ -599,7 +595,10 @@ export const IMPORT_RULES = [
   { vendor: 'RE:Vision', plugin: 'ReelSmart Motion Blur', to: 'motionBlur', test: /reelsmart|\brsmb\b|motion ?blur ?pro/i,
     map: { amount: { n: ['blur amount', 'motion blur amount'], conv: (v) => (v <= 4 ? v * 200 : v) } } },
   { vendor: 'Plugin Everything', plugin: 'Deep Glow', to: 'deepGlow', test: /deep ?glow|\bpedg\b/i,
-    map: { radius: { i: 1, n: ['radius'] }, exposure: { i: 2, n: ['exposure', 'intensity'] }, threshold: { i: 4, n: ['threshold'], conv: pct }, tint: { i: 38, n: ['tint color'] }, useTint: { i: 37, n: ['enable tint'] }, aspect: { i: 10, n: ['aspect ratio', 'aspect'] } },
+    map: { radius: { i: 1, n: ['radius'] }, exposure: { i: 2, n: ['exposure', 'intensity'] }, threshold: { i: 4, n: ['threshold'], conv: pct }, tint: { i: 38, n: ['tint color'] }, useTint: { i: 37, n: ['enable tint'] }, aspect: { i: 10, n: ['aspect ratio', 'aspect'] },
+      knee: { i: 5, n: ['threshold smooth'] }, blendMode: { i: 8, n: ['blend mode'] }, spread: { i: 11, n: ['spread'] },
+      caEnable: { i: 13 }, caChannels: { i: 14, n: ['channels'] }, caAmount: { i: 15 }, tintMode: { i: 39 }, tintMix: { i: 41, n: ['mix'] },
+      iterations: { i: 21, n: ['glow iterations'] }, sourceOpacity: { i: 24, n: ['source opacity'] } },
     post: (p, raw) => { if (p.useTint === undefined) p.useTint = false; } },
   { vendor: 'Video Copilot', plugin: 'Optical Flares', to: 'lensFlare', test: /optical ?flares?/i, map: { brightness: { n: ['brightness'] }, size: { n: ['scale', 'size'] } } },
   { vendor: 'Video Copilot', plugin: 'Saber', to: 'deepGlow', test: /\bsaber\b/i, map: { exposure: { n: ['glow intensity'] }, radius: { n: ['glow spread', 'glow size'], conv: (v) => v * 100 }, tint: { n: ['glow color'] } }, set: { useTint: true } },
@@ -652,12 +651,8 @@ export const IMPORT_RULES = [
   { vendor: 'Sapphire', plugin: 'S_Streaks', to: 'streaks', test: /s_streaks/i, map: { length: { n: ['streak length', 'length'], conv: (v) => (v <= 2 ? v * 200 : v) }, amount: { n: ['brightness'] }, angle: { n: ['angle', 'streak angle'] } } },
   { vendor: 'Sapphire', plugin: 'S_Feedback', to: 'feedback', test: /s_feedback/i, map: { zoom: { n: ['zoom', 'scale'] }, rotate: { n: ['rotate'] }, count: { n: ['iterations', 'repeats'] } } },
   // S_Glow → Glow/Diffusion, igual ao Frameify: intensidade = Brightness × 50, raio = Width × 0,75, limiar = Threshold × 100, cor
-  { vendor: 'Sapphire', plugin: 'S_Glow', to: 'lkDiffusion', test: /s_glow/i,
-    expand: (fx, raw) => {
-      const col = fx.params.find((q) => (q.name || '').toLowerCase() === 'color')?.value;
-      const c = col && col.length >= 4 ? col.slice(1, 4).map((x) => (x > 1 ? x / 255 : x)) : [1, 1, 1];
-      return [{ type: 'lkDiffusion', label: fx.name || 'S_Glow', note: 'como o Frameify (Glow/Diffusion)', params: { str: 100, amount: (raw('brightness') ?? 1) * 50, radius: (raw('glow width') ?? raw('width') ?? 80) * 0.75, threshold: (raw('threshold') ?? 0.5) * 100, tint: [...c, 1] } }];
-    } },
+  // S_Glow / S_HueSatBright / S_Flicker: efeitos próprios com os controles oficiais (nomes iguais → casam 1 a 1)
+  { vendor: 'Sapphire', plugin: 'S_Glow', to: 'sGlow', match: ['S_Glow'], test: /^s_glow$/i },
   { vendor: 'Sapphire', plugin: 'S_ZoomBlur', to: 'radialBlur', test: /s_zoomblur|s_blurzoom|s_radialblur/i, set: { mode: 1 },
     map: { amount: { n: ['zoom amount', 'blur amount', 'amount', 'length'], conv: (v) => (v <= 2 ? v * 100 : v) }, center: { n: ['center', 'center xy'] } } },
   { vendor: 'Sapphire', plugin: 'S_Blur', to: 'blur', test: /s_blur/i, map: { radius: { n: ['width', 'blur amount'], conv: (v) => (v < 5 ? v * 100 : v) } } },
