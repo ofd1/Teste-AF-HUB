@@ -22,6 +22,8 @@ import { KeyTools } from './keytools.js';
 import { deleteKeys, animProps, setEase } from './keyframes.js';
 import { sourceTime, ensureGroupTime } from './timing.js';
 import { exportDialog } from './exporter.js';
+import { probeMp4, needsProxy, proxySupported, makeProxy } from './proxy.js';
+import { keepAwake as keepScreenOn } from './platform.js';
 import { getEffectDef } from './effects.js';
 import { modal, toast, pickFiles, storage } from './ui.js';
 import { formatTime, formatSimple, uid, deepClone, escapeHtml } from './util.js';
@@ -737,10 +739,51 @@ function addLayer(type) {
   store.addLayer(l);
 }
 
+/**
+ * Vídeo pesado (4K / centenas de MB): oferece a cópia otimizada 1080p feita no aparelho — no iPhone o Safari
+ * trava com o original (memória). Retorna o arquivo a usar (o proxy ou o original).
+ */
+async function maybeProxy(f) {
+  let info = null;
+  try { info = await probeMp4(f); } catch { info = null; }
+  const w = info ? (info.video.rotation % 180 ? info.video.height : info.video.width) : 0, h = info ? (info.video.rotation % 180 ? info.video.width : info.video.height) : 0;
+  if (!info || !needsProxy(f, w, h)) return f;
+  const mb = Math.round(f.size / 1048576), dur = info.video.table.n ? (info.video.table.dts[info.video.table.n - 1] / info.video.timescale) : 0;
+  if (!(await proxySupported(info))) {
+    toast(`“${f.name}” é pesado (${mb} MB, ${w}×${h}) e este aparelho não consegue otimizar o formato. Se travar, exporte o vídeo em 1080p na galeria antes de importar.`, 'warn', 10000);
+    return f;
+  }
+  const go = await modal('Vídeo pesado', `<p><b>${escapeHtml(f.name)}</b> tem <b>${mb} MB</b> (${w}×${h}, ${Math.round(dur / 60 * 10) / 10} min). Vídeos assim deixam o Safari do iPhone sem memória e o app fecha.</p>
+    <p>Criar uma <b>cópia otimizada em 1080p</b> para editar? Fica leve (~${Math.max(1, Math.round(dur * 1.05))} MB), com o mesmo som, e exporta normalmente em 1080p. Leva alguns minutos com o app aberto.</p>`,
+  [{ label: 'Usar o original', value: false }, { label: 'Otimizar (recomendado)', primary: true, value: true }]);
+  if (!go) return f;
+  const ctl = new AbortController();
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-wrap';
+  wrap.innerHTML = `<div class="modal"><header><h2>Otimizando vídeo…</h2></header><div class="modal-body"><div class="progress"><div class="bar"></div></div><p class="muted small prog-text">Preparando…</p><p class="muted small">Deixe o app aberto na tela.</p></div><footer><button class="danger">Cancelar</button></footer></div>`;
+  document.body.appendChild(wrap);
+  wrap.querySelector('button').onclick = () => ctl.abort();
+  keepScreenOn(true);
+  const t0 = performance.now();
+  try {
+    const px = await makeProxy(f, { signal: ctl.signal, onProgress: (x) => {
+      wrap.querySelector('.bar').style.width = `${Math.round(x * 100)}%`;
+      const el = (performance.now() - t0) / 1000, left = x > 0.02 ? el / x - el : 0;
+      wrap.querySelector('.prog-text').textContent = `${Math.round(x * 100)}%${left ? ` · faltam ~${left > 90 ? `${Math.round(left / 60)} min` : `${Math.round(left)} s`}` : ''}`;
+    } });
+    toast(`Cópia otimizada pronta: ${Math.round(px.size / 1048576)} MB (antes ${mb} MB).`, 'ok', 6000);
+    return px;
+  } catch (e) {
+    if (String(e?.message || e) !== 'cancelado') toast(`Não deu para otimizar (${e?.message || e}). Usando o original.`, 'warn', 8000);
+    return f;
+  } finally { wrap.remove(); keepScreenOn(false); }
+}
+
 async function importMedia(files) {
   ensurePersistentStorage();
-  for (const f of files) {
+  for (let f of files) {
     const isVideo = f.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|mkv)$/i.test(f.name);
+    if (isVideo && /\.(mp4|mov|m4v)$/i.test(f.name)) f = await maybeProxy(f);
     const isAudio = f.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(f.name);
     const isImage = f.type.startsWith('image/');
     if (!isVideo && !isAudio && !isImage) continue;

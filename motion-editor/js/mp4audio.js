@@ -4,9 +4,9 @@
 // vídeos grandes (antes o arquivo inteiro era lido para a RAM só para tirar o som).
 // Retorna: Uint8Array (ADTS) · false (o arquivo não tem trilha de áudio) · null (formato não suportado).
 
-const txt = (b, o) => String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3]);
+export const txt = (b, o) => String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3]);
 
-function boxes(buf, start, end) {
+export function boxes(buf, start, end) {
   const out = [];
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   let o = start;
@@ -19,10 +19,10 @@ function boxes(buf, start, end) {
   }
   return out;
 }
-const child = (buf, box, type) => boxes(buf, box.start, box.end).find((b) => b.type === type);
+export const child = (buf, box, type) => boxes(buf, box.start, box.end).find((b) => b.type === type);
 
 /** AudioSpecificConfig dentro do esds (descritor 0x05). */
-function ascFromEsds(buf, s, e) {
+export function ascFromEsds(buf, s, e) {
   let o = s + 4; // versão + flags
   const readLen = () => { let n = 0; for (let i = 0; i < 4; i++) { const c = buf[o++]; n = (n << 7) | (c & 0x7f); if (!(c & 0x80)) break; } return n; };
   while (o < e) {
