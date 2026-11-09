@@ -424,7 +424,7 @@ function renderLayerImage(layer, t, scale0, extra) {
   for (const { def, p, prev, fx } of evaluated) {
     try {
       const input = tex;
-      tex = def.render(input, p, { ...env, paramsAt: (tt) => evalParams(fx, tt) }, prev) || input;
+      tex = def.render(input, p, { ...env, fx, paramsAt: (tt) => evalParams(fx, tt) }, prev) || input;
       // Opacidade do efeito (AE: Compositing Options → Effect Opacity)
       const op = p.fxOpacity ?? 100;
       if (op < 99.95 && tex !== input) tex = gl.mix(input, tex, Math.max(0, op) / 100);

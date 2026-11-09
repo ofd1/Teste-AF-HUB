@@ -52,13 +52,23 @@ void main() {
 
 // BCC Textured Wipe: some primeiro onde a "textura" (luminância da própria camada) é mais escura
 const TEXWIPE = frag(`
-uniform sampler2D u_tex2; uniform float u_amt, u_soft, u_inv;
+uniform sampler2D u_tex2; uniform float u_amt, u_soft, u_inv, u_texmode, u_tint, u_fscale, u_seed, u_bw, u_bop; uniform vec3 u_bcol;
 void main() {
   vec4 s = texture2D(u_tex, v_uv);
   float L = luma(unpre(texture2D(u_tex2, v_uv)).rgb);
+  // Texture (BCC): ruído fractal e/ou branco somado à influência (deixa a borda do wipe orgânica)
+  vec2 q = v_uv * u_size / max(8.0, u_fscale);
+  float fr = fbm(q + u_seed, 5), wn = hash(floor(v_uv * u_size) + u_seed);
+  float tx = u_texmode < 1.5 ? 0.0 : u_texmode < 2.5 ? fr : u_texmode < 3.5 ? wn : (fr + wn) * 0.5;
+  if (u_texmode > 1.5) L = mix(L, tx, u_tint);
   if (u_inv > 0.5) L = 1.0 - L;
   float k = smoothstep(u_amt - u_soft, u_amt + u_soft + 1e-4, L);
-  gl_FragColor = s * k;
+  // Border 1: faixa colorida na frente do wipe (Thickness em px, Opacity)
+  float bw = u_bw / max(1.0, u_size.y) * 4.0;
+  float border = u_bw > 0.0 ? (smoothstep(u_amt - u_soft - bw, u_amt - u_soft, L) - smoothstep(u_amt + u_soft, u_amt + u_soft + bw, L)) : 0.0;
+  border = clamp(border, 0.0, 1.0) * u_bop * step(0.0005, u_amt);
+  vec4 o = s * k;
+  gl_FragColor = mix(o, vec4(u_bcol, 1.0) * max(s.a, 0.0), border);
 }`);
 
 // Mapa de profundidade aproximado: luminância suavizada (o que está em foco/iluminado vem para frente) +
@@ -106,12 +116,18 @@ export default [
     render: (src, p, env) => env.gl.pass(EDGEDET, { u_tex: src, u_w: [p.wr, p.wg, p.wb], u_thr: p.threshold * 0.3, u_bright: p.bright, u_mix: p.mix / 100 }),
   },
   {
-    type: 'texturedWipe', label: 'Textured Wipe (BCC)', category: 'Transições', plugin: 'BCC Textured Wipe',
-    description: 'Transição que some primeiro nas partes mais escuras da imagem (textura), com borda suave.',
-    params: [num('amount', 'Wipe Amount %', 50, 0, 100, 0.1), num('softness', 'Softness', 20, 0, 100, 0.1), num('blur', 'Suavizar textura (px)', 8, 0, 100, 0.5), bool('invert', 'Inverter', false)],
+    type: 'texturedWipe', label: 'BCC Textured Wipe', category: 'Transições', plugin: 'BCC Textured Wipe',
+    description: 'Como o BCC Textured Wipe: a camada some guiada pela luminância (influência) + textura fractal/ruído, com borda suave (Softness) e Border 1 colorida. Animation: Manual (Wipe Amount), Auto (pela duração da camada) ou Pct. Done.',
+    params: [sel('animation', 'Animation', ['Manual', 'Auto', 'Pct. Done'], 1), num('amount', 'Wipe Amount %', 50, 0, 100, 0.1), num('percent', 'Percent Done', 0, 0, 100, 0.1), bool('invert', 'Invert Wipe', false),
+      num('softness', 'Softness', 20, 0, 100, 0.1), num('blur', 'Influence Blur (px)', 8, 0, 100, 0.5),
+      sel('texture', 'Texture', ['Off', 'Fractal Noise', 'White Noise', 'Fractal and White Noise'], 1), num('texInt', 'Texture Intensity', 50, 0, 100), num('fscale', 'Fractal Scale', 60, 4, 1000), num('seed', 'Noise Seed', 0, 0, 1000, 1),
+      num('border', 'Border 1 Thickness', 0, 0, 200), col('borderColor', 'Border 1 Color', [1, 1, 1, 1]), num('borderOp', 'Border 1 Opacity', 100, 0, 100)],
     render: (src, p, env) => {
       const tx = p.blur > 0.3 ? env.gl.blur(src, p.blur * env.scale) : src;
-      return env.gl.pass(TEXWIPE, { u_tex: src, u_tex2: tx, u_amt: p.amount / 100, u_soft: (p.softness / 100) * 0.25, u_inv: p.invert });
+      const lay = env.layer, dur = lay ? Math.max(0.01, lay.outPoint - lay.inPoint) : 1;
+      const amt = p.animation === 2 ? Math.min(1, Math.max(0, env.t / dur)) : p.animation === 3 ? p.percent / 100 : p.amount / 100;
+      return env.gl.pass(TEXWIPE, { u_tex: src, u_tex2: tx, u_amt: amt, u_soft: (p.softness / 100) * 0.25, u_inv: p.invert, u_texmode: p.texture ?? 1, u_tint: (p.texInt ?? 50) / 100,
+        u_fscale: (p.fscale ?? 60) * env.scale, u_seed: p.seed || 0, u_bw: (p.border || 0) * env.scale, u_bop: (p.borderOp ?? 100) / 100, u_bcol: rgb(p.borderColor || [1, 1, 1, 1]) });
     },
   },
   {

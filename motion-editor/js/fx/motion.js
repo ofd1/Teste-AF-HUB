@@ -243,14 +243,21 @@ export default [
     render: (src, p, env, prev) => {
       const q = prev || p;
       // Sapphire: Shift em pixels (como no AE). Projetos antigos guardavam fração da tela (|v| ≤ 2): convertidos aqui.
-      const px = (v, size) => (Math.abs(v) <= 2 && v !== 0 && !Number.isInteger(v) ? v * size : v);
-      const sx0 = px(q.shiftX, env.w), sy0 = px(q.shiftY, env.h), sx1 = px(p.shiftX, env.w), sy1 = px(p.shiftY, env.h);
+      // Projetos antigos guardavam o Shift como fração da tela. Só converte quando a propriedade INTEIRA
+      // (valor e todos os keyframes) está nessa escala — antes um Shift animado em px que passava por −1,5
+      // virava −960 px num único quadro (o "bug de 1 quadro" do Main Shakey).
+      const frac = (key) => { const pr = env.fx?.params?.[key]; if (!pr || typeof pr !== 'object') return false; const vs = [pr.value, ...(pr.keys || []).map((k) => k.v)].filter((v) => typeof v === 'number'); return vs.length > 0 && vs.every((v) => Math.abs(v) <= 2) && vs.some((v) => v !== 0 && !Number.isInteger(v)); };
+      const fx = frac('shiftX'), fy = frac('shiftY');
+      const px = (v, size, isY) => ((isY ? fy : fx) ? v * size : v);
+      const sx0 = px(q.shiftX, env.w, false), sy0 = px(q.shiftY, env.h, true), sx1 = px(p.shiftX, env.w, false), sy1 = px(p.shiftY, env.h, true);
       const moving = Math.abs(q.zDist - p.zDist) > 1e-4 || Math.abs(q.rotate - p.rotate) > 1e-3 || Math.abs(sx0 - sx1) > 0.05 || Math.abs(sy0 - sy1) > 0.05;
       const P0 = { dx: sx0, dy: sy0, s: 1 / Math.max(0.01, q.zDist), rot: q.rotate }, P1 = { dx: sx1, dy: sy1, s: 1 / Math.max(0.01, p.zDist), rot: p.rotate };
       // Sapphire: janela do obturador = [Shift − Duração/2, Shift + Duração/2] em quadros (Shift 0 → de −0,5 a +0,5 com Duração 1).
       // O estado em u quadros é estimado pela velocidade entre o quadro anterior e o atual.
       const D = Math.max(0, p.shutter ?? 1), S = p.shutterShift || 0;
-      const at = (u) => ({ dx: P1.dx + (P1.dx - P0.dx) * u, dy: P1.dy + (P1.dy - P0.dy) * u, s: Math.max(0.01, P1.s + (P1.s - P0.s) * u), rot: P1.rot + (P1.rot - P0.rot) * u });
+      // prev = parâmetros de D quadros atrás (renderer): velocidade por quadro = (P1 − P0) / D
+      const vk = D > 0 ? 1 / D : 0;
+      const at = (u) => ({ dx: P1.dx + (P1.dx - P0.dx) * u * vk, dy: P1.dy + (P1.dy - P0.dy) * u * vk, s: Math.max(0.01, P1.s + (P1.s - P0.s) * u * vk), rot: P1.rot + (P1.rot - P0.rot) * u * vk });
       let a0 = moving && D > 0 ? at(S - D / 2) : P1, a1 = moving && D > 0 ? at(S + D / 2) : P1;
       if ((p.mode | 0) === 2) {
         // Blur Only: só o borrão do movimento, sem aplicar a transformação (relativo ao estado atual)
@@ -281,7 +288,7 @@ export default [
       sel('border', 'Border', ['Mirror', 'Tile', 'Ignore', 'Expand'], 1), sel('lightMode', 'Light Behaviour', ['Brighter', 'Darker', 'Both'], 1),
       num('blurBoost', 'Blur Boost %', 100, 0, 400), pos('scaleOrigin', 'Scale Origin', [0.5, 0.5]), sel('timeDir', 'Time Direction', ['Forward Only', 'Backward Only', 'Ambos'], 3),
     ],
-    pad: (p, { layer, w, h } = {}) => (isFull(layer) ? 0 : (p.slide ? ((p.slideAmt || 0) / 100) * Math.max(w || 0, h || 0) * 0.35 : 0) + (p.scale ? (Math.max(w || 0, h || 0) * (p.scaleAmt || 0)) / 400 : 0)),
+    pad: (p, { layer, w, h } = {}) => (isFull(layer) ? 0 : (p.slide ? ((p.slideAmt || 0) / 100) * Math.max(w || 0, h || 0) * 0.2 : 0) + (p.scale ? (Math.max(w || 0, h || 0) * (p.scaleAmt || 0)) / 400 : 0)),
     // Time: o tranco mostra um quadro de outro momento (como o Twitch Time)
     timeWarp: (t, p) => {
       if (!p.time) return t;
@@ -300,7 +307,7 @@ export default [
         const es = p.scale ? twitchEnv(t, p, 4) : 0;
         const el = p.slide ? twitchEnv(t, p, 5) : 0;
         const [ux, uy] = twitchDir(t, p);
-        const d = el * ((p.slideAmt || 0) / 100) * L * 0.35;
+        const d = el * ((p.slideAmt || 0) / 100) * L * 0.2; // calibrado: tranco do Twitch é curto, não atravessa meia tela
         return { s: 1 + es * ((p.scaleAmt || 0) / 100) * 0.5, dx: ux * d, dy: uy * d, rot: 0, el };
       };
       const c = at(env.t);
@@ -319,7 +326,7 @@ export default [
         if (n > 1) out = smoothMotion(env, out, q, c, n);
       }
       const eb = p.blur ? twitchEnv(env.t, p, 1) : 0;
-      if (eb > 0.01) out = gl.blur(out, eb * ((p.blurAmt || 0) / 100) * ((p.blurBoost ?? 100) / 100) * 55 * env.scale * (L / 1920)); // blur do Twitch é bem forte no plugin
+      if (eb > 0.01) out = gl.blur(out, eb * ((p.blurAmt || 0) / 100) * ((p.blurBoost ?? 100) / 100) * 30 * env.scale * (L / 1920)); // blur do Twitch (calibrado: forte mas curto)
       const ec = p.color ? twitchEnv(env.t, p, 2) : 0;
       const el = p.light ? twitchEnv(env.t, p, 3) : 0;
       const rgbK = c.el * ((p.slideRgb || 0) / 10);

@@ -208,7 +208,7 @@ export default [
       if (r < 0.5) return src;
       return env.gl.pass(LENSBLUR, {
         u_tex: src, u_r: r, u_sides: p.irisShape <= 1 ? 0 : p.irisShape + 1, u_curv: p.curvature / 100, u_rot: rad(p.irisRot), u_boost: p.boost / 100,
-        u_hthr: p.hThreshold / 100, u_gamma: Math.max(0.1, p.gamma), u_bmode: p.boostMode, u_mix: p.mix / 100, u_sxy: [p.scaleX / 100, p.scaleY / 100],
+        u_hthr: p.hThreshold / 100, u_gamma: Math.min(5, Math.max(0.1, p.gamma > 5 ? p.gamma / 100 : p.gamma)), /* BCC grava Gamma ×100 (200 = 2,0) */ u_bmode: p.boostMode, u_mix: p.mix / 100, u_sxy: [p.scaleX / 100, p.scaleY / 100],
       });
     },
   },
