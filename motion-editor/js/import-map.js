@@ -587,6 +587,14 @@ export const IMPORT_RULES = [
       shutter: { n: ['mo blur length'] }, wrap: { n: ['wrap x'], conv: (v) => Math.min(3, Math.max(1, v)) },
     },
     post: (p, raw) => { p.sapphire = true; p.drift = (raw('drift') ?? 0); if (!raw('motion blur')) p.shutter = 0; if (p.ampX === undefined) p.ampX = 100; if (p.ampY === undefined) p.ampY = 100; } },
+  // S_DissolveShake: mesmo tremor do S_Shake (Amplitude × X/Y Rand Amp, Tilt, Seed, Mo Blur) — antes só lia Frequency/Seed
+  { vendor: 'Sapphire', plugin: 'S_DissolveShake', to: 'shake', match: ['S_DissolveShake'],
+    map: {
+      amount: { n: ['amplitude'], conv: (v) => (v < 20 ? v * 100 : v) }, frequency: { n: ['frequency'] },
+      ampX: { n: ['x rand amp'] }, ampY: { n: ['y rand amp'] }, rotation: { n: ['tilt rand amp'] }, zoom: { n: ['z rand amp'], conv: (v) => v * 100 },
+      seed: { n: ['seed'] }, shutter: { n: ['mo blur length'] }, wrap: { n: ['wrap x'], conv: (v) => Math.min(3, Math.max(1, v)) },
+    },
+    post: (p, raw) => { p.sapphire = true; p.style = 1; p.stillness = 0; p.drift = 0; if (!raw('motion blur')) p.shutter = 0; if (p.ampX === undefined) p.ampX = 100; if (p.ampY === undefined) p.ampY = 100; } },
   { vendor: 'Sapphire', plugin: 'S_BlurMoCurves', to: 'blurMoCurves', test: /s_blurmocurves/i,
     map: { center: { n: ['center xy'] }, zDist: { n: ['z dist'] }, rotate: { n: ['rotate'] }, shiftX: { n: ['shift x'] }, shiftY: { n: ['shift y'] }, shutter: { n: ['shutter duration'] }, shutterShift: { i: 56, n: ['shutter shift'] }, bias: { i: 57, n: ['exposure bias'] }, brightness: { i: 58, n: ['brightness'] }, mode: { n: ['effect', 'mode'] }, wrap: { n: ['wrap x'], conv: (v) => Math.min(3, Math.max(1, v)) }, wrapY: { n: ['wrap y'], conv: (v) => Math.min(3, Math.max(1, v)) } } },
   // S_Sharpen: nitidez em faixas de detalhe + Sharpen Width (contraste local largo); Opacity pode passar de 1 (amplifica)

@@ -167,7 +167,9 @@ export default [
     pad: (p, { layer, w, h } = {}) => (isFull(layer) ? 0 : p.amount * 1.3 + (Math.max(w || 0, h || 0) * (p.zoom + p.rotation)) / 100),
     render: (src, p, env) => {
       const fps = env.fps || 30;
-      const oct = Math.max(1, Math.round(p.complexity ?? 1));
+      // S_Shake (Sapphire): um ruído por eixo na Frequency (X/Y Rand Freq = 1). Oitavas extras (2× a frequência)
+      // passavam do limite de 30 q/s e o tremor pulava longe de um quadro para o outro (rastros enormes).
+      const oct = p.sapphire ? 1 : Math.max(1, Math.round(p.complexity ?? 1));
       // ruído normalizado como o random do S_Shake (desvio ~0,55, picos ~±1,4): o noiseG cru tem desvio 0,3 e deixava o tremor fraco
       const wig = (f, seed) => { let v = 0, a = 1, n = 0; for (let o = 0; o < oct; o++) { v += noiseG(f * 2 ** o + o * 0.37, seed + o * 7.7) * a; n += a * a; a *= 0.5; } const x = (v / Math.sqrt(n)) * 1.8; return x / (1 + Math.abs(x) * 0.25); };
       // Impacto: começa forte e decai (curva exponencial), como um tranco de câmera em batida
