@@ -11,6 +11,7 @@ process.argv.slice(2).forEach(add);
 
 const SKIP = /^(MB |ADBE Effect Built In)|LookSuite|Magic Bullet|Colorista|Universe|Deep Glow|Element|Optical Flares/i;
 const out = {};
+const MAXB = +(process.env.MAXB || 60000); // blocos maiores (ex.: Twixtor) com MAXB=200000
 const id = (d, o) => String.fromCharCode(d[o], d[o + 1], d[o + 2], d[o + 3]);
 const u32 = (d, o) => ((d[o] << 24) | (d[o + 1] << 16) | (d[o + 2] << 8) | d[o + 3]) >>> 0;
 const cstr = (d, o, n) => { let s = ''; for (let i = 0; i < n && d[o + i]; i++) s += String.fromCharCode(d[o + i]); return s; };
@@ -38,7 +39,7 @@ for (const f of files) {
           if (c === 'LIST' && id(d, p + 8) === 'sspc') blocks.push(d.slice(p, p + 8 + m + (m & 1)));
           p += 8 + m + (m & 1);
         }
-        names.forEach((mn, i) => { if (blocks[i] && !SKIP.test(mn) && blocks[i].length < 60000 && !out[mn]) out[mn] = Buffer.from(blocks[i]).toString('base64'); });
+        names.forEach((mn, i) => { if (blocks[i] && !SKIP.test(mn) && blocks[i].length < MAXB && !out[mn]) out[mn] = Buffer.from(blocks[i]).toString('base64'); });
       }
       o += 8 + n + (n & 1);
     }
@@ -82,7 +83,15 @@ function clean(node) {
   node.kids = node.kids.map(clean);
   return node;
 }
+// MERGE=1: mantém os moldes que já existem e só acrescenta os novos
+const fresh = new Set(Object.keys(out));
+if (process.env.MERGE) {
+  const prev = await import(new URL('../js/ffx-templates.js', import.meta.url));
+  for (const [k, v] of Object.entries(prev.TEMPLATES)) { out[k] = v; fresh.delete(k); } // moldes antigos (já limpos) ficam como estão
+  if (!lhd3 && prev.LHD3 && prev.LHD3 !== 'null') lhd3 = prev.LHD3;
+}
 for (const mn of Object.keys(out)) {
+  if (!fresh.has(mn)) continue; // moldes antigos já estão limpos
   const [root] = tree(new Uint8Array(Buffer.from(out[mn], 'base64')));
   out[mn] = ser(clean(root)).toString('base64');
 }

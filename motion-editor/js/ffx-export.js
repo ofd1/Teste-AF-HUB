@@ -197,7 +197,8 @@ export async function effectsToFFX(effects, { fps = 30, name = 'MotionFrame' } =
         const cd = tb.kids.find((k) => k.id === 'cdat');
         const colorScale = cd && pd.kind === 'color' && new DataView(cd.data.buffer, cd.data.byteOffset).getFloat64(0) > 1 ? 255 : 1;
         const val = valueOf(pd);
-        const conv = (x) => { const y = invertConv(m?.conv, x, pd.kind); return y === null ? null : toAE(y, pd.kind === 'bool' ? 'bool' : pd.kind, colorScale); };
+        // inv: conversão de volta explícita (popups como o Frame Interp do Twixtor, valores com limite)
+        const conv = (x) => { const y = m?.inv ? m.inv(x) : invertConv(m?.conv, x, pd.kind); return y === null ? null : toAE(y, m?.inv ? 'number' : pd.kind === 'bool' ? 'bool' : pd.kind, colorScale); };
         if (val.keys && pd.kind !== 'color') {
           const ks = val.keys.map((k) => ({ ...k, v: conv(k.v) })).filter((k) => k.v);
           if (ks.length !== val.keys.length) continue;

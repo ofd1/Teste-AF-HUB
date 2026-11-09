@@ -463,7 +463,7 @@ export const IMPORT_RULES = [
   // ---------------------------------------------------------------- plugins de terceiros
   // ---- regras ajustadas com presets reais de edit (sonhei, ftb, galego, ZAZ…)
   { vendor: 'RE:Vision', plugin: 'Twixtor', to: 'twixtor', test: /twixtor/i,
-    map: { speed: { i: 5, n: ['speed %', 'speed'] }, frameBlend: { i: 1, n: ['frame interp', 'frame interpolation'], conv: (v) => v >= 2 } } },
+    map: { speed: { i: 5, n: ['speed %', 'speed'] }, frameBlend: { i: 1, n: ['frame interp', 'frame interpolation'], conv: (v) => v >= 2, inv: (b) => (b ? 3 : 1) } } }, // Frame Interp: 1 Nearest, 2 Blend, 3 Motion Weighted Blend
   { vendor: 'Red Giant', plugin: 'Magic Bullet Looks', to: 'looks', test: /^MB Look|magic ?bullet ?looks/i, expand: looksExpand },
   { vendor: 'Red Giant', plugin: 'Magic Bullet Colorista / Mojo', to: 'colorGrade', test: /colorista|\bmojo\b/i },
   // Topaz Video AI (plugin do AE, categoria "Topaz Video AI"): efeitos "Enhance" e "Frame Interpolation".
@@ -646,7 +646,7 @@ export const IMPORT_RULES = [
 
   // Sapphire (Boris FX)
   { vendor: 'Sapphire', plugin: 'S_GlowRainbow', to: 'glowRainbow', test: /s_glowrainbow|s_glowrings/i, map: { radius: { n: ['width'], conv: (v) => (v < 5 ? v * 500 : v) }, amount: { n: ['brightness'] }, threshold: { n: ['threshold'], conv: pct } } },
-  { vendor: 'Sapphire', plugin: 'S_EdgeRays', to: 'edgeRays', test: /s_edgerays/i, map: { center: { n: ['center', 'rays center'] }, length: { n: ['rays length', 'length'], conv: (v) => (v <= 2 ? v * 60 : v) }, amount: { n: ['rays bright', 'brightness'] } } },
+  { vendor: 'Sapphire', plugin: 'S_EdgeRays', to: 'edgeRays', test: /s_edgerays/i, map: { center: { n: ['center', 'rays center'] }, length: { n: ['rays length', 'length'], conv: (v) => (v <= 2 ? v * 60 : v) }, amount: { n: ['rays brightness', 'rays bright', 'brightness'] } } },
   { vendor: 'Sapphire', plugin: 'S_Swish3D / S_SwishPan', to: 'swish', test: /s_swish|s_swishpan|s_wipeblur|s_blurmotion/i, map: { distance: { n: ['swish distance', 'distance', 'shift'] }, angle: { n: ['swish angle', 'angle', 'direction'] } } },
   { vendor: 'Sapphire', plugin: 'S_JpegDamage', to: 'jpegDamage', test: /s_jpeg|jpeg ?glitch/i, map: { amount: { n: ['amount', 'damage'], conv: (v) => (v <= 1 ? v * 100 : v) }, block: { n: ['block size'] } } },
   { vendor: 'Sapphire', plugin: 'S_Streaks', to: 'streaks', test: /s_streaks/i, map: { length: { n: ['streak length', 'length'], conv: (v) => (v <= 2 ? v * 200 : v) }, amount: { n: ['brightness'] }, angle: { n: ['angle', 'streak angle'] } } },
@@ -661,7 +661,7 @@ export const IMPORT_RULES = [
   { vendor: 'Sapphire', plugin: 'S_ZoomBlur', to: 'radialBlur', test: /s_zoomblur|s_blurzoom|s_radialblur/i, set: { mode: 1 },
     map: { amount: { n: ['zoom amount', 'blur amount', 'amount', 'length'], conv: (v) => (v <= 2 ? v * 100 : v) }, center: { n: ['center', 'center xy'] } } },
   { vendor: 'Sapphire', plugin: 'S_Blur', to: 'blur', test: /s_blur/i, map: { radius: { n: ['width', 'blur amount'], conv: (v) => (v < 5 ? v * 100 : v) } } },
-  { vendor: 'Sapphire', plugin: 'S_WarpChroma', to: 'rgbSplit', test: /s_warpchroma|s_chroma/i, set: { mode: 2 }, map: { amount: { n: ['amount', 'shift'], conv: (v) => (v < 5 ? v * 60 : v) } } },
+  { vendor: 'Sapphire', plugin: 'S_WarpChroma', to: 'rgbSplit', test: /s_warpchroma|s_chroma/i, set: { mode: 2 }, map: { amount: { n: ['amount', 'shift', 'warp amount'], conv: (v) => (v < 5 ? v * 60 : v) } } },
   { vendor: 'Sapphire', plugin: 'S_LensFlare', to: 'lensFlare', test: /s_lensflare|s_flare/i,
     map: { position: { n: ['flare pos', 'flare position', 'position', 'center'] }, brightness: { n: ['brightness'], conv: (v) => (v <= 5 ? v * 100 : v) }, size: { n: ['scale', 'flare scale', 'size'], conv: (v) => (v <= 5 ? v * 220 : v) }, color: { n: ['color', 'flare color'] } } },
   { vendor: 'Sapphire', plugin: 'S_Rays', to: 'lightRays', test: /s_rays/i,
@@ -756,7 +756,7 @@ export const IMPORT_RULES = [
       // padrões do AE: 3 Tijolos, 8 Vidro, 9 Hexágonos, 10 Quebra-cabeça (Jigsaw), 11 Octógonos e quadrados, 15 Tábuas, 18 Quadrados, 21/22 Triângulos
       pattern: { i: 6, conv: (v) => ({ 3: 4, 9: 5, 10: 6, 11: 10, 15: 9, 18: 2, 14: 2, 13: 2, 19: 3, 21: 3, 22: 3, 20: 3, 17: 3 })[Math.round(v)] || 1 },
       depth: { n: ['extrusion depth'], conv: (v) => Math.min(30, Math.max(0, v * 10)) },
-      repetitions: { i: 10, conv: (v) => Math.min(80, Math.max(3, v * 1.6)) },
+      repetitions: { i: 10, conv: (v) => Math.min(80, Math.max(3, v * 1.6)), inv: (v) => v / 1.6 },
       force: { i: 24 }, forceDepth: { i: 26 }, radius: { i: 28, conv: (v) => v * 0.65 }, strength: { i: 30 },
       force2: { i: 32 }, force2Depth: { i: 34 }, radius2: { i: 36, conv: (v) => v * 0.65 }, strength2: { i: 38 },
       spin: { i: 40 }, tumble: { i: 42 }, randomness: { i: 44, conv: (v) => v * 1.5 }, viscosity: { i: 46 }, massVariance: { i: 48 },
