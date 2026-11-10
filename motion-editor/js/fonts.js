@@ -73,7 +73,9 @@ export const GOOGLE_FONTS = ['Anton', 'Bebas Neue', 'Montserrat', 'Poppins', 'Os
   'Krona One', 'Syne', 'Familjen Grotesk', 'Bricolage Grotesque', 'Dela Gothic One', 'Rubik Mono One', 'Rubik Glitch', 'Rubik Wet Paint', 'Creepster', 'Nosifer', 'Metal Mania',
   'UnifrakturMaguntia', 'Pirata One', 'Grenze Gotisch', 'Press Start 2P', 'VT323', 'Silkscreen', 'Major Mono Display', 'Share Tech Mono', 'IBM Plex Mono', 'JetBrains Mono', 'Caveat',
   'Dancing Script', 'Great Vibes', 'Satisfy', 'Sacramento', 'Allura', 'Yellowtail', 'Kaushan Script', 'Marck Script', 'Shadows Into Light', 'Gloria Hallelujah', 'Indie Flower', 'Amatic SC',
-  'Bowlby One', 'Passion One', 'Luckiest Guy', 'Titan One', 'Fredoka', 'Baloo 2', 'Chewy', 'Sigmar', 'Climate Crisis', 'Tilt Warp', 'Tilt Prism', 'Bodoni Moda', 'Fraunces', 'Gloock', 'Instrument Serif'];
+  'Bowlby One', 'Passion One', 'Luckiest Guy', 'Titan One', 'Fredoka', 'Baloo 2', 'Chewy', 'Sigmar', 'Climate Crisis', 'Tilt Warp', 'Tilt Prism', 'Bodoni Moda', 'Fraunces', 'Gloock', 'Instrument Serif',
+  // largas/geométricas (logos e mograph)
+  'Lexend Zetta', 'Lexend Exa', 'Lexend Mega', 'Montserrat Alternates', 'Tomorrow', 'Goldman', 'Anybody', 'Zen Dots', 'Wallpoet', 'Kanit', 'Prompt', 'Saira', 'Saira Expanded', 'Archivo', 'Red Hat Display', 'Jost', 'Figtree', 'Gabarito', 'Onest', 'Albert Sans', 'Mulish', 'Quicksand', 'Comfortaa', 'Nunito Sans', 'Josefin Sans', 'Bai Jamjuree', 'Darker Grotesque', 'Epilogue', 'Hanken Grotesk', 'Schibsted Grotesk', 'Instrument Sans', 'Geologica', 'Golos Text', 'Rethink Sans', 'Readex Pro', 'Russo One'];
 const gLoaded = new Set();
 const famOf = (css) => String(css || '').split(',')[0].trim().replace(/^["']|["']$/g, '');
 

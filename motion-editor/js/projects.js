@@ -5,7 +5,7 @@ import { escapeHtml, uid } from './util.js';
 import { flatLayers } from './state.js';
 import { putMedia, getMedia, deleteMedia, listKeys } from './idb.js';
 
-export const APP_VERSION = 'v95';
+export const APP_VERSION = 'v96';
 const INDEX = 'motionframe.projects.v1';
 const KEY = (id) => `motionframe.project.${id}`;
 const SETTINGS = 'motionframe.settings.v1';
@@ -150,7 +150,8 @@ export class HomeScreen {
           <button data-h="importAE"><span>Ae</span>Importar do After Effects</button>
           <button data-h="presets"><span>★</span>Meus presets</button>
           <button data-h="plugins"><span>⤒</span>Plugins (.aex)</button>
-          <button data-h="demoLogo"><span>✦</span>Demo: logo animada</button>
+          <button data-h="logoAnim"><span>✦</span>Animar minha logo</button>
+          <button data-h="demoLogo"><span>▶</span>Demo: logo animada</button>
         </div>
         <div class="home-recover"></div>
         <h3 class="home-h">Projetos <span class="muted small">${list.length}</span></h3>

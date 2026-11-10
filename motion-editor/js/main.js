@@ -685,7 +685,7 @@ function simpleItems(layer, t, many) {
     ['more', '⋯', 'Mais'],
   ];
   if (!toolbarMore) return main;
-  return [ ['composer', '❖', 'Animações prontas'], ['add-adjustment', '◐', 'Camada de cor'], ['group', '⊞', 'Agrupar'], ['import-ffx', '⤒', 'Importar .ffx'], ['marker', '▾', 'Marcar batida'], ['comp', '⚙', 'Tamanho e FPS']];
+  return [ ['composer', '❖', 'Animações prontas'], ['logo-anim', '✦', 'Animar logo'], ['font-id', '🔤', 'Identificar fonte'], ['add-adjustment', '◐', 'Camada de cor'], ['group', '⊞', 'Agrupar'], ['import-ffx', '⤒', 'Importar .ffx'], ['marker', '▾', 'Marcar batida'], ['comp', '⚙', 'Tamanho e FPS']];
 }
 
 function renderToolbar() {
@@ -718,7 +718,7 @@ function renderToolbar() {
     : [
       ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
       ['add-media', '🎞', 'Vídeo / Foto', true], ['add-audio', '♪', 'Música'], ['add-text', 'T', 'Texto'], ['add', '＋', 'Mais camadas'],
-      ['presets', '★', 'Presets'], ['composer', '❖', 'Composer'], ['add-adjustment', '◐', 'Ajuste (CC)'], ...(layerClipboard.length ? [['paste-layer', '📋', 'Colar camada']] : []), ['group', '⊞', 'Agrupar'], ['import-ffx', '⤒', 'Importar .ffx'], ['comp', '⚙', 'Composição'],
+      ['presets', '★', 'Presets'], ['composer', '❖', 'Composer'], ['add-adjustment', '◐', 'Ajuste (CC)'], ...(layerClipboard.length ? [['paste-layer', '📋', 'Colar camada']] : []), ['logo-anim', '✦', 'Animar logo'], ['font-id', '🔤', 'Identificar fonte'], ['group', '⊞', 'Agrupar'], ['import-ffx', '⤒', 'Importar .ffx'], ['comp', '⚙', 'Composição'],
     ];
   toolbar.innerHTML = items.map(([cmd, icon, label, hot]) => (cmd === 'sep' ? '<span class="tool sep"></span>' : `<button class="tool ${hot ? 'hot' : ''}" data-cmd="${cmd}" title="${escapeHtml(TIPS[cmd] || label)}"><span class="ti">${ico(icon)}</span><span class="tl">${label}</span></button>`)).join('');
   toolbar.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => commands[b.dataset.cmd]?.()));
@@ -1254,6 +1254,8 @@ const commands = {
   effects: () => openSheet('effects'),
   presets: () => openSheet('presets'),
   composer: () => openSheet('composer'),
+  'logo-anim': () => animateLogoFlow(),
+  'font-id': async () => { const { fontIdDialog } = await import('./fontid-ui.js'); await fontIdDialog(store, { toast }); renderToolbar(); },
   props: () => openSheet('props'),
   keys: () => openSheet('keys'),
   speed: () => { ensureSpeedEffect(store.layer()); openSheet('effects'); },
@@ -1580,6 +1582,22 @@ async function openProjectById(id) {
   if (desktop.matches) { sheet.classList.add('open'); renderDock(); }
 }
 
+/** Animar logo: escolhe a imagem, separa em peças e abre um projeto novo com a animação montada. */
+async function animateLogoFlow() {
+  const [f] = await pickFiles('image/*', false);
+  if (!f) return;
+  try {
+    const { splitLogo, buildLogoAnimation } = await import('./logoanim.js');
+    const img = await createImageBitmap(f);
+    const sp = splitLogo(img);
+    if (!sp.pieces.length) throw new Error('não achei a logo na imagem (fundo e logo da mesma cor?)');
+    const P = await buildLogoAnimation(sp, { name: `${f.name.replace(/\.[^.]+$/, '')} · logo animada` });
+    saveProjectData(P, null);
+    await openProjectById(P.id);
+    toast(`Logo separada em ${sp.pieces.length} peças (${sp.lines} linha(s)). Toque ▶ — cada peça é uma camada editável.`, 'ok', 6000);
+  } catch (e) { toast(`Não deu para animar a logo: ${e.message}`, 'error', 6000); }
+}
+
 async function createProjectFlow() {
   const s = getSettings();
   const pre = COMP_PRESETS.find((x) => x.id === s.compPreset) || COMP_PRESETS[0];
@@ -1757,6 +1775,7 @@ const home = new HomeScreen({
   afterDelete: () => cleanUnusedMedia(),
   create: () => createProjectFlow(),
   importProject: () => importProjectFile(),
+  logoAnim: () => animateLogoFlow(),
   demoLogo: async () => {
     // projeto de exemplo de motion design: logo feita com o pacote MoGraph (formas com Trim Paths, texto cinético, logo reveal)
     const { buildLogoDemoProject } = await import('./mograph.js');
