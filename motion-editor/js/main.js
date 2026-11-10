@@ -178,13 +178,16 @@ function drawOverlay() {
 }
 
 let lastFrame = performance.now();
+const playClock = { t0: 0, wall0: 0, last: 0 };
 function loop(now) {
-  const dt = Math.min(0.1, (now - lastFrame) / 1000);
   lastFrame = now;
   if (store.playing && !store.exporting) {
-    let t = store.time + dt;
-    if (t >= store.project.duration) { t = 0; playAudio(store.project, 0); }
-    store.time = t;
+    // relógio de verdade (como CapCut): o som nunca espera a imagem; se um quadro pesado atrasa, a prévia pula
+    // quadros em vez de ficar lenta e dessincronizar do som
+    if (Math.abs(store.time - playClock.last) > 0.02) { playClock.t0 = store.time; playClock.wall0 = now; playAudio(store.project, store.time); } // alguém mudou o tempo (scrub)
+    let t = playClock.t0 + (now - playClock.wall0) / 1000;
+    if (t >= store.project.duration) { t = 0; playClock.t0 = 0; playClock.wall0 = now; playAudio(store.project, 0); }
+    store.time = t; playClock.last = t;
     store.emit('time');
   }
   if ((dirty || store.playing) && !store.exporting) {
@@ -286,7 +289,7 @@ function setPlaying(p) {
   store.playing = p;
   playBtn.innerHTML = ico(p ? 'pause' : 'play');
   lastFrame = performance.now();
-  if (p) playAudio(store.project, store.time);
+  if (p) { playClock.t0 = playClock.last = store.time; playClock.wall0 = performance.now(); playAudio(store.project, store.time); }
   else { stopAudio(); pauseAll(); store.setTime(store.time); }
   dirty = true;
 }

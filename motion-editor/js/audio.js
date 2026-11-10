@@ -51,6 +51,8 @@ export async function loadAudio(src) {
   let buf;
   try { buf = await job; } finally { pending.delete(src); }
   buffers.set(src, buf);
+  // terminou de carregar com o vídeo tocando: entra no som agora (antes só tocava depois de pausar e dar play)
+  if (playState) { const ps = playState; setTimeout(() => { if (playState === ps) playAudio(ps.project, ps.t0 + (performance.now() - ps.wall0) / 1000); }, 0); }
   return buf;
 }
 
@@ -126,34 +128,42 @@ function scheduleGain(gain, l, ctxStart, fromT) {
 }
 
 /** Inicia a reprodução de todas as camadas de áudio a partir do tempo t. */
+let playState = null; // { project, t0, wall0 } enquanto toca: para encaixar sons que terminam de carregar depois do play
+
 export function playAudio(project, t) {
   stopAudio();
   iosAudioSession();
   const ac = audioCtx();
   if (ac.state === 'suspended') ac.resume();
+  playState = { project, t0: t, wall0: performance.now() };
   const now = ac.currentTime + 0.03;
   for (const l of audioLayers(project)) {
-    if (t >= l.outPoint) continue;
-    const buf = buffers.get(l.props.src);
-    const src = ac.createBufferSource();
-    src.buffer = buf;
-    const gain = ac.createGain();
-    const rate = l.type === 'video' ? (l.props.speed ?? 1) : 1;
-    src.playbackRate.value = rate;
-    src.connect(gain).connect(ac.destination);
-    const startAt = Math.max(0, l.inPoint - t);
-    const offset = (l.props.sourceStart || 0) + Math.max(0, t - l.inPoint) * rate;
-    const dur = (l.outPoint - Math.max(t, l.inPoint)) * rate;
-    if (offset >= buf.duration) continue;
-    scheduleGain(gain, l, now, t);
-    src.start(now + startAt, offset, dur);
-    playing.push(src);
+    // cada camada isolada: um arquivo com problema (velocidade/duração inválida) não cala as outras
+    try {
+      if (t >= l.outPoint) continue;
+      const buf = buffers.get(l.props.src);
+      const rate = l.type === 'video' ? (l.props.speed ?? 1) : 1;
+      if (!buf || !(rate > 0)) continue;
+      const startAt = Math.max(0, l.inPoint - t);
+      const offset = Math.max(0, (l.props.sourceStart || 0) + Math.max(0, t - l.inPoint) * rate);
+      const dur = (l.outPoint - Math.max(t, l.inPoint)) * rate;
+      if (offset >= buf.duration || !(dur > 0)) continue;
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      src.playbackRate.value = rate;
+      const gain = ac.createGain();
+      src.connect(gain).connect(ac.destination);
+      scheduleGain(gain, l, now, t);
+      src.start(now + startAt, offset, dur);
+      playing.push(src);
+    } catch (e) { console.warn('som da camada falhou', l.id, e); }
   }
 }
 
 export function stopAudio() {
   for (const s of playing) { try { s.stop(); } catch { /* já parado */ } }
   playing = [];
+  playState = null;
 }
 
 /** Mixa o áudio do projeto (para exportação). */

@@ -4,7 +4,10 @@
 import { frag, colorFrag, num, ang, col, bool, sel, pos, rgb, noise1 } from './common.js';
 
 // constantes de calibração (ajustadas juntas nas CCs de referência; 1 = padrão)
-const TK = (k) => globalThis.__MF_TUNE?.[k] ?? 1;
+// calibrado juntando FTB, Rafa e Wdzik contra os prints do AE (erro médio 20,9 → 18,4): a Haze/Flare entra por cima e
+// por baixo, com metade da força; Contraste e Gamma do Colorista pela metade; Saturação +25%; vinheta 0,81
+const TK_DEF = { hdir: 2, vig: 0.81, sat: 1.25, con: 0.5, gam: 0.5, haze: 0.5 };
+const TK = (k) => globalThis.__MF_TUNE?.[k] ?? TK_DEF[k] ?? 1;
 const SHARPEN = frag(`
 uniform sampler2D u_tex2; uniform float u_amount; uniform float u_thr; uniform float u_luma;
 void main() {
