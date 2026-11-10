@@ -344,26 +344,63 @@ export function cacheReady(layer) {
 }
 
 export function cacheStatus() {
-  const building = [...caches.values()].filter((c) => !c.ready && !c.cancelled);
+  const building = [...caches.values()].filter((c) => !c.ready && !c.cancelled && !c.quiet);
   if (!building.length) return null;
   return Math.round((building.reduce((n, c) => n + c.progress, 0) / building.length) * 100);
 }
 
-/** Garante cache para camadas de vídeo com Velocidade (Twixtor). Chamar após mudanças (debounced). */
-export function ensureCaches(project) {
+const TEMPORAL_FX = new Set(['timeSlice', 'sTimeSlice', 'echo', 'bccTemporalBlur', 'wideTime']);
+const hasTemporal = (l) => (l.effects || []).some((fx) => fx.enabled && TEMPORAL_FX.has(fx.type));
+const WIN = 10; // s de vídeo guardados em volta do cursor quando só efeitos de tempo pedem o cache (clipes longos)
+
+/** Garante cache para camadas de vídeo com Velocidade (Twixtor) e efeitos de tempo (Time Slice, Echo…).
+ *  Também para vídeos DENTRO de um grupo/pré-comp que tem o efeito de tempo (antes ficavam sem cache e o Time Slice
+ *  mostrava o mesmo quadro em todas as faixas). Clipes longos só com efeito de tempo: janela de 10 s no fps real em volta
+ *  do cursor, que acompanha a reprodução (antes o cache inteiro caía para poucos quadros por segundo). */
+export function ensureCaches(project, t = null) {
   const ids = new Set();
-  for (const l of flatLayers(project.layers)) {
-    if (l.type !== 'video' || !l.props.src || !(speedEffect(l) || remapEffect(l) || l.props.interpolate || dedupeOf(l) || l.effects.some((fx) => fx.enabled && (fx.type === 'timeSlice' || fx.type === 'sTimeSlice' || fx.type === 'echo' || fx.type === 'bccTemporalBlur')))) continue;
+  const need = [];
+  const walk = (layers, inTemporalGroup) => {
+    for (const l of layers || []) {
+      if (l.type === 'group') { walk(l.props?.layers, inTemporalGroup || hasTemporal(l)); continue; }
+      if (l.type !== 'video' || !l.props.src) continue;
+      const strong = speedEffect(l) || remapEffect(l) || l.props.interpolate || dedupeOf(l);
+      if (strong || hasTemporal(l) || inTemporalGroup) need.push({ l, windowed: !strong && !inTemporalGroup });
+    }
+  };
+  walk(project.layers, false);
+  for (const { l, windowed } of need) {
     ids.add(l.id);
-    const c = caches.get(l.id);
-    if (c && c.key === cacheKey(l)) continue;
-    if (c) { c.cancelled = true; freeCache(c); }
-    buildCache(project, l);
+    let win = null;
+    if (windowed && t != null) {
+      const a = sourceTime(l, l.inPoint), b = sourceTime(l, l.outPoint);
+      if (Math.abs(b - a) > WIN * 1.4) {
+        const c0 = sourceTime(l, Math.max(l.inPoint, Math.min(l.outPoint, t)));
+        win = [c0 - WIN * 0.3, c0 + WIN * 0.7]; // mais quadros à frente (a reprodução anda para frente)
+      }
+    }
+    const key = cacheKey(l) + (win ? '' : '|full');
+    const c = caches.get(l.id), nx = pendingCaches.get(l.id);
+    if (c && c.baseKey === key) {
+      if (!win || !c.win) continue;
+      const cur = sourceTime(l, Math.max(l.inPoint, Math.min(l.outPoint, t)));
+      if (cur > c.win[0] + 1 && cur < c.win[1] - 2.5) continue; // ainda dentro da janela
+      if (nx && !nx.cancelled && cur > nx.win[0] && cur < nx.win[1] - 1) continue; // janela nova já vindo
+    }
+    if (nx) { nx.cancelled = true; freeCache(nx); pendingCaches.delete(l.id); }
+    // troca de janela: o cache atual continua valendo até o novo ficar pronto (o efeito não some durante a troca)
+    const keepOld = c && c.ready && c.baseKey === key && win;
+    if (c && !keepOld) { c.cancelled = true; freeCache(c); caches.delete(l.id); }
+    buildCache(project, l, { key, win, swap: !!keepOld });
   }
   for (const [id, c] of caches) if (!ids.has(id)) { c.cancelled = true; freeCache(c); caches.delete(id); }
+  for (const [id, c] of pendingCaches) if (!ids.has(id)) { c.cancelled = true; freeCache(c); pendingCaches.delete(id); }
 }
+const pendingCaches = new Map();
+let cacheVer = 0;
+export const cacheVersion = () => cacheVer;
 
-async function buildCache(project, layer) {
+async function buildCache(project, layer, { key: baseKey = cacheKey(layer) + '|full', win = null, swap = false } = {}) {
   const key = cacheKey(layer);
   const fps = layer.props.sourceFps || project.fps; // quadros no fps real do vídeo
   let lo = Infinity, hi = -Infinity;
@@ -373,8 +410,9 @@ async function buildCache(project, layer) {
   }
   // Sensitivity (Topaz): mais alto = considera duplicados também quadros quase iguais (0,9 ≈ sensibilidade 20)
   const dupThr = 0.15 + (dedupeOf(layer)?.sens ?? 20) * 0.0375;
-  const entry = { key, fps, t0: 0, frames: [], dup: [], sigs: [], ready: false, progress: 0, cancelled: false };
-  caches.set(layer.id, entry);
+  if (win) { lo = Math.max(lo, win[0]); hi = Math.min(hi, win[1]); }
+  const entry = { key, baseKey, win, fps, t0: 0, frames: [], dup: [], sigs: [], ready: false, progress: 0, cancelled: false, quiet: swap };
+  if (swap) pendingCaches.set(layer.id, entry); else caches.set(layer.id, entry);
   cacheListener();
   const v = makeVideo(layer.props.src);
   await waitMeta(v);
@@ -407,6 +445,8 @@ async function buildCache(project, layer) {
   releaseVideo(v);
   if (entry.cancelled) return;
   entry.ready = true;
+  cacheVer++;
+  if (swap) { const old = caches.get(layer.id); if (old && old !== entry) { old.cancelled = true; freeCache(old); } caches.set(layer.id, entry); pendingCaches.delete(layer.id); }
   cacheListener();
   onChange();
 }

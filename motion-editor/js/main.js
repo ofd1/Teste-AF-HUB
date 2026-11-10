@@ -8,7 +8,7 @@ import { setBgListener, ensureBgModel, bgStatus } from './bgremove.js';
 import { setGLLostListener, glLost } from './gl.js';
 import { createEffectInstance, setPluginLookup, upgradeLayerEffects } from './presets.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
-import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, detectFps, mediaReady, framesDrawable } from './media.js';
+import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, cacheVersion, detectFps, mediaReady, framesDrawable } from './media.js';
 import { loadAudio, playAudio, stopAudio, detectBeats } from './audio.js';
 import { valueAt, setValue, setKey, anim } from './anim.js';
 import { setThreeD } from './three-d.js';
@@ -191,6 +191,8 @@ function loop(now) {
     store.emit('time');
   }
   if ((dirty || store.playing) && !store.exporting) {
+    // janela do cache de quadros (Time Slice/Echo em clipe longo) acompanha o cursor
+    if (now - lastEnsure > 1000) { lastEnsure = now; ensureCaches(store.project, store.time); }
     prepare(store.project, store.time, { playing: store.playing });
     if (curQuality() !== quality) { quality = curQuality(); layoutCanvas(); }
     const fps = store.project.fps || 30, fi = Math.round(store.time * fps + 1e-6);
@@ -240,10 +242,10 @@ requestAnimationFrame(loop);
 const cachePill = document.createElement('div');
 cachePill.className = 'cache-pill';
 stage.appendChild(cachePill);
-let lastCacheSt = null;
+let lastCacheSt = null, lastCacheVer = 0, lastEnsure = 0;
 setCacheListener(() => {
   const st = cacheStatus();
-  if (lastCacheSt != null && st == null) frameCacheClear(); // cache do Twixtor ficou pronto: quadros interpolados mudam
+  if (cacheVersion() !== lastCacheVer) { lastCacheVer = cacheVersion(); frameCacheClear(); } // cache novo pronto: quadros mudam
   lastCacheSt = st;
   cachePill.textContent = st == null ? '' : `Preparando quadros… ${st}%`;
   cachePill.classList.toggle('show', st != null);
@@ -252,7 +254,7 @@ setCacheListener(() => {
 let cacheTimer = 0;
 function scheduleCaches() {
   clearTimeout(cacheTimer);
-  cacheTimer = setTimeout(() => { if (!store.exporting) ensureCaches(store.project); }, 600);
+  cacheTimer = setTimeout(() => { if (!store.exporting) ensureCaches(store.project, store.time); }, 600);
 }
 
 // fontes do Google usadas nos textos: carrega ao abrir o projeto; quando chegam, redesenha
