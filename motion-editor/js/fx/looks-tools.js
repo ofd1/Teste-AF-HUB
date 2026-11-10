@@ -99,6 +99,9 @@ function lt(mode, map) {
   return {
     render: (src, p, env) => {
       const u = map(p);
+      const T = globalThis.__MF_TUNE || {};
+      if (mode === 3) u.a *= T.lkexp ?? 1;
+      if (mode === 4) u.a = 1 + (u.a - 1) * (T.lksat ?? 1);
       return env.gl.pass(LOOKTOOL, { u_tex: src, u_mode: mode, u_a: u.a ?? 0, u_b: u.b ?? 0, u_c: u.c ?? 0, u_d: u.d ?? 0, u_e: u.e ?? 0, u_c1: u.c1 || [1, 1, 1], u_c2: u.c2 || [1, 1, 1], u_c3: u.c3 || [1, 1, 1], u_str: (p.str ?? 100) / 100 });
     },
   };

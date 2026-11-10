@@ -3,6 +3,8 @@
 // Photo Filter e Colorista (lift/gamma/gain).
 import { frag, colorFrag, num, ang, col, bool, sel, pos, rgb, noise1 } from './common.js';
 
+// constantes de calibração (ajustadas juntas nas CCs de referência; 1 = padrão)
+const TK = (k) => globalThis.__MF_TUNE?.[k] ?? 1;
 const SHARPEN = frag(`
 uniform sampler2D u_tex2; uniform float u_amount; uniform float u_thr; uniform float u_luma;
 void main() {
@@ -408,16 +410,16 @@ const EFFECTS = [
       const pts = [1, 2, 3, 4].map((i) => [p[`curve${i}x`], p[`curve${i}y`]]).filter(([x]) => x > 0 && x < 1).sort((a, b) => a[0] - b[0]);
       const curve = [0, 1, 2, 3].flatMap((i) => pts[i] || [1, 0]);
       let out = gl.pass(LOOKS, {
-        u_tex: src, u_exp: p.exposure, u_sat: p.saturation / 100, u_hue: p.hue / 360, u_con: p.contrast / 100, u_fade: p.fade / 100,
+        u_tex: src, u_exp: p.exposure * TK('exp'), u_sat: 1 + (p.saturation / 100 - 1) * TK('sat'), u_hue: p.hue / 360, u_con: p.contrast / 100 * TK('con'), u_fade: p.fade / 100,
         u_svl: { f1: (p.satLum && p.satLum.length === 7 ? p.satLum : [0, 0, 0, 0, 0, 0, 0]) }, u_svs: { f1: (p.satSat && p.satSat.length === 7 ? p.satSat : [0, 0, 0, 0, 0, 0, 0]) }, u_svon: [...(p.satLum || []), ...(p.satSat || [])].some((x) => Math.abs(x) > 1e-4) ? 1 : 0,
-        u_mtint: Math.max(-1, Math.min(1, (p.mojoTint || 0) / 100)), u_2s: Math.max(0, Math.min(1, (p.twoStrip || 0) / 100)), u_mojo: p.mojo / 100, u_cool: (p.mojoCool ?? 50) / 50, u_skin: (p.mojoSkin ?? 50) / 50, u_punch: (p.punch || 0) / 100, u_bleach: (p.bleach || 0) / 100,
-        u_temp: (p.temperature || 0) / 100, u_tint: (p.tint || 0) / 100,
-        u_vig: p.vignette / 100, u_vsize: p.vignetteSize / 100, u_strength: s,
+        u_mtint: Math.max(-1, Math.min(1, (p.mojoTint || 0) / 100)), u_2s: Math.max(0, Math.min(1, (p.twoStrip || 0) / 100)), u_mojo: p.mojo / 100 * TK('mojo'), u_cool: (p.mojoCool ?? 50) / 50, u_skin: (p.mojoSkin ?? 50) / 50, u_punch: (p.punch || 0) / 100, u_bleach: (p.bleach || 0) / 100,
+        u_temp: (p.temperature || 0) / 100 * TK('temp'), u_tint: (p.tint || 0) / 100 * TK('tnt'),
+        u_vig: p.vignette / 100 * TK('vig'), u_vsize: p.vignetteSize / 100, u_strength: s,
         u_filter: rgb(p.filter), u_fdens: p.filterDensity / 100,
-        u_lift: [p.liftR, p.liftG, p.liftB], u_gamma: [p.gammaR, p.gammaG, p.gammaB], u_gain: [p.gainR, p.gainG, p.gainB],
-        u_hsl: { vec3: HSL_COLORS.flatMap(([k]) => [p[`hsl${k}H`] || 0, p[`hsl${k}S`] || 0, p[`hsl${k}L`] || 0]) },
+        u_lift: [p.liftR, p.liftG, p.liftB].map((v) => v * TK('lift')), u_gamma: [p.gammaR, p.gammaG, p.gammaB].map((v) => 1 + (v - 1) * TK('gam')), u_gain: [p.gainR, p.gainG, p.gainB].map((v) => 1 + (v - 1) * TK('gain')),
+        u_hsl: { vec3: HSL_COLORS.flatMap(([k]) => [(p[`hsl${k}H`] || 0) * TK('hslh'), (p[`hsl${k}S`] || 0) * TK('hsls'), (p[`hsl${k}L`] || 0) * TK('hsll')]) },
         u_curve: { vec2: curve }, u_ncurve: pts.length,
-        u_spexp: p.spotExposure || 0, u_spc: p.spotCenter || [0.5, 0.5], u_spsize: (p.spotSize ?? 50) / 100, u_spsoft: Math.max(0.01, (p.spotSoft ?? 50) / 100), u_spcol: rgb(p.spotColor || [1, 1, 1, 1]),
+        u_spexp: (p.spotExposure || 0) * TK('spot'), u_spc: p.spotCenter || [0.5, 0.5], u_spsize: (p.spotSize ?? 50) / 100, u_spsoft: Math.max(0.01, (p.spotSoft ?? 50) / 100), u_spcol: rgb(p.spotColor || [1, 1, 1, 1]),
         u_spasp: p.spotAspect ?? 1, u_spinv: !!p.spotInvert, u_imgasp: [1, env.h / env.w],
         u_grexp: p.gradExposure || 0, u_grang: p.gradAngle || 0, u_groff: p.gradOffset || 0, u_grsoft: Math.max(0.01, p.gradSoft ?? 0.5), u_grcol: rgb(p.gradColor || [1, 1, 1, 1]),
         u_mixr: p.mixR || [1, 0, 0], u_mixg: p.mixG || [0, 1, 0], u_mixb: p.mixB || [0, 0, 1], u_mixamt: (p.mixAmt || 0) * s, u_lkc: p.lkContrast || 0, u_lkpiv: p.lkPivot ?? 0.5, u_lkcomp: p.lkComp || 0, u_gr2: !!p.gradTwoPoint, u_grp1: p.gradP1 || [0.5, 0], u_grp2: p.gradP2 || [0.5, 0.5],
@@ -438,12 +440,12 @@ const EFFECTS = [
         if (dt[0] < 0.995 || dt[1] < 0.995 || dt[2] < 0.995) th = gl.pass(TINTMUL, { u_tex: th, u_c: [dt[0], dt[1], dt[2]] });
         const b = gl.blur(th, p.diffusionRadius * 0.5 * env.scale);
         // ×2 com proteção das sombras: medido nas CCs FTB/Galego (AE: pretos iguais, brancos mais claros)
-        out = gl.pass(DIFF_COMP, { u_tex: out, u_tex2: b, u_amount: (p.diffusion / 100) * s * 2, u_prot: 0.9 });
+        out = gl.pass(DIFF_COMP, { u_tex: out, u_tex2: b, u_amount: (p.diffusion / 100) * s * 2 * TK('diff'), u_prot: 0.9 });
       }
       if ((p.hazeExposure ?? -99) > -20 && s > 0) {
         const small = gl.copy(out, 96, Math.max(16, Math.round(96 * out.h / out.w)));
         const soft = gl.blur(small, Math.max(0.5, ((p.hazeSoftness ?? 60) / 100) * small.h * 0.5 + 1), 3);
-        out = gl.pass(HAZE, { u_tex: out, u_tex2: soft, u_exp: Math.pow(2, p.hazeExposure) * 0.4 * s, u_spill: Math.max(0.01, (p.hazeSpill ?? 16) / 100), u_reach: Math.max(0.02, (p.hazeReach ?? 50) / 100 * 0.5), u_tintc: rgb(p.hazeTint || [1, 0.92, 0.82, 1]), u_mbs: Math.min(0.98, (p.hazeMBSize ?? 0) / 100 * MB_SIZE_K), u_mbsh: 0, u_mbk: MB_SHADE_K, u_mono: 1, u_mbh: ((p.hazeMBShade ?? 0) / 100) });
+        out = gl.pass(HAZE, { u_tex: out, u_tex2: soft, u_exp: Math.pow(2, p.hazeExposure) * 0.4 * s * TK('haze'), u_spill: Math.max(0.01, (p.hazeSpill ?? 16) / 100), u_reach: Math.max(0.02, (p.hazeReach ?? 50) / 100 * 0.5), u_tintc: rgb(p.hazeTint || [1, 0.92, 0.82, 1]), u_mbs: Math.min(0.98, (p.hazeMBSize ?? 0) / 100 * MB_SIZE_K), u_mbsh: 0, u_mbk: MB_SHADE_K, u_mono: 1, u_mbh: ((p.hazeMBShade ?? 0) / 100) });
       }
       if ((p.anamSize || 0) > 0 && s > 0) {
         const hi = gl.pass(ANAM_HI, { u_tex: out, u_thr: (p.anamThreshold ?? 70) / 100, u_soft: 0.15 });

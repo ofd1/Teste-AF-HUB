@@ -46,7 +46,7 @@ export function sCurveLut(v, str = 1) {
   const c = Math.max(0, v[0] ?? 0), m = clampN(v[1] ?? 0.5, 0.02, 0.98), b = clampN(v[2] ?? 0.5, 0.02, 0.98);
   const bp = v[3] || 0, wp = v[4] ?? 1;
   const g = Math.log(m) / Math.log(b); // gama que leva o Brightness (entrada) ao Midpoint (saída)
-  const k = Math.log1p(c) * 0.6;       // Contrast → expoente do S (0 = reto; calibrado no print do AE, Wdzik CC)
+  const k = Math.log1p(c) * 0.6 * (globalThis.__MF_TUNE?.scurve ?? 1);       // Contrast → expoente do S (0 = reto; calibrado no print do AE, Wdzik CC)
   const f = (x0) => {
     let x = clampN((x0 - bp) / Math.max(1e-3, wp - bp), 0, 1);
     x = x ** g;
