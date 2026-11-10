@@ -96,7 +96,7 @@ const LGG = colorFrag('uniform vec3 u_lift, u_gamma, u_gain; uniform float u_sat
 const LOOKS = frag(`
 uniform float u_svl[7], u_svs[7]; uniform float u_svon;
 float curve7(float x, float c[7]) { x = clamp(x, 0.0, 1.0) * 6.0; float r = c[6]; for (int i = 0; i < 6; i++) { if (x >= float(i) && x < float(i + 1)) r = mix(c[i], c[i + 1], x - float(i)); } return r; }
-uniform float u_mtint;  uniform float u_2s; uniform float u_exp, u_sat, u_hue, u_con, u_fade, u_mojo, u_cool, u_skin, u_punch, u_bleach, u_vig, u_vsize, u_strength, u_temp, u_tint, u_fdens;
+uniform float u_mtint; uniform float u_vasp; uniform float u_2s; uniform float u_exp, u_sat, u_hue, u_con, u_fade, u_mojo, u_cool, u_skin, u_punch, u_bleach, u_vig, u_vsize, u_strength, u_temp, u_tint, u_fdens;
 uniform vec3 u_filter, u_lift, u_gamma, u_gain, u_mixr, u_mixg, u_mixb; uniform float u_mixamt;
 uniform vec3 u_hsl[8];
 uniform vec2 u_curve[4]; uniform float u_ncurve;
@@ -249,7 +249,7 @@ void main() {
   r += vec3(curveDy(clamp(r.r, 0.0, 1.0)), curveDy(clamp(r.g, 0.0, 1.0)), curveDy(clamp(r.b, 0.0, 1.0)));
   r = mix(r, vec3(0.08) + r * 0.86, u_fade);
   // vinheta
-  vec2 cu = contentUV(v_uv) - 0.5;
+  vec2 cu = (contentUV(v_uv) - 0.5) * vec2(1.0, u_vasp);
   r *= 1.0 - smoothstep(u_vsize, u_vsize + 0.5, length(cu) * 1.4142) * u_vig;
   r = clamp(r, 0.0, 1.0);
   gl_FragColor = pre(vec4(mix(c0.rgb, r, u_strength), c0.a));
@@ -327,6 +327,12 @@ void main() {
 const MB_SIZE_K = 0.5, MB_SHADE_K = 0.3;
 const HAZE = frag(`
 uniform sampler2D u_tex2; uniform float u_exp, u_spill, u_reach, u_mbs, u_mbsh, u_mbk, u_mono, u_mbh; uniform vec3 u_tintc;
+uniform float u_hdir;
+vec3 stripV(float y0, float y1, float x) {
+  vec3 acc = vec3(0.0);
+  for (int i = 0; i < 6; i++) { float y = mix(y0, y1, (float(i) + 0.5) / 6.0); acc += texture2D(u_tex2, fromContent(vec2(x, y))).rgb; }
+  return acc / 6.0;
+}
 vec3 strip(float x0, float x1, float y) {
   vec3 acc = vec3(0.0);
   for (int i = 0; i < 6; i++) { float x = mix(x0, x1, (float(i) + 0.5) / 6.0); acc += texture2D(u_tex2, fromContent(vec2(x, y))).rgb; }
@@ -335,9 +341,13 @@ vec3 strip(float x0, float x1, float y) {
 void main() {
   vec4 a = texture2D(u_tex, v_uv);
   vec2 c = contentUV(v_uv);
-  vec3 L = strip(0.0, u_spill, c.y), R = strip(1.0 - u_spill, 1.0, c.y);
+  vec3 L, R; float wl, wr;
+  if (u_hdir < 0.5) { L = strip(0.0, u_spill, c.y); R = strip(1.0 - u_spill, 1.0, c.y); }
+  else { L = stripV(0.0, u_spill, c.x); R = stripV(1.0 - u_spill, 1.0, c.x); }
   L = pow(L, vec3(2.2)); R = pow(R, vec3(2.2));
-  float wl = exp(-c.x / max(u_reach, 0.01)), wr = exp(-(1.0 - c.x) / max(u_reach, 0.01));
+  float pc = u_hdir < 0.5 ? c.x : c.y;
+  wl = exp(-pc / max(u_reach, 0.01)); wr = exp(-(1.0 - pc) / max(u_reach, 0.01));
+  if (u_hdir > 1.5) wr = 0.0;
   // a luz da Haze/Flare tem a cor do Tint (só o brilho vem das laterais da imagem) — medido nas CCs Wdzik/FTB
   L = mix(L, vec3(luma(L)), u_mono); R = mix(R, vec3(luma(R)), u_mono);
   vec3 h = (L * wl + R * wr) * u_tintc * u_exp;
@@ -414,7 +424,7 @@ const EFFECTS = [
         u_svl: { f1: (p.satLum && p.satLum.length === 7 ? p.satLum : [0, 0, 0, 0, 0, 0, 0]) }, u_svs: { f1: (p.satSat && p.satSat.length === 7 ? p.satSat : [0, 0, 0, 0, 0, 0, 0]) }, u_svon: [...(p.satLum || []), ...(p.satSat || [])].some((x) => Math.abs(x) > 1e-4) ? 1 : 0,
         u_mtint: Math.max(-1, Math.min(1, (p.mojoTint || 0) / 100)), u_2s: Math.max(0, Math.min(1, (p.twoStrip || 0) / 100)), u_mojo: p.mojo / 100 * TK('mojo'), u_cool: (p.mojoCool ?? 50) / 50, u_skin: (p.mojoSkin ?? 50) / 50, u_punch: (p.punch || 0) / 100, u_bleach: (p.bleach || 0) / 100,
         u_temp: (p.temperature || 0) / 100 * TK('temp'), u_tint: (p.tint || 0) / 100 * TK('tnt'),
-        u_vig: p.vignette / 100 * TK('vig'), u_vsize: p.vignetteSize / 100, u_strength: s,
+        u_vig: p.vignette / 100 * TK('vig'), u_vasp: TK('vasp'), u_vsize: p.vignetteSize / 100, u_strength: s,
         u_filter: rgb(p.filter), u_fdens: p.filterDensity / 100,
         u_lift: [p.liftR, p.liftG, p.liftB].map((v) => v * TK('lift')), u_gamma: [p.gammaR, p.gammaG, p.gammaB].map((v) => 1 + (v - 1) * TK('gam')), u_gain: [p.gainR, p.gainG, p.gainB].map((v) => 1 + (v - 1) * TK('gain')),
         u_hsl: { vec3: HSL_COLORS.flatMap(([k]) => [(p[`hsl${k}H`] || 0) * TK('hslh'), (p[`hsl${k}S`] || 0) * TK('hsls'), (p[`hsl${k}L`] || 0) * TK('hsll')]) },
@@ -445,7 +455,7 @@ const EFFECTS = [
       if ((p.hazeExposure ?? -99) > -20 && s > 0) {
         const small = gl.copy(out, 96, Math.max(16, Math.round(96 * out.h / out.w)));
         const soft = gl.blur(small, Math.max(0.5, ((p.hazeSoftness ?? 60) / 100) * small.h * 0.5 + 1), 3);
-        out = gl.pass(HAZE, { u_tex: out, u_tex2: soft, u_exp: Math.pow(2, p.hazeExposure) * 0.4 * s * TK('haze'), u_spill: Math.max(0.01, (p.hazeSpill ?? 16) / 100), u_reach: Math.max(0.02, (p.hazeReach ?? 50) / 100 * 0.5), u_tintc: rgb(p.hazeTint || [1, 0.92, 0.82, 1]), u_mbs: Math.min(0.98, (p.hazeMBSize ?? 0) / 100 * MB_SIZE_K), u_mbsh: 0, u_mbk: MB_SHADE_K, u_mono: 1, u_mbh: ((p.hazeMBShade ?? 0) / 100) });
+        out = gl.pass(HAZE, { u_tex: out, u_tex2: soft, u_exp: Math.pow(2, p.hazeExposure) * 0.4 * s * TK('haze'), u_spill: Math.max(0.01, (p.hazeSpill ?? 16) / 100), u_reach: Math.max(0.02, (p.hazeReach ?? 50) / 100 * 0.5), u_tintc: rgb(p.hazeTint || [1, 0.92, 0.82, 1]), u_mbs: Math.min(0.98, (p.hazeMBSize ?? 0) / 100 * MB_SIZE_K), u_mbsh: 0, u_mbk: MB_SHADE_K, u_hdir: TK('hdir') - 1.0, u_mono: 1, u_mbh: ((p.hazeMBShade ?? 0) / 100) });
       }
       if ((p.anamSize || 0) > 0 && s > 0) {
         const hi = gl.pass(ANAM_HI, { u_tex: out, u_thr: (p.anamThreshold ?? 70) / 100, u_soft: 0.15 });
