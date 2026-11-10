@@ -1587,14 +1587,13 @@ async function animateLogoFlow() {
   const [f] = await pickFiles('image/*', false);
   if (!f) return;
   try {
-    const { splitLogo, buildLogoAnimation } = await import('./logoanim.js');
+    const { logoAnimDialog } = await import('./logoanim-ui.js');
     const img = await createImageBitmap(f);
-    const sp = splitLogo(img);
-    if (!sp.pieces.length) throw new Error('não achei a logo na imagem (fundo e logo da mesma cor?)');
-    const P = await buildLogoAnimation(sp, { name: `${f.name.replace(/\.[^.]+$/, '')} · logo animada` });
+    const P = await logoAnimDialog(img, f.name.replace(/\.[^.]+$/, ''), async (blob) => { const id = uid('m'); putMedia(id, blob); return { mediaId: id, src: URL.createObjectURL(blob) }; });
+    if (!P) return;
     saveProjectData(P, null);
     await openProjectById(P.id);
-    toast(`Logo separada em ${sp.pieces.length} peças (${sp.lines} linha(s)). Toque ▶ — cada peça é uma camada editável.`, 'ok', 6000);
+    toast('Logo animada criada. Toque ▶ — cada peça é uma camada editável; troque o estilo criando de novo.', 'ok', 6000);
   } catch (e) { toast(`Não deu para animar a logo: ${e.message}`, 'error', 6000); }
 }
 

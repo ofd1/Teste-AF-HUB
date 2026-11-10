@@ -137,96 +137,232 @@ function fx(type, params) {
   return out;
 }
 
+// ---------------------------------------------------------------- estilos de animação automática
+// Cada estilo diz como cada peça entra (posição/escala/rotação/opacidade/efeitos) e quais enfeites o projeto ganha.
+export const LOGO_STYLES = [
+  { id: 'montar', name: 'Montar + anel', desc: 'Peças do símbolo voam e encaixam, anel desenhando, explosão de linhas, letras sobem.' },
+  { id: 'pop', name: 'Pop elástico', desc: 'Cada peça estoura do centro com elástico, em onda do meio para fora, com círculos.' },
+  { id: 'glitch', name: 'Glitch digital', desc: 'Peças piscam em ordem aleatória com RGB split e blocos de glitch até estabilizar.' },
+  { id: 'deslizar', name: 'Corporativo (deslizar)', desc: 'Linha a linha subindo com curva expo, limpo e elegante, com linha de acento.' },
+  { id: 'particulas', name: 'Partículas reunindo', desc: 'Peças espalhadas pela tela se juntam girando, com motion blur.' },
+  { id: 'impacto', name: 'Impacto (carimbo)', desc: 'A logo bate na tela vinda da câmera: flash, tremida, poeira e explosão.' },
+  { id: 'luz', name: 'Revelar com luz', desc: 'Uma faixa de luz passa e cada peça acende quando ela chega.' },
+  { id: 'flip', name: 'Flip de cartões', desc: 'Peças viram como cartões, da esquerda para a direita.' },
+  { id: 'queda', name: 'Cair e quicar', desc: 'Peças caem de cima e quicam no lugar, em ordem aleatória.' },
+  { id: 'tunel', name: 'Zoom túnel', desc: 'Peças vêm de trás da câmera, enormes e desfocadas, e pousam.' },
+  { id: 'digitar', name: 'Digitar (montagem)', desc: 'Peças aparecem uma a uma com um pequeno pop, como digitando.' },
+];
+
+function rng(seed) { let x = seed >>> 0 || 1; return () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return ((x >>> 0) % 100000) / 100000; }; }
+
 /**
- * Monta o projeto. split = splitLogo(...). opts: { name, size:[w,h], fps, duration, saveMedia(blob)→Promise<{mediaId,src}> }
- * A primeira linha colorida (o símbolo) monta voando do centro; linhas de texto entram letra a letra.
+ * Monta o projeto. split = splitLogo(...). opts: { name, style, size:[w,h], fps, duration, background:'logo'|'dark'|'gradient',
+ * pieceMedia:[{mediaId,src}] (opcional, já salvos), saveMedia(blob)→Promise<{mediaId,src}> }
  */
 export async function buildLogoAnimation(split, opts = {}) {
+  const style = opts.style || 'montar';
   const [PW, PH] = opts.size || [1080, 1080];
   const P = createProject(PW, PH);
-  Object.assign(P, { id: uid('prj'), name: opts.name || 'Logo animada', fps: opts.fps || 30, duration: opts.duration || 6, background: split.transparentBg ? '#101014' : hex(split.bg) });
-  const fit = Math.min((PW * 0.78) / split.W, (PH * 0.78) / split.H);
+  const bgHex = split.transparentBg ? '#101014' : hex(split.bg);
+  Object.assign(P, { id: uid('prj'), name: opts.name || 'Logo animada', fps: opts.fps || 30, duration: opts.duration || 6, background: opts.background === 'dark' ? '#0c0c10' : bgHex });
+  const fit = Math.min((PW * 0.78) / split.W, (PH * 0.6) / split.H, (Math.min(PW, PH) * 0.9) / Math.max(split.W, split.H));
   const ox = (PW - split.W * fit) / 2, oy = (PH - split.H * fit) / 2;
   const save = opts.saveMedia || (async (blob) => { const id = uid('m'); await putMedia(id, blob); return { mediaId: id, src: URL.createObjectURL(blob) }; });
   const D = P.duration;
+  const R = rng(7);
   // qual linha é o símbolo: a de cor mais saturada (ou a primeira)
   const lineIds = [...new Set(split.pieces.map((p) => p.line))];
-  const lineSat = lineIds.map((li) => { const ps = split.pieces.filter((p) => p.line === li); return ps.reduce((s, p) => s + sat(p.color) * p.area, 0) / ps.reduce((s, p) => s + p.area, 0); });
+  const lineSat = lineIds.map((li) => { const ps = split.pieces.filter((p) => p.line === li); return ps.reduce((s2, p) => s2 + sat(p.color) * p.area, 0) / ps.reduce((s2, p) => s2 + p.area, 0); });
   const emblemLine = lineIds.length > 1 && Math.max(...lineSat) > 0.25 ? lineIds[lineSat.indexOf(Math.max(...lineSat))] : lineIds.length > 1 ? lineIds[0] : -1;
-  const accent = (() => { const e = split.pieces.filter((p) => p.line === emblemLine); return e.length ? e.reduce((s, p) => s.map((v, i) => v + p.color[i] * p.area), [0, 0, 0]).map((v) => v / e.reduce((s, p) => s + p.area, 0)) : [255, 255, 255]; })();
   const emb = split.pieces.filter((p) => p.line === emblemLine);
-  const ecx = emb.length ? ox + (Math.min(...emb.map((p) => p.x)) + Math.max(...emb.map((p) => p.x + p.w))) / 2 * fit : PW / 2;
-  const ecy = emb.length ? oy + (Math.min(...emb.map((p) => p.y)) + Math.max(...emb.map((p) => p.y + p.h))) / 2 * fit : PH / 2;
-  const er = emb.length ? Math.max(...emb.map((p) => Math.max(p.x + p.w - p.x, 1))) : 0;
-  const eSize = emb.length ? Math.max(Math.max(...emb.map((p) => p.x + p.w)) - Math.min(...emb.map((p) => p.x)), Math.max(...emb.map((p) => p.y + p.h)) - Math.min(...emb.map((p) => p.y))) * fit : PW * 0.3;
+  const accentRGB = (() => { const e = emb.length ? emb : split.pieces; const a = e.reduce((s2, p) => s2 + p.area, 0); return e.reduce((s2, p) => s2.map((v, i) => v + p.color[i] * p.area), [0, 0, 0]).map((v) => v / a); })();
+  const ac = (sat(accentRGB) > 0.2 ? accentRGB : [255, 255, 255]).map((v) => v / 255);
+  const bbox = (ps) => ps.length ? [Math.min(...ps.map((p) => p.x)), Math.min(...ps.map((p) => p.y)), Math.max(...ps.map((p) => p.x + p.w)), Math.max(...ps.map((p) => p.y + p.h))] : [0, 0, split.W, split.H];
+  const eb = bbox(emb.length ? emb : split.pieces), lb = bbox(split.pieces);
+  const ecx = ox + ((eb[0] + eb[2]) / 2) * fit, ecy = oy + ((eb[1] + eb[3]) / 2) * fit;
+  const eSize = Math.max(eb[2] - eb[0], eb[3] - eb[1]) * fit;
+  const lcx = ox + ((lb[0] + lb[2]) / 2) * fit, lcy = oy + ((lb[1] + lb[3]) / 2) * fit;
+  const textLines = lineIds.filter((li) => li !== emblemLine);
+  const order = [...split.pieces].sort((a, b) => (a.line === emblemLine ? -1 : 0) - (b.line === emblemLine ? -1 : 0) || a.line - b.line || a.x - b.x);
+  const N = split.pieces.length;
+  const maxDist = Math.max(1, ...split.pieces.map((p) => Math.hypot(ox + (p.x + p.w / 2) * fit - lcx, oy + (p.y + p.h / 2) * fit - lcy)));
+  const S = (v) => [fit * v, fit * v];
 
   const pieceLayers = [];
-  const textLines = lineIds.filter((li) => li !== emblemLine);
-  for (const p of split.pieces) {
-    const blob = await new Promise((r) => p.canvas.toBlob(r, 'image/png'));
-    const m = await save(blob);
-    const l = LAYER_FACTORIES.image(P, m.src, p.w, p.h, p.line === emblemLine ? 'Símbolo' : 'Letra');
+  for (let k = 0; k < split.pieces.length; k++) {
+    const p = split.pieces[k];
+    let m = opts.pieceMedia?.[k];
+    if (!m) { const blob = await new Promise((r) => p.canvas.toBlob(r, 'image/png')); m = await save(blob); }
+    const isE = p.line === emblemLine;
+    const l = LAYER_FACTORIES.image(P, m.src, p.w, p.h, isE ? 'Símbolo' : 'Letra');
     l.props.mediaId = m.mediaId; l.props.fileName = `${l.name}.png`;
     const cx = ox + (p.x + p.w / 2) * fit, cy = oy + (p.y + p.h / 2) * fit;
-    l.transform.scale = A([fit * 100, fit * 100]);
+    const gi = order.indexOf(p), li = isE ? -1 : textLines.indexOf(p.line), row = split.pieces.filter((q) => q.line === p.line), j = row.indexOf(p);
+    const ei = emb.indexOf(p);
+    const dist = Math.hypot(cx - lcx, cy - lcy) / maxDist;
+    l.transform.position = A([cx, cy]); l.transform.scale = A(S(100));
     l.inPoint = 0; l.outPoint = D;
-    if (p.line === emblemLine) {
-      // símbolo: cada peça vem de fora (na direção do centro → peça), girando, e encaixa com curva expo
-      const i = emb.indexOf(p), dx = cx - ecx, dy = cy - ecy, n = Math.hypot(dx, dy) || 1;
-      const t0 = 0.25 + i * 0.12, t1 = t0 + 0.9;
-      l.transform.position = KF([[t0, [cx + (dx / n) * PW * 0.45, cy + (dy / n) * PW * 0.45], 'expoOut'], [t1, [cx, cy]]]);
-      l.transform.rotation = KF([[t0, (i % 2 ? 1 : -1) * 120, 'expoOut'], [t1, 0]]);
-      l.transform.scale = KF([[t0, [fit * 40, fit * 40], 'expoOut'], [t1, [fit * 100, fit * 100]]]);
-      l.transform.opacity = KF([[t0, 0], [t0 + 0.15, 100]]);
-      l.effects.push(fx('motionBlur', { amount: 120, samples: 12 }));
-      l.name = `Símbolo ${i + 1}`;
-    } else {
-      // texto: letras sobem com desfoque (título) ou fecham o espaçamento (linhas seguintes)
-      const li = textLines.indexOf(p.line), row = split.pieces.filter((q) => q.line === p.line), j = row.indexOf(p);
-      const base = 1.35 + li * 0.55, t0 = base + j * (li === 0 ? 0.06 : 0.035);
-      if (li === 0) {
-        l.transform.position = KF([[t0, [cx, cy + p.h * fit * 0.9], 'expoOut'], [t0 + 0.7, [cx, cy]]]);
-        l.transform.opacity = KF([[t0, 0], [t0 + 0.25, 100]]);
-        l.effects.push(fx('blur', { radius: { keys: [{ t: t0, v: 18, ease: 'expoOut' }, { t: t0 + 0.6, v: 0, ease: 'linear' }] } }));
-      } else {
-        const spread = (cx - PW / 2) * 0.9;
-        l.transform.position = KF([[t0, [cx + spread, cy], 'expoOut'], [t0 + 1.0, [cx, cy]]]);
-        l.transform.opacity = KF([[t0, 0, 'easeOut'], [t0 + 0.5, 100]]);
+    l.name = isE ? `Símbolo ${ei + 1}` : `Linha ${li + 1} · ${j + 1}`;
+    const T = (t0, dur, ease = 'expoOut') => ({ t0, t1: t0 + dur, ease });
+    switch (style) {
+      case 'pop': {
+        const { t0, t1 } = T(0.3 + dist * 0.9, 0.9);
+        l.transform.scale = KF([[t0, S(0), 'elastic'], [t1, S(100)]]);
+        l.transform.rotation = KF([[t0, (R() - 0.5) * 50, 'elastic'], [t1, 0]]);
+        break;
       }
-      l.name = `Linha ${li + 1} · ${j + 1}`;
+      case 'glitch': {
+        const t0 = 0.25 + R() * 1.3, k1 = t0 + 0.05, k2 = t0 + 0.12, k3 = t0 + 0.2;
+        l.transform.opacity = KF([[t0, 0, 'hold'], [k1, 100, 'hold'], [k2, 0, 'hold'], [k3, 100, 'hold']]);
+        l.transform.position = KF([[t0, [cx + (R() - 0.5) * PW * 0.12, cy], 'hold'], [k2, [cx + (R() - 0.5) * PW * 0.05, cy], 'hold'], [k3, [cx, cy]]]);
+        break;
+      }
+      case 'deslizar': {
+        const t0 = 0.35 + (isE ? 0 : 0.45 + li * 0.35) + (isE ? ei * 0.06 : j * 0.025);
+        l.transform.position = KF([[t0, [cx, cy + p.h * fit * 0.8], 'expoOut'], [t0 + 0.9, [cx, cy]]]);
+        l.transform.opacity = KF([[t0, 0, 'easeOut'], [t0 + 0.35, 100]]);
+        break;
+      }
+      case 'particulas': {
+        const sx = R() * PW, sy = R() * PH, t0 = 0.2 + R() * 0.5, t1 = t0 + 1.3 + R() * 0.3;
+        l.transform.position = KF([[t0, [sx, sy], 'expoInOut'], [t1, [cx, cy]]]);
+        l.transform.rotation = KF([[t0, (R() - 0.5) * 720, 'expoInOut'], [t1, 0]]);
+        l.transform.scale = KF([[t0, S(25), 'expoInOut'], [t1, S(100)]]);
+        l.transform.opacity = KF([[0, 0], [t0 + 0.2, 100]]);
+        l.effects.push(fx('motionBlur', { amount: 110, samples: 12 }));
+        break;
+      }
+      case 'impacto': break; // anima o grupo inteiro (abaixo)
+      case 'luz': {
+        const t0 = 0.5 + (cx / PW) * 1.4;
+        l.transform.opacity = KF([[t0 - 0.1, 0, 'easeOut'], [t0 + 0.25, 100]]);
+        l.effects.push(fx('exposure', { exposure: { keys: [{ t: t0 - 0.1, v: 2.5, ease: 'expoOut' }, { t: t0 + 0.8, v: 0, ease: 'linear' }] } }));
+        break;
+      }
+      case 'flip': {
+        const t0 = 0.3 + ((cx - ox) / Math.max(1, split.W * fit)) * 1.0 + (isE ? 0 : 0.25);
+        l.transform.scale = KF([[t0, [0, fit * 100], 'expoOut'], [t0 + 0.7, S(100)]]);
+        l.transform.opacity = KF([[t0, 0, 'linear'], [t0 + 0.08, 100]]);
+        break;
+      }
+      case 'queda': {
+        const t0 = 0.2 + R() * 1.1;
+        l.transform.position = KF([[t0, [cx, cy - PH * 0.75], 'bounce'], [t0 + 1.0, [cx, cy]]]);
+        l.transform.rotation = KF([[t0, (R() - 0.5) * 40, 'bounce'], [t0 + 1.0, 0]]);
+        break;
+      }
+      case 'tunel': {
+        const t0 = 0.2 + gi * (1.4 / Math.max(1, N)), t1 = t0 + 0.9;
+        l.transform.scale = KF([[t0, S(900), 'expoOut'], [t1, S(100)]]);
+        l.transform.position = KF([[t0, [lcx + (cx - lcx) * 4, lcy + (cy - lcy) * 4], 'expoOut'], [t1, [cx, cy]]]);
+        l.transform.opacity = KF([[t0, 0, 'linear'], [t0 + 0.2, 100]]);
+        l.effects.push(fx('blur', { radius: { keys: [{ t: t0, v: 40, ease: 'expoOut' }, { t: t1, v: 0, ease: 'linear' }] } }));
+        break;
+      }
+      case 'digitar': {
+        const t0 = 0.3 + gi * Math.min(0.12, 2.2 / Math.max(1, N));
+        l.transform.scale = KF([[t0, S(0), 'back'], [t0 + 0.28, S(100)]]);
+        l.transform.opacity = KF([[t0, 0, 'hold'], [t0 + 0.01, 100]]);
+        break;
+      }
+      default: { // montar
+        if (isE) {
+          const dx = cx - ecx, dy = cy - ecy, n = Math.hypot(dx, dy) || 1;
+          const t0 = 0.25 + ei * 0.12, t1 = t0 + 0.9;
+          l.transform.position = KF([[t0, [cx + (dx / n) * PW * 0.45, cy + (dy / n) * PW * 0.45], 'expoOut'], [t1, [cx, cy]]]);
+          l.transform.rotation = KF([[t0, (ei % 2 ? 1 : -1) * 120, 'expoOut'], [t1, 0]]);
+          l.transform.scale = KF([[t0, S(40), 'expoOut'], [t1, S(100)]]);
+          l.transform.opacity = KF([[t0, 0], [t0 + 0.15, 100]]);
+          l.effects.push(fx('motionBlur', { amount: 120, samples: 12 }));
+        } else {
+          const base = 1.35 + li * 0.55, t0 = base + j * (li === 0 ? 0.06 : 0.035);
+          if (li === 0) {
+            l.transform.position = KF([[t0, [cx, cy + p.h * fit * 0.9], 'expoOut'], [t0 + 0.7, [cx, cy]]]);
+            l.transform.opacity = KF([[t0, 0], [t0 + 0.25, 100]]);
+            l.effects.push(fx('blur', { radius: { keys: [{ t: t0, v: 18, ease: 'expoOut' }, { t: t0 + 0.6, v: 0, ease: 'linear' }] } }));
+          } else {
+            const spread = (cx - PW / 2) * 0.9;
+            l.transform.position = KF([[t0, [cx + spread, cy], 'expoOut'], [t0 + 1.0, [cx, cy]]]);
+            l.transform.opacity = KF([[t0, 0, 'easeOut'], [t0 + 0.5, 100]]);
+          }
+        }
+      }
     }
     pieceLayers.push(l);
   }
-  // grupo com push de câmera lento (escala 100 → 104) e saída no fim
+  // grupo: push de câmera lento e saída no fim
   const group = LAYER_FACTORIES.group(P, pieceLayers.reverse());
   group.name = 'Logo'; group.inPoint = 0; group.outPoint = D;
   group.transform.scale = KF([[0, [100, 100], 'linear'], [D - 0.6, [104, 104], 'expoIn'], [D, [118, 118]]]);
   group.transform.opacity = KF([[D - 0.45, 100, 'easeIn'], [D, 0]]);
   const layers = [group];
-  const ac = accent.map((v) => v / 255);
-  if (emb.length) {
-    // anel desenhando em volta do símbolo + explosão de linhas quando as peças encaixam
-    const R = eSize * 0.78;
-    const ring = LAYER_FACTORIES.shape(P, [{ t: 'group', items: [{ t: 'ellipse', size: A([R * 2, R * 2]), position: A([0, 0]) }, { t: 'trim', start: KF([[1.0, 0, 'expoInOut'], [2.2, 100]]), end: KF([[0.6, 0, 'expoOut'], [1.6, 100]]), offset: KF([[0.6, -90, 'expoOut'], [2.2, 60]]) }, { t: 'stroke', color: A(ac), width: A(Math.max(3, PW * 0.006)), opacity: A(100), cap: 2, join: 2 }], tr: { position: A([0, 0]), scale: A([100, 100]), rotation: A(0), opacity: A(100), anchor: A([0, 0]) } }]);
-    ring.name = 'Anel'; ring.props.width = PW; ring.props.height = PH; ring.inPoint = 0; ring.outPoint = 2.4; ring.transform.position = A([ecx, ecy]);
-    const n = 12, items = [];
+  const sweep = (t0, t1, w = 70) => group.effects.push(fx('lightSweep', { width: w, intensity: 0.9, direction: 25, center: { keys: [{ t: t0, v: [-0.3, 0.5], ease: 'expoInOut' }, { t: t1, v: [1.3, 0.5], ease: 'linear' }] } }));
+  const shapeL = (name, items, t0, t1, pos = [ecx, ecy]) => { const l = LAYER_FACTORIES.shape(P, items); l.name = name; l.props.width = PW; l.props.height = PH; l.inPoint = t0; l.outPoint = t1; l.transform.position = A(pos); layers.unshift(l); return l; };
+  const grp = (items, tr = {}) => ({ t: 'group', items, tr: { position: A([0, 0]), scale: A([100, 100]), rotation: A(0), opacity: A(100), anchor: A([0, 0]), ...tr } });
+  const stroke = (c, w) => ({ t: 'stroke', color: A(c), width: A(w), opacity: A(100), cap: 2, join: 2 });
+  const line = (a, b) => ({ t: 'path', path: { shapes: [{ closed: false, pts: [a, a, a, b, b, b] }], times: [] } });
+  const burst = (t0, Rr, n = 12) => {
+    const items = [];
     for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), r0 = R * 1.05, r1 = R * 1.45;
-      const v0 = [c * r0, s * r0], v1 = [c * r1, s * r1];
-      items.push({ t: 'group', items: [{ t: 'path', path: { shapes: [{ closed: false, pts: [v0, v0, v0, v1, v1, v1] }], times: [] } }, { t: 'trim', start: KF([[1.45, 0, 'expoInOut'], [1.95, 100]]), end: KF([[1.25, 0, 'expoOut'], [1.6, 100]]), offset: A(0) }, { t: 'stroke', color: A(i % 2 ? ac : [1, 1, 1]), width: A(Math.max(3, PW * 0.005)), opacity: A(100), cap: 2, join: 2 }], tr: { position: A([0, 0]), scale: A([100, 100]), rotation: A(0), opacity: A(100), anchor: A([0, 0]) } });
+      const a = (i / n) * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a);
+      items.push(grp([line([c * Rr * 1.05, s2 * Rr * 1.05], [c * Rr * 1.45, s2 * Rr * 1.45]), { t: 'trim', start: KF([[t0 + 0.2, 0, 'expoInOut'], [t0 + 0.7, 100]]), end: KF([[t0, 0, 'expoOut'], [t0 + 0.35, 100]]), offset: A(0) }, stroke(i % 2 ? ac : [1, 1, 1], Math.max(3, PW * 0.005))]));
     }
-    const burst = LAYER_FACTORIES.shape(P, items);
-    burst.name = 'Explosão'; burst.props.width = PW; burst.props.height = PH; burst.inPoint = 1.2; burst.outPoint = 2.1; burst.transform.position = A([ecx, ecy]);
-    layers.unshift(ring, burst);
+    return shapeL('Explosão', items, t0, t0 + 0.9);
+  };
+  const waves = (t0, Rr) => shapeL('Ondas', [0, 1, 2].map((k) => grp([{ t: 'ellipse', size: A([Rr, Rr]), position: A([0, 0]) }, stroke(k === 1 ? ac : [1, 1, 1], Math.max(2, PW * 0.004))], {
+    scale: KF([[t0 + k * 0.15, [0, 0], 'expoOut'], [t0 + 0.9 + k * 0.15, [180 + k * 70, 180 + k * 70]]]), opacity: KF([[t0 + 0.4 + k * 0.15, 100, 'easeIn'], [t0 + 1.0 + k * 0.15, 0]]),
+  })), t0, t0 + 1.5);
+  switch (style) {
+    case 'pop': waves(0.3, eSize * 0.6); sweep(2.3, 3.4); break;
+    case 'glitch':
+      group.effects.push(fx('rgbSplit', { amount: { keys: [{ t: 0.2, v: 40, ease: 'expoOut' }, { t: 1.9, v: 0, ease: 'linear' }, { t: 3.4, v: 0, ease: 'hold' }, { t: 3.45, v: 30, ease: 'expoOut' }, { t: 3.7, v: 0, ease: 'linear' }] } }));
+      group.effects.push(fx('glitch', { amount: { keys: [{ t: 0.2, v: 90, ease: 'expoOut' }, { t: 1.9, v: 0, ease: 'linear' }, { t: 3.4, v: 0, ease: 'hold' }, { t: 3.45, v: 70, ease: 'expoOut' }, { t: 3.7, v: 0, ease: 'linear' }] } }));
+      break;
+    case 'deslizar': {
+      const y = oy + lb[3] * fit + PH * 0.04, half = (lb[2] - lb[0]) * fit * 0.5;
+      shapeL('Linha de acento', [grp([line([-half, 0], [half, 0]), { t: 'trim', start: A(0), end: KF([[1.2, 0, 'expoInOut'], [2.2, 100]]), offset: A(0) }, stroke(ac, Math.max(3, PW * 0.005))])], 1.2, D, [lcx, y]);
+      sweep(2.6, 3.8, 50);
+      break;
+    }
+    case 'particulas': waves(1.75, eSize * 0.7); sweep(2.4, 3.6); break;
+    case 'impacto': {
+      const tI = 0.55;
+      group.transform.scale = KF([[0.15, [320, 320], 'expoIn'], [tI, [100, 100], 'easeOut'], [D - 0.6, [104, 104], 'expoIn'], [D, [118, 118]]]);
+      group.transform.opacity = KF([[0.15, 0, 'linear'], [0.3, 100, 'linear'], [D - 0.45, 100, 'easeIn'], [D, 0]]);
+      const sh = []; for (let i = 0; i <= 8; i++) sh.push([tI + i * 0.035, [PW / 2 + (i < 8 ? (R() - 0.5) * PW * 0.04 * (1 - i / 8) : 0), PH / 2 + (i < 8 ? (R() - 0.5) * PH * 0.04 * (1 - i / 8) : 0)]]);
+      group.transform.position = KF(sh);
+      group.effects.push(fx('motionBlur', { amount: 150, samples: 16 }));
+      const fl = LAYER_FACTORIES.solid(P); fl.name = 'Flash'; fl.props.fill = '#ffffff'; fl.inPoint = tI; fl.outPoint = tI + 0.5; fl.transform.opacity = KF([[tI, 80, 'expoOut'], [tI + 0.45, 0]]); layers.unshift(fl);
+      waves(tI, eSize * 0.9); burst(tI, eSize * 0.7, 16);
+      sweep(2.2, 3.3);
+      break;
+    }
+    case 'luz': {
+      const bar = LAYER_FACTORIES.rect(P); bar.name = 'Faixa de luz'; bar.props.width = Math.round(PW * 0.06); bar.props.height = Math.round(PH * 1.6); bar.props.radius = 0; bar.props.fill = '#ffffff';
+      bar.inPoint = 0.3; bar.outPoint = 2.3; bar.transform.rotation = A(20); bar.transform.position = KF([[0.35, [-PW * 0.1, PH / 2], 'linear'], [2.1, [PW * 1.1, PH / 2]]]);
+      bar.transform.opacity = A(28); bar.effects.push(fx('blur', { radius: 40 })); bar.blend = 'screen';
+      layers.unshift(bar);
+      break;
+    }
+    case 'flip': sweep(2.0, 3.1); break;
+    case 'queda': burst(1.4, eSize * 0.65); break;
+    case 'tunel': sweep(2.2, 3.3); waves(1.6, eSize * 0.7); break;
+    case 'digitar': sweep(0.3 + N * Math.min(0.12, 2.2 / Math.max(1, N)) + 0.3, 0.3 + N * Math.min(0.12, 2.2 / Math.max(1, N)) + 1.4); break;
+    default: { // montar
+      if (emb.length) {
+        const Rr = eSize * 0.78;
+        shapeL('Anel', [grp([{ t: 'ellipse', size: A([Rr * 2, Rr * 2]), position: A([0, 0]) }, { t: 'trim', start: KF([[1.0, 0, 'expoInOut'], [2.2, 100]]), end: KF([[0.6, 0, 'expoOut'], [1.6, 100]]), offset: KF([[0.6, -90, 'expoOut'], [2.2, 60]]) }, stroke(ac, Math.max(3, PW * 0.006))])], 0, 2.4);
+        burst(1.25, Rr);
+      }
+      sweep(2.6, 3.8);
+    }
   }
-  // brilho passando sobre tudo (camada de ajuste) quando o texto termina de entrar
-  // (no grupo da logo: o brilho só aparece sobre a logo, não no fundo)
-  group.effects.push(fx('lightSweep', { width: 70, intensity: 0.9, direction: 25, center: { keys: [{ t: 2.6, v: [-0.3, 0.5], ease: 'expoInOut' }, { t: 3.8, v: [1.3, 0.5], ease: 'linear' }] } }));
   const glow = LAYER_FACTORIES.adjustment(P); glow.name = 'Glow'; glow.inPoint = 0; glow.outPoint = D;
   glow.effects.push(fx('glow', { threshold: 60, radius: 26, intensity: 0.55 }));
   layers.unshift(glow);
-  // fundo: cor da logo com vinheta
+  // fundo: cor da logo (ou escuro) com vinheta; degradê opcional
   const bg = LAYER_FACTORIES.solid(P); bg.name = 'Fundo'; bg.props.fill = P.background; bg.inPoint = 0; bg.outPoint = D;
+  if (opts.background === 'gradient') bg.effects.push(fx('ramp', { start: [ac[0] * 0.35, ac[1] * 0.35, ac[2] * 0.35, 1], end: [0.02, 0.02, 0.03, 1], angle: 180, radial: true }));
   bg.effects.push(fx('vignette', { amount: 40 }));
   layers.push(bg);
   P.layers = layers;

@@ -125,12 +125,16 @@ export function applyComposerItem(item0, dur, store) {
   const P = store.project, t = store.time;
   const item = composerItems(P.width, P.height).find((x) => x.id === item0.id) || item0; // deslocamentos no tamanho da composição
   if (item.kind === 'element') {
-    const l = item.mk(P, dur);
-    l.name = item.name;
-    for (const p of Object.values(l.transform)) for (const k of p.keys) k.t = +(k.t + t).toFixed(4);
-    if (l.type === 'shape') shiftShapeKeys(l.props.shapes, t);
-    l.inPoint = t; l.outPoint = Math.min(P.duration, t + dur);
-    store.addLayer(l);
+    const made = item.mk(P, dur);
+    const list = Array.isArray(made) ? made : [made];
+    // várias camadas (templates com texto): adiciona de baixo para cima
+    for (const l of [...list].reverse()) {
+      if (!Array.isArray(made)) l.name = item.name;
+      for (const p of Object.values(l.transform)) for (const k of p.keys) k.t = +(k.t + t).toFixed(4);
+      if (l.type === 'shape') shiftShapeKeys(l.props.shapes, t);
+      l.inPoint = t; l.outPoint = Math.min(P.duration, t + dur);
+      store.addLayer(l);
+    }
     return `“${item.name}” adicionado em ${t.toFixed(2)} s.`;
   }
   let layer = store.layer();
@@ -170,7 +174,15 @@ function previewProject(item, dur) {
     return g;
   };
   const s0 = 0.3;
-  if (item.kind === 'element') { const l = item.mk(P, dur); for (const p of Object.values(l.transform)) for (const k of p.keys) k.t += s0; if (l.type === 'shape') { l.transform.position = { value: [PW / 2, PH / 2], keys: [] }; shiftShapeKeys(l.props.shapes, s0); } l.inPoint = s0; l.outPoint = s0 + dur; P.layers = [l, bg]; return P; }
+  if (item.kind === 'element') {
+    const made = item.mk(P, dur), list = Array.isArray(made) ? made : [made];
+    for (const l of list) {
+      for (const p of Object.values(l.transform)) for (const k of p.keys) k.t += s0;
+      if (l.type === 'shape') { if (!Array.isArray(made)) l.transform.position = { value: [PW / 2, PH / 2], keys: [] }; shiftShapeKeys(l.props.shapes, s0); }
+      l.inPoint = s0; l.outPoint = s0 + dur;
+    }
+    P.layers = [...list, bg]; return P;
+  }
   if (item.kind === 'text') {
     const tx = LAYER_FACTORIES.text(P); tx.props.text = 'MOTION'; tx.props.fontSize = 56; tx.inPoint = 0; tx.outPoint = P.duration;
     tx.props.animators = item.mk(dur, 56).map((an) => shiftAnim(an, s0)); P.layers = [tx, bg]; return P;

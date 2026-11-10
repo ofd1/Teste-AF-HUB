@@ -98,6 +98,84 @@ export const MO_ELEMENTS = [
     return shapeLayer(P, items);
   }],
 ];
+// ---------------------------------------------------------------- mais mograph (Repetidor, templates com texto, padrões)
+const rep = (copies, o = {}) => ({ t: 'repeater', copies: typeof copies === 'object' ? copies : A(copies), offset: A(0), position: A(o.position || [0, 0]), scale: A(o.scale || [100, 100]), rotation: A(o.rotation || 0), anchor: A([0, 0]), startOpacity: A(o.o0 ?? 100), endOpacity: A(o.o1 ?? 100) });
+const PALETTE = [[1, 0.78, 0.2], [0.49, 0.36, 1], [0.3, 0.85, 1], [1, 0.36, 0.5], [0.4, 1, 0.6], [1, 1, 1]];
+function textLayer(P, text, fs, weight = 800, color = '#ffffff') { const t = LAYER_FACTORIES.text(P); Object.assign(t.props, { text, fontSize: fs, fontWeight: weight, color }); return t; }
+MO_ELEMENTS.push(
+  ['Radar (anéis repetidos)', (P, d) => shapeLayer(P, [it.group([it.ellipse([P.width * 0.12, P.width * 0.12]), it.stroke(CYAN, P.width * 0.004), rep(6, { scale: [135, 135], o0: 100, o1: 0 })], {
+    scale: KF([[0, [0, 0], 'expoOut'], [d * 0.5, [100, 100], 'easeInOut'], [d, [140, 140]]]), opacity: KF([[d * 0.6, 100, 'easeIn'], [d, 0]]) })])],
+  ['Espiral de quadrados', (P, d) => shapeLayer(P, [it.group([it.rect([P.width * 0.42, P.width * 0.42], [0, 0], 8), it.stroke(WHITE, P.width * 0.004), rep(14, { scale: [90, 90], rotation: 12, o0: 100, o1: 15 })], {
+    rotation: KF([[0, -120, 'expoOut'], [d, 40]]), scale: KF([[0, [0, 0], 'expoOut'], [d * 0.6, [100, 100], 'expoIn'], [d, [0, 0]]]) })])],
+  ['Grade de pontos', (P, d) => shapeLayer(P, [it.group([it.group([{ t: 'ellipse', size: KF([[0, [0, 0], 'elastic'], [d * 0.6, [P.width * 0.025, P.width * 0.025]], [d, [0, 0]]]), position: A([0, 0]) }, it.fill(WHITE), rep(8, { position: [P.width * 0.07, 0] })], { position: A([-P.width * 0.245, 0]) }), rep(6, { position: [0, P.width * 0.07] })], { position: A([0, -P.width * 0.175]) })])],
+  ['Equalizador (barras)', (P, d) => {
+    const n = 9, bw = P.width * 0.035, items = [];
+    for (let i = 0; i < n; i++) {
+      const ks = []; for (let k = 0; k <= 8; k++) ks.push([(d * k) / 8, [bw, P.height * (0.05 + 0.25 * Math.abs(Math.sin(i * 1.7 + k * 2.3)))], 'easeInOut']);
+      items.push(it.group([{ t: 'rect', size: KF(ks), position: A([(i - (n - 1) / 2) * bw * 1.6, 0]), round: A(bw / 2) }, it.fill(PALETTE[i % 3])]));
+    }
+    return shapeLayer(P, items);
+  }],
+  ['Confete', (P, d) => {
+    const items = []; let s2 = 3;
+    const r = () => { s2 = (s2 * 16807) % 2147483647; return s2 / 2147483647; };
+    for (let i = 0; i < 40; i++) {
+      const x0 = (r() - 0.5) * P.width * 0.2, x1 = (r() - 0.5) * P.width * 1.1, y1 = P.height * (0.2 + r() * 0.5), sz = P.width * (0.012 + r() * 0.012);
+      items.push(it.group([i % 2 ? it.rect([sz, sz * 0.5]) : it.ellipse([sz, sz]), it.fill(PALETTE[i % PALETTE.length])], {
+        position: KF([[0, [x0, 0], 'expoOut'], [d * 0.35, [x1 * 0.7, -P.height * (0.2 + r() * 0.25)], 'easeIn'], [d, [x1, y1]]]),
+        rotation: KF([[0, 0, 'linear'], [d, (r() - 0.5) * 1080]]), opacity: KF([[d * 0.75, 100, 'easeIn'], [d, 0]]),
+      }));
+    }
+    return shapeLayer(P, items);
+  }],
+  ['Transição de círculos (cobre a tela)', (P, d) => {
+    const R = Math.hypot(P.width, P.height) * 1.05, items = [];
+    [ACCENT, WARM, [0.07, 0.07, 0.09]].forEach((c, k) => items.unshift(it.group([it.ellipse([R, R]), it.fill(c)], { scale: KF([[k * d * 0.08, [0, 0], 'expoInOut'], [d * 0.5 + k * d * 0.05, [100, 100], 'expoInOut'], [d * 0.6 + k * d * 0.05, [100, 100], 'expoInOut'], [d, [0, 0]]]) })));
+    return shapeLayer(P, items.reverse());
+  }],
+  ['Hexágono desenhando', (P, d) => shapeLayer(P, [it.group([it.star(6, P.width * 0.16, 0, 2, 0), drawErase(d, 0.55, 0.5), it.stroke(WHITE, P.width * 0.008), rep(3, { scale: [125, 125], o0: 100, o1: 35 })], { rotation: KF([[0, -30, 'expoOut'], [d, 30]]) })])],
+  ['Brilho de 4 pontas', (P, d) => shapeLayer(P, [-1, 0, 1].map((k) => it.group([it.star(4, P.width * (k ? 0.03 : 0.06), P.width * (k ? 0.006 : 0.012)), it.fill(WHITE)], {
+    position: A([k * P.width * 0.12, k * k * -P.width * 0.05]),
+    scale: KF([[d * (0.1 + (k + 1) * 0.12), [0, 0], 'back'], [d * (0.4 + (k + 1) * 0.12), [100, 100], 'expoIn'], [d, [0, 0]]]), rotation: KF([[0, 0], [d, 90]]) })))],
+  ['Seta (callout)', (P, d) => {
+    const L = P.width * 0.28;
+    return shapeLayer(P, [it.group([poly([[-L, L * 0.4], [0, 0], [L, 0]]), drawOnly(d * 0.6), it.stroke(WHITE, P.width * 0.006)]),
+      it.group([it.ellipse([P.width * 0.03, P.width * 0.03], [-L, L * 0.4]), it.fill(WARM)], { scale: KF([[0, [0, 0], 'elastic'], [d * 0.5, [100, 100]]]), anchor: A([-L, L * 0.4]), position: A([-L, L * 0.4]) })]);
+  }],
+  ['Barra de progresso', (P, d) => {
+    const w = P.width * 0.6, h = P.width * 0.03;
+    return shapeLayer(P, [it.group([it.rect([w, h], [0, 0], h / 2), it.fill([1, 1, 1], 18)]),
+      it.group([it.rect([w, h], [w / 2, 0], h / 2), it.fill(ACCENT)], { position: A([-w / 2, 0]), scale: KF([[d * 0.1, [0, 100], 'expoInOut'], [d * 0.9, [100, 100]]]) })]);
+  }],
+);
+// templates de motion design com texto + formas (o Composer adiciona todas as camadas)
+MO_ELEMENTS.push(
+  ['Lower third (nome e cargo)', (P, d) => {
+    const x = P.width * 0.08, y = P.height * 0.78, fs = Math.round(P.width * 0.055);
+    const bar = shapeLayer(P, [it.group([poly([[0, 0], [P.width * 0.55, 0]]), it.trim(KF([[d * 0.75, 0, 'expoIn'], [d, 100]]), KF([[0, 0, 'expoOut'], [d * 0.25, 100]])), it.stroke(WARM, P.width * 0.006)])]);
+    bar.transform.position = A([x, y]); bar.name = 'Lower third · linha';
+    const box = shapeLayer(P, [it.group([it.rect([P.width * 0.55, fs * 2.6], [P.width * 0.275, -fs * 1.3]), it.fill([0.07, 0.07, 0.1], 85)], { scale: KF([[d * 0.05, [0, 100], 'expoOut'], [d * 0.3, [100, 100]], [d * 0.78, [100, 100], 'expoIn'], [d, [0, 100]]]) })]);
+    box.transform.position = A([x, y]); box.name = 'Lower third · caixa';
+    const t1 = textLayer(P, 'NOME SOBRENOME', fs, 800); t1.props.align = 'left';
+    t1.transform.position = KF([[d * 0.12, [x + P.width * 0.3, y - fs * 1.75], 'expoOut'], [d * 0.4, [x + P.width * 0.28, y - fs * 1.75]]]);
+    t1.transform.opacity = KF([[d * 0.12, 0], [d * 0.3, 100], [d * 0.75, 100, 'easeIn'], [d * 0.9, 0]]);
+    const t2 = textLayer(P, 'Cargo · Empresa', Math.round(fs * 0.55), 500, '#ffc83d'); t2.props.align = 'left';
+    t2.transform.position = KF([[d * 0.2, [x + P.width * 0.3, y - fs * 0.7], 'expoOut'], [d * 0.48, [x + P.width * 0.28, y - fs * 0.7]]]);
+    t2.transform.opacity = KF([[d * 0.2, 0], [d * 0.38, 100], [d * 0.75, 100, 'easeIn'], [d * 0.9, 0]]);
+    return [t1, t2, box, bar];
+  }],
+  ['Caixa revelando título', (P, d) => {
+    const fs = Math.round(P.width * 0.09), w = P.width * 0.7;
+    const t = textLayer(P, 'SEU TÍTULO', fs, 900);
+    t.transform.opacity = KF([[d * 0.3, 0, 'hold'], [d * 0.31, 100]]);
+    const box = shapeLayer(P, [it.group([it.rect([w, fs * 1.4], [w / 2, 0]), it.fill(ACCENT)], { position: A([-w / 2, 0]), scale: KF([[0, [0, 100], 'expoInOut'], [d * 0.3, [100, 100]]]) }),
+      it.group([it.rect([w, fs * 1.4], [-w / 2, 0]), it.fill(ACCENT)], { position: A([w / 2, 0]), scale: KF([[d * 0.3, [0, 100], 'hold'], [d * 0.31, [100, 100], 'expoInOut'], [d * 0.62, [0, 100]]]) })]);
+    box.name = 'Caixa';
+    // a 1ª caixa cresce da esquerda; no meio troca pela 2ª, que encolhe para a direita revelando o texto
+    box.props.shapes[0].tr.opacity = KF([[d * 0.3, 100, 'hold'], [d * 0.31, 0]]);
+    return [box, t];
+  }],
+);
 function shapeLayer(P, shapes) {
   const l = LAYER_FACTORIES.shape(P, shapes);
   l.props.width = P.width; l.props.height = P.height;

@@ -294,6 +294,27 @@ function trimmedPath(it, t, trim) {
 }
 const css3 = (c, a = 1) => `rgba(${Math.round((c?.[0] ?? 1) * 255)},${Math.round((c?.[1] ?? 1) * 255)},${Math.round((c?.[2] ?? 1) * 255)},${a})`;
 function drawShapeItems(ctx, items, t) {
+  // Repetidor (Repeater do AE): copia tudo o que está ACIMA dele no grupo, acumulando o deslocamento a cada cópia
+  const ri = items.findIndex((x) => x.t === 'repeater');
+  if (ri >= 0) {
+    const rp = items[ri];
+    const n = Math.max(0, Math.min(200, Math.round(V(rp.copies, t, 3)))), off = V(rp.offset, t, 0);
+    const [px, py] = V(rp.position, t, [100, 0]), [sx, sy] = V(rp.scale, t, [100, 100]), rot = V(rp.rotation, t, 0), [ax, ay] = V(rp.anchor, t, [0, 0]);
+    const o0 = V(rp.startOpacity, t, 100) / 100, o1 = V(rp.endOpacity, t, 100) / 100;
+    const above = items.slice(0, ri);
+    // como no AE: a cópia de cima é a última (composite "Acima"); desenha da última para a primeira por baixo
+    for (let c = n - 1; c >= 0; c--) {
+      const k = c + off;
+      ctx.save();
+      ctx.translate(px * k, py * k);
+      ctx.translate(ax, ay); ctx.rotate((rot * k * Math.PI) / 180); ctx.scale(Math.pow(sx / 100, k), Math.pow(sy / 100, k)); ctx.translate(-ax, -ay);
+      ctx.globalAlpha *= Math.max(0, Math.min(1, n > 1 ? o0 + (o1 - o0) * (c / (n - 1)) : o0));
+      drawShapeItems(ctx, above, t);
+      ctx.restore();
+    }
+    drawShapeItems(ctx, items.slice(ri + 1), t);
+    return;
+  }
   // como no AE: preenchimento/contorno valem para as formas ACIMA deles no mesmo grupo; a lista é desenhada de baixo para cima
   for (let k = items.length - 1; k >= 0; k--) {
     const it = items[k];

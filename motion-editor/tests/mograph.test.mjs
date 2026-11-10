@@ -26,3 +26,14 @@ test('curvas novas de motion design', async () => {
   const e = { value: 0, keys: [{ t: 0, v: 0, ease: 'expoOut' }, { t: 1, v: 100, ease: 'linear' }] };
   assert.ok(valueAt(e, 0.25) > 75, 'expo: chega rápido e pousa devagar');
 });
+
+test('mais mograph: Repetidor e templates com texto', async () => {
+  const { MO_ELEMENTS } = await import('../js/mograph.js');
+  const names = MO_ELEMENTS.map((x) => x[0]);
+  for (const n of ['Radar (anéis repetidos)', 'Espiral de quadrados', 'Grade de pontos', 'Equalizador (barras)', 'Confete', 'Lower third (nome e cargo)', 'Caixa revelando título']) assert.ok(names.includes(n), n);
+  const P = { width: 1080, height: 1920 };
+  const radar = MO_ELEMENTS.find((x) => x[0].startsWith('Radar'))[1](P, 1);
+  assert.ok(radar.props.shapes[0].items.some((x) => x.t === 'repeater'));
+  const lt = MO_ELEMENTS.find((x) => x[0].startsWith('Lower third'))[1](P, 2);
+  assert.ok(Array.isArray(lt) && lt.some((l) => l.type === 'text') && lt.some((l) => l.type === 'shape'));
+});
