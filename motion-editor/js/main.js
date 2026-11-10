@@ -56,7 +56,13 @@ let dirty = true;
 // (mede o tempo de cada quadro: se passar do tempo do fps, reduz; se sobrar folga, aumenta)
 const PLAY_STEPS = [0.33, 0.4, 0.5, 0.6, 0.75, 0.9, 1];
 let playStep = 4, renderMs = 0, fastFrames = 0;
-const curQuality = () => (qualitySel.value === 'auto' ? (store.playing ? PLAY_STEPS[playStep] : 1) : parseFloat(qualitySel.value));
+// Prévia leve (como CapCut/Alight Motion): nunca renderiza mais pixels do que a tela mostra, e tocando fica em até 720p.
+// A exportação não usa isto (sai sempre na resolução escolhida).
+let dispQ = 1;
+const playCap = () => Math.min(1, 720 / Math.max(1, Math.min(store.project.width, store.project.height)));
+const curQuality = () => (qualitySel.value === 'auto'
+  ? (store.playing ? Math.min(PLAY_STEPS[playStep], dispQ, playCap()) : dispQ)
+  : Math.min(parseFloat(qualitySel.value), qualitySel.value === '1' ? 1 : dispQ));
 function adaptQuality(ms) {
   if (!store.playing || qualitySel.value !== 'auto') return;
   renderMs = renderMs ? renderMs * 0.8 + ms * 0.2 : ms;
@@ -125,6 +131,8 @@ function layoutCanvas() {
   }
   const r = stage.getBoundingClientRect();
   const s = Math.min((r.width - 16) / width, (r.height - 16) / height);
+  // pixels na tela, com densidade até 2× (telas 3× do iPhone não mostram diferença numa prévia pequena)
+  if (r.width > 40) dispQ = Math.max(0.25, Math.min(1, s * Math.min(2, window.devicePixelRatio || 1)));
   const cssW = Math.max(40, width * s), cssH = Math.max(40, height * s);
   wrap.style.width = `${cssW}px`;
   wrap.style.height = `${cssH}px`;

@@ -94,7 +94,7 @@ const LGG = colorFrag('uniform vec3 u_lift, u_gamma, u_gain; uniform float u_sat
 const LOOKS = frag(`
 uniform float u_svl[7], u_svs[7]; uniform float u_svon;
 float curve7(float x, float c[7]) { x = clamp(x, 0.0, 1.0) * 6.0; float r = c[6]; for (int i = 0; i < 6; i++) { if (x >= float(i) && x < float(i + 1)) r = mix(c[i], c[i + 1], x - float(i)); } return r; }
-uniform float u_mtint; uniform float u_2s; uniform float u_exp, u_sat, u_hue, u_con, u_fade, u_mojo, u_cool, u_skin, u_punch, u_bleach, u_vig, u_vsize, u_strength, u_temp, u_tint, u_fdens;
+uniform float u_mtint;  uniform float u_2s; uniform float u_exp, u_sat, u_hue, u_con, u_fade, u_mojo, u_cool, u_skin, u_punch, u_bleach, u_vig, u_vsize, u_strength, u_temp, u_tint, u_fdens;
 uniform vec3 u_filter, u_lift, u_gamma, u_gain, u_mixr, u_mixg, u_mixb; uniform float u_mixamt;
 uniform vec3 u_hsl[8];
 uniform vec2 u_curve[4]; uniform float u_ncurve;
@@ -279,6 +279,16 @@ const TINTMUL = frag(`uniform vec3 u_c; void main() { vec4 c = texture2D(u_tex, 
 const THRESH = frag(`
 uniform float u_thr;
 void main() { vec4 c = unpre(texture2D(u_tex, v_uv)); gl_FragColor = pre(vec4(c.rgb, c.a * smoothstep(u_thr - 0.1, u_thr + 0.15, luma(c.rgb)))); }`);
+// Diffusion do Looks: a luz vaza dos realces, mas quase não lava as sombras (no AE os pretos continuam pretos
+// e os claros ficam mais claros — medido nas CCs FTB/Galego). Screen ponderado pelo brilho do próprio pixel.
+const DIFF_COMP = frag(`
+uniform sampler2D u_tex2; uniform float u_amount, u_prot;
+void main() {
+  vec4 s = texture2D(u_tex, v_uv); vec4 g = texture2D(u_tex2, v_uv) * u_amount;
+  float l = luma(s.rgb / max(s.a, 1e-4));
+  float w = mix(1.0, smoothstep(0.08, 0.75, l), u_prot);
+  gl_FragColor = vec4(s.rgb + g.rgb * (s.a - s.rgb) * w, s.a);
+}`);
 const SCREEN_ADD = frag(`
 uniform sampler2D u_tex2; uniform float u_amount;
 void main() { vec4 s = texture2D(u_tex, v_uv); vec4 g = texture2D(u_tex2, v_uv) * u_amount; gl_FragColor = vec4(s.rgb + g.rgb * (s.a - s.rgb), s.a); }`);
@@ -419,7 +429,8 @@ const EFFECTS = [
         const dt = p.diffusionTint || [1, 1, 1, 1];
         if (dt[0] < 0.995 || dt[1] < 0.995 || dt[2] < 0.995) th = gl.pass(TINTMUL, { u_tex: th, u_c: [dt[0], dt[1], dt[2]] });
         const b = gl.blur(th, p.diffusionRadius * 0.5 * env.scale);
-        out = gl.pass(SCREEN_ADD, { u_tex: out, u_tex2: b, u_amount: (p.diffusion / 100) * s });
+        // ×2 com proteção das sombras: medido nas CCs FTB/Galego (AE: pretos iguais, brancos mais claros)
+        out = gl.pass(DIFF_COMP, { u_tex: out, u_tex2: b, u_amount: (p.diffusion / 100) * s * 2, u_prot: 0.9 });
       }
       if ((p.hazeExposure ?? -99) > -20 && s > 0) {
         const small = gl.copy(out, 96, Math.max(16, Math.round(96 * out.h / out.w)));
