@@ -635,7 +635,7 @@ const TIPS = {
   presets: 'Presets prontos: CC, shakes, transições… e os .ffx que você importar', 'add-adjustment': 'Camada de ajuste: efeitos nela valem para tudo que está embaixo (Ctrl+Alt+Y)',
   group: 'Pré-compor: junta as camadas selecionadas numa composição (Ctrl+Shift+C)', 'import-ffx': 'Importar preset do After Effects (.ffx), Frameify, Looks…', comp: 'Tamanho, fps e duração da composição (Ctrl+K)',
   effects: 'Efeitos aplicados na camada selecionada', props: 'Posição, escala, rotação, opacidade, cor, texto…', keys: 'Keyframes e editor de gráfico (easing)',
-  split: 'Cortar a camada no playhead (Ctrl+Shift+D)', dup: 'Duplicar a camada (Ctrl+D)', up: 'Subir a camada (Ctrl+])', down: 'Descer a camada (Ctrl+[)', del: 'Excluir (Delete)',
+  split: 'Cortar a camada no playhead (Ctrl+Shift+D)', dup: 'Duplicar a camada (Ctrl+D)', 'copy-layer': 'Copiar a camada com efeitos e keyframes (Ctrl+C)', 'paste-layer': 'Colar a camada copiada, também em outro projeto (Ctrl+V)', up: 'Subir a camada (Ctrl+])', down: 'Descer a camada (Ctrl+[)', del: 'Excluir (Delete)',
   'toggle-visible': 'Esconder/mostrar a camada', speed: 'Câmera lenta, rampas de velocidade (Twixtor)', topaz: 'Melhorar qualidade, câmera lenta por IA, estabilizar (Topaz)',
   freeze: 'Congelar o quadro atual', 'time-reverse': 'Tocar a camada ao contrário', 'bg-remove': 'Tirar o fundo (recorte automático)', calibrate: 'Copiar a cor de uma imagem de referência',
   sound: 'Volume e som da camada', ungroup: 'Desfazer a pré-composição', 'open-group': 'Entrar na pré-composição para editar', 'close-group': 'Voltar para a composição principal',
@@ -649,7 +649,7 @@ let toolbarMore = false; // modo simples: "Mais" mostra as ferramentas avançada
 
 /** Barra do modo simples: poucas ferramentas com nomes do dia a dia; o resto fica em "Mais". */
 function simpleItems(layer, t, many) {
-  if (many > 1) return [['deselect', '✕', 'Fechar'], ['sep'], ['presets', '★', 'Preset em todas', true], ['effects', '✦', 'Efeitos'], ['props', '☰', 'Ajustar juntas'], ['group', '⊞', 'Juntar em grupo'], ['dup', '⧉', 'Duplicar'], ['del', '🗑', 'Excluir']];
+  if (many > 1) return [['deselect', '✕', 'Fechar'], ['sep'], ['presets', '★', 'Preset em todas', true], ['effects', '✦', 'Efeitos'], ['props', '☰', 'Ajustar juntas'], ['group', '⊞', 'Juntar em grupo'], ['dup', '⧉', 'Duplicar'], ['copy-layer', '⎘', 'Copiar'], ['del', '🗑', 'Excluir']];
   if (layer) {
     const main = [
       ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
@@ -659,7 +659,7 @@ function simpleItems(layer, t, many) {
       ...(t === 'video' || t === 'group' ? [['speed', '⏱', 'Velocidade', true]] : []),
       ['props', '☰', 'Editar'], ['keys', '📈', 'Animar'],
       ...(t === 'video' || t === 'audio' ? [['sound', '🔊', 'Volume']] : []),
-      ['split', '✂', 'Dividir'], ['dup', '⧉', 'Duplicar'], ['del', '🗑', 'Excluir'],
+      ['split', '✂', 'Dividir'], ['dup', '⧉', 'Duplicar'], ['copy-layer', '⎘', 'Copiar'], ...(layerClipboard.length ? [['paste-layer', '📋', 'Colar']] : []), ['del', '🗑', 'Excluir'],
       ['more', '⋯', 'Mais'],
     ];
     if (!toolbarMore) return main;
@@ -676,6 +676,7 @@ function simpleItems(layer, t, many) {
   const main = [
     ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
     ['add-media', '🎞', 'Vídeo / Foto', true], ['add-audio', '♪', 'Música'], ['add-text', 'T', 'Texto'], ['presets', '★', 'Presets'], ['add', '＋', 'Mais camadas'],
+    ...(layerClipboard.length ? [['paste-layer', '📋', 'Colar camada']] : []),
     ['more', '⋯', 'Mais'],
   ];
   if (!toolbarMore) return main;
@@ -692,7 +693,7 @@ function renderToolbar() {
     ? [
       ['deselect', '✕', 'Limpar seleção'], ['sep'],
       ['group', '⊞', `Pré-compor (${many})`, true], ['props', '☰', `Ajustar ${many} juntas`, true], ['presets', '★', 'Preset em todas'], ['effects', '✦', 'Efeitos'],
-      ['sequence', '⇶', 'Sequenciar'], ['dup', '⧉', 'Duplicar'], ['del', '🗑', `Excluir ${many}`],
+      ['sequence', '⇶', 'Sequenciar'], ['dup', '⧉', 'Duplicar'], ['copy-layer', '⎘', 'Copiar'], ['del', '🗑', `Excluir ${many}`],
     ]
     : layer
     ? [
@@ -704,7 +705,7 @@ function renderToolbar() {
       ...(t === 'video' || t === 'audio' ? [['sound', '🔊', 'Som']] : []),
       ...(t === 'video' || t === 'image' ? [['bg-remove', '✂︎', 'Tirar fundo']] : []),
       ['calibrate', '🎯', 'Calibrar CC'], ['props', '☰', 'Propriedades'], ['keys', '📈', 'Keyframes / gráfico'],
-      ['split', '✂', 'Dividir'], ['dup', '⧉', 'Duplicar'],
+      ['split', '✂', 'Dividir'], ['dup', '⧉', 'Duplicar'], ['copy-layer', '⎘', 'Copiar camada'], ...(layerClipboard.length ? [['paste-layer', '📋', 'Colar camada']] : []),
       t === 'group' ? ['ungroup', '⊟', 'Desagrupar'] : ['group', '⊞', 'Pré-compor'],
       ['up', '▲', 'Subir'], ['down', '▼', 'Descer'],
       ['toggle-visible', layer.visible ? '👁' : '◌', layer.visible ? 'Ocultar' : 'Mostrar'], ['del', '🗑', 'Excluir'],
@@ -712,7 +713,7 @@ function renderToolbar() {
     : [
       ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
       ['add-media', '🎞', 'Vídeo / Foto', true], ['add-audio', '♪', 'Música'], ['add-text', 'T', 'Texto'], ['add', '＋', 'Mais camadas'],
-      ['presets', '★', 'Presets'], ['composer', '❖', 'Composer'], ['add-adjustment', '◐', 'Ajuste (CC)'], ['group', '⊞', 'Agrupar'], ['import-ffx', '⤒', 'Importar .ffx'], ['comp', '⚙', 'Composição'],
+      ['presets', '★', 'Presets'], ['composer', '❖', 'Composer'], ['add-adjustment', '◐', 'Ajuste (CC)'], ...(layerClipboard.length ? [['paste-layer', '📋', 'Colar camada']] : []), ['group', '⊞', 'Agrupar'], ['import-ffx', '⤒', 'Importar .ffx'], ['comp', '⚙', 'Composição'],
     ];
   toolbar.innerHTML = items.map(([cmd, icon, label, hot]) => (cmd === 'sep' ? '<span class="tool sep"></span>' : `<button class="tool ${hot ? 'hot' : ''}" data-cmd="${cmd}" title="${escapeHtml(TIPS[cmd] || label)}"><span class="ti">${ico(icon)}</span><span class="tl">${label}</span></button>`)).join('');
   toolbar.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => commands[b.dataset.cmd]?.()));
@@ -1252,6 +1253,8 @@ const commands = {
   keys: () => openSheet('keys'),
   speed: () => { ensureSpeedEffect(store.layer()); openSheet('effects'); },
   split: () => { if (!store.layer() || !store.splitLayer(store.selectedLayerId, store.time)) toast('Posicione o playhead dentro da camada para dividir.', 'warn'); },
+  'copy-layer': () => copyLayers(false),
+  'paste-layer': () => pasteLayers(),
   dup: () => { const list = store.selectedLayers(); store.multi?.clear(); for (const l of list) store.duplicateLayer(l.id); },
   up: () => store.selectedLayerId && store.moveLayer(store.selectedLayerId, -1),
   down: () => store.selectedLayerId && store.moveLayer(store.selectedLayerId, 1),
@@ -1310,7 +1313,9 @@ export function showShortcuts() {
   modal('Atalhos de teclado (After Effects)', SHORTCUTS.map(([g, list]) => `<h3 style="margin:12px 0 6px;font-size:14px">${g}</h3><table class="sc-table">${list.map(([k, d]) => `<tr><td><kbd>${escapeHtml(k)}</kbd></td><td>${escapeHtml(d)}</td></tr>`).join('')}</table>`).join(''), [{ label: 'Fechar', value: null }], { wide: true });
 }
 
-let layerClipboard = [];
+// área de transferência de camadas: fica guardada no aparelho (dá para colar em outro projeto)
+let layerClipboard = (() => { try { return JSON.parse(localStorage.getItem('motionframe.layerClipboard') || '[]'); } catch { return []; } })();
+const saveLayerClipboard = () => { try { localStorage.setItem('motionframe.layerClipboard', JSON.stringify(layerClipboard)); } catch { /* sem espaço: fica só na memória */ } };
 const PROP_KEYS = { p: 'position', s: 'scale', r: 'rotation', t: 'opacity', a: 'anchor' };
 function revealProp(k) {
   if (!store.layer()) return;
@@ -1389,7 +1394,9 @@ function copyLayers(cut) {
   const list = store.selectedLayers();
   if (!list.length) return;
   layerClipboard = list.map((l) => deepClone(l));
+  saveLayerClipboard();
   if (cut) deleteSelection();
+  renderToolbar();
   toast(`${list.length} camada(s) ${cut ? 'recortada(s)' : 'copiada(s)'}.`, 'ok', 1200);
 }
 function pasteLayers() {
@@ -1401,6 +1408,7 @@ function pasteLayers() {
   store.multi?.clear();
   store.selectedLayerId = copies[0].id;
   store.commit('structure');
+  toast(`${copies.length} camada(s) colada(s).`, 'ok', 1200);
 }
 
 document.addEventListener('keydown', (e) => {
