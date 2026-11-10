@@ -324,7 +324,7 @@ void main() {
 // Matte box do Haze/Flare (calibrado com os prints do AE: FTB e Wdzik CC usam Size 50 / Shade 75)
 const MB_SIZE_K = 0.5, MB_SHADE_K = 0.3;
 const HAZE = frag(`
-uniform sampler2D u_tex2; uniform float u_exp, u_spill, u_reach, u_mbs, u_mbsh, u_mbk; uniform vec3 u_tintc;
+uniform sampler2D u_tex2; uniform float u_exp, u_spill, u_reach, u_mbs, u_mbsh, u_mbk, u_mono, u_mbh; uniform vec3 u_tintc;
 vec3 strip(float x0, float x1, float y) {
   vec3 acc = vec3(0.0);
   for (int i = 0; i < 6; i++) { float x = mix(x0, x1, (float(i) + 0.5) / 6.0); acc += texture2D(u_tex2, fromContent(vec2(x, y))).rgb; }
@@ -336,8 +336,16 @@ void main() {
   vec3 L = strip(0.0, u_spill, c.y), R = strip(1.0 - u_spill, 1.0, c.y);
   L = pow(L, vec3(2.2)); R = pow(R, vec3(2.2));
   float wl = exp(-c.x / max(u_reach, 0.01)), wr = exp(-(1.0 - c.x) / max(u_reach, 0.01));
+  // a luz da Haze/Flare tem a cor do Tint (só o brilho vem das laterais da imagem) — medido nas CCs Wdzik/FTB
+  L = mix(L, vec3(luma(L)), u_mono); R = mix(R, vec3(luma(R)), u_mono);
   vec3 h = (L * wl + R * wr) * u_tintc * u_exp;
   vec3 lin = pow(a.rgb / max(a.a, 1e-4), vec3(2.2));
+  // Matte Box: como na lente real, a aba bloqueia a luz parasita (a haze) nas bordas — não escurece a imagem
+  if (u_mbh > 0.0) {
+    vec2 q = abs(c - 0.5) * 2.0 * vec2(1.0, 0.45);
+    float d = length(max(q - vec2(u_mbs), 0.0)) / max(1.0 - u_mbs, 0.05);
+    h *= 1.0 - clamp(d, 0.0, 1.0) * u_mbh;
+  }
   // Matte Box Size / Shade (Looks3.aex): a "matte box" na frente da lente sombreia as bordas do quadro
   if (u_mbsh > 0.0) {
     vec2 q = abs(c - 0.5) * 2.0 * vec2(1.0, 0.45); // a sombra vem das abas laterais: em cima/embaixo quase não aparece
@@ -435,7 +443,7 @@ const EFFECTS = [
       if ((p.hazeExposure ?? -99) > -20 && s > 0) {
         const small = gl.copy(out, 96, Math.max(16, Math.round(96 * out.h / out.w)));
         const soft = gl.blur(small, Math.max(0.5, ((p.hazeSoftness ?? 60) / 100) * small.h * 0.5 + 1), 3);
-        out = gl.pass(HAZE, { u_tex: out, u_tex2: soft, u_exp: Math.pow(2, p.hazeExposure) * 0.4 * s, u_spill: Math.max(0.01, (p.hazeSpill ?? 16) / 100), u_reach: Math.max(0.02, (p.hazeReach ?? 50) / 100 * 0.5), u_tintc: rgb(p.hazeTint || [1, 0.92, 0.82, 1]), u_mbs: Math.min(0.98, (p.hazeMBSize ?? 0) / 100 * MB_SIZE_K), u_mbsh: ((p.hazeMBShade ?? 0) / 100) * s, u_mbk: MB_SHADE_K });
+        out = gl.pass(HAZE, { u_tex: out, u_tex2: soft, u_exp: Math.pow(2, p.hazeExposure) * 0.4 * s, u_spill: Math.max(0.01, (p.hazeSpill ?? 16) / 100), u_reach: Math.max(0.02, (p.hazeReach ?? 50) / 100 * 0.5), u_tintc: rgb(p.hazeTint || [1, 0.92, 0.82, 1]), u_mbs: Math.min(0.98, (p.hazeMBSize ?? 0) / 100 * MB_SIZE_K), u_mbsh: 0, u_mbk: MB_SHADE_K, u_mono: 1, u_mbh: ((p.hazeMBShade ?? 0) / 100) });
       }
       if ((p.anamSize || 0) > 0 && s > 0) {
         const hi = gl.pass(ANAM_HI, { u_tex: out, u_thr: (p.anamThreshold ?? 70) / 100, u_soft: 0.15 });
