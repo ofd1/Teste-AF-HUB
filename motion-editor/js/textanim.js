@@ -5,6 +5,12 @@ import { valueAt } from './anim.js';
 
 const v = (p, t, d) => (p == null ? d : valueAt(p, t));
 
+function mixCss(base, c, a) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(base).trim());
+  const b = m ? [parseInt(m[1].slice(0, 2), 16), parseInt(m[1].slice(2, 4), 16), parseInt(m[1].slice(4, 6), 16)] : [255, 255, 255];
+  const r = [0, 1, 2].map((k) => Math.round(b[k] + ((c[k] ?? 1) * 255 - b[k]) * a));
+  return `rgb(${r[0]},${r[1]},${r[2]})`;
+}
 function hash(n) { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
 function noise1(x) { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return (hash(i) * (1 - u) + hash(i + 1) * u) * 2 - 1; }
 
@@ -120,7 +126,7 @@ export function drawAnimatedText(ctx, p, w, h, t, font) {
     const y = h / 2 + (li - (lines.length - 1) / 2) * lh;
     glyphs.forEach((g, gi) => {
       const i = k + gi, cw = adv[gi];
-      let op = 1, dx = 0, dy = 0, sx = 1, sy = 1, rot = 0, blur = 0;
+      let op = 1, dx = 0, dy = 0, sx = 1, sy = 1, rot = 0, blur = 0, scr = 0, col = null, colA = 0;
       for (const { an, s } of ams) {
         const pr = an.props || {}, a = s[i];
         if (!a) continue;
@@ -129,6 +135,8 @@ export function drawAnimatedText(ctx, p, w, h, t, font) {
         if (pr.scale) { const q = v(pr.scale, t, [100, 100]); sx *= 1 + (q[0] / 100 - 1) * a; sy *= 1 + ((q[1] ?? q[0]) / 100 - 1) * a; }
         if (pr.rotation) rot += v(pr.rotation, t, 0) * a;
         if (pr.blur) { const q = v(pr.blur, t, [0, 0]); blur += Math.max(Math.abs(q[0]), Math.abs(q[1] ?? q[0])) * Math.abs(a); }
+        if (pr.scramble) scr = Math.max(scr, (v(pr.scramble, t, 0) / 100) * Math.abs(a)); // letras trocadas (decode)
+        if (pr.fillColor) { col = v(pr.fillColor, t, [1, 1, 1]); colA = Math.max(colA, Math.min(1, Math.abs(a))); }
       }
       op = Math.max(0, Math.min(1, op));
       if (op > 0.002 && g.trim()) {
@@ -139,9 +147,14 @@ export function drawAnimatedText(ctx, p, w, h, t, font) {
         if (sx !== 1 || sy !== 1) ctx.scale(sx, sy);
         if (blur > 0.3 && 'filter' in ctx) ctx.filter = `blur(${blur.toFixed(1)}px)`;
         ctx.textAlign = 'center';
-        if (p.strokeWidth > 0) { ctx.lineJoin = 'round'; ctx.strokeStyle = p.strokeColor; ctx.lineWidth = p.strokeWidth * 2; ctx.strokeText(g, 0, 0); }
-        ctx.fillStyle = p.color;
-        ctx.fillText(g, 0, 0);
+        let gg = g;
+        if (scr > 0.01 && hash(i * 7.3 + Math.floor(t * 24) * 1.7) < scr) {
+          const set = /[a-z]/.test(g) ? 'abcdefghijklmnopqrstuvwxyz0123456789' : 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&@*+=';
+          gg = set[Math.floor(hash(i * 3.1 + Math.floor(t * 24) * 9.7) * set.length)];
+        }
+        if (p.strokeWidth > 0) { ctx.lineJoin = 'round'; ctx.strokeStyle = p.strokeColor; ctx.lineWidth = p.strokeWidth * 2; ctx.strokeText(gg, 0, 0); }
+        ctx.fillStyle = col && colA > 0 ? mixCss(p.color, col, colA) : p.color;
+        ctx.fillText(gg, 0, 0);
         ctx.restore();
       }
       x += cw;

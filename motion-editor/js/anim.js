@@ -60,6 +60,12 @@ const curves = {
   easeIn: cubicBezier(0.33, 0, 1, 1),
   easeOut: cubicBezier(0, 0, 0.67, 1),
   back: cubicBezier(0.34, 1.56, 0.64, 1),
+  // curvas típicas de motion design (Flow / Motion Bro): saída rápida e pouso longo, elástico e "back" de entrada
+  expoOut: cubicBezier(0.16, 1, 0.3, 1),
+  expoIn: cubicBezier(0.7, 0, 0.84, 0),
+  expoInOut: cubicBezier(0.87, 0, 0.13, 1),
+  backIn: cubicBezier(0.36, 0, 0.66, -0.56),
+  elastic: (x) => (x <= 0 ? 0 : x >= 1 ? 1 : Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * ((2 * Math.PI) / 3)) + 1),
   bounce: (x) => {
     const n = 7.5625, d = 2.75;
     if (x < 1 / d) return n * x * x;

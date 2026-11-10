@@ -239,6 +239,59 @@ export function tracePath(p, sh) {
   }
   if (sh.closed) p.closePath();
 }
+// Trim Paths (AE): pontos ao longo do contorno de cada forma (polilinha) para cortar Start/End/Offset
+function shapePoly(it, t) {
+  const out = [];
+  if (it.t === 'rect') {
+    const [sw, sh] = V(it.size, t, [100, 100]), [x, y] = V(it.position, t, [0, 0]);
+    // como no AE: começa no meio do lado de cima e anda no sentido horário
+    out.push([x, y - sh / 2], [x + sw / 2, y - sh / 2], [x + sw / 2, y + sh / 2], [x - sw / 2, y + sh / 2], [x - sw / 2, y - sh / 2], [x, y - sh / 2]);
+    return { pts: out, closed: false };
+  }
+  if (it.t === 'ellipse') {
+    const [sw, sh] = V(it.size, t, [100, 100]), [x, y] = V(it.position, t, [0, 0]);
+    for (let i = 0; i <= 96; i++) { const a = -Math.PI / 2 + (i / 96) * Math.PI * 2; out.push([x + Math.cos(a) * sw / 2, y + Math.sin(a) * sh / 2]); }
+    return { pts: out, closed: false };
+  }
+  if (it.t === 'star') {
+    const n = Math.max(3, Math.round(V(it.points, t, 5))), [x, y] = V(it.position, t, [0, 0]), rot = (V(it.rotation, t, 0) * Math.PI) / 180;
+    const ro = V(it.outer, t, 100), ri = V(it.inner, t, 50), star = (it.kind || 1) === 1, steps = star ? n * 2 : n;
+    for (let i = 0; i <= steps; i++) { const r = star && i % 2 ? ri : ro, a = -Math.PI / 2 + rot + (i * Math.PI * 2) / steps; out.push([x + Math.cos(a) * r, y + Math.sin(a) * r]); }
+    return { pts: out, closed: false };
+  }
+  if (it.t === 'path') {
+    const sh = pathAt(it.path, t); if (!sh) return null;
+    const P = sh.pts, n = Math.floor(P.length / 3); if (!n) return null;
+    out.push(P[0]);
+    for (let i = 0; i < n; i++) {
+      const nx = (i + 1) % n; if (nx === 0 && !sh.closed) break;
+      const a = P[i * 3], o = P[i * 3 + 1], inn = P[i * 3 + 2], b = P[nx * 3];
+      for (let k = 1; k <= 24; k++) { const u = k / 24, m = 1 - u; out.push([m * m * m * a[0] + 3 * m * m * u * o[0] + 3 * m * u * u * inn[0] + u * u * u * b[0], m * m * m * a[1] + 3 * m * m * u * o[1] + 3 * m * u * u * inn[1] + u * u * u * b[1]]); }
+    }
+    return { pts: out, closed: false };
+  }
+  return null;
+}
+function trimmedPath(it, t, trim) {
+  const poly = shapePoly(it, t);
+  const P = new Path2D();
+  if (!poly || poly.pts.length < 2) return P;
+  const pts = poly.pts, cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const L = cum[cum.length - 1]; if (L <= 0) return P;
+  let s = Math.max(0, Math.min(100, V(trim.start, t, 0))) / 100, e = Math.max(0, Math.min(100, V(trim.end, t, 100))) / 100;
+  if (s > e) [s, e] = [e, s];
+  if (e - s < 1e-4) return P;
+  const off = (((V(trim.offset, t, 0) / 360) % 1) + 1) % 1;
+  const at = (d) => { if (d > L + 1e-9) d -= L; else if (d < 0) d += L; d = Math.max(0, Math.min(L, d)); let i = 1; while (i < cum.length - 1 && cum[i] < d) i++; const f = (d - cum[i - 1]) / Math.max(1e-9, cum[i] - cum[i - 1]); return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f]; };
+  const d0 = (s + off) * L, d1 = (e + off) * L;
+  // offset pode empurrar o trecho para além do fim do contorno: desenha em duas partes (sem ligar o fim ao começo)
+  const seg = (a0, a1) => { const n = Math.max(2, Math.ceil(((a1 - a0) / L) * pts.length * 1.5)); for (let k = 0; k <= n; k++) { const q = at(a0 + ((a1 - a0) * k) / n); if (k) P.lineTo(q[0], q[1]); else P.moveTo(q[0], q[1]); } };
+  if (d1 <= L + 1e-9) seg(d0, d1);
+  else if (d0 >= L) seg(d0 - L, d1 - L);
+  else { seg(d0, L); seg(0, d1 - L); }
+  return P;
+}
 const css3 = (c, a = 1) => `rgba(${Math.round((c?.[0] ?? 1) * 255)},${Math.round((c?.[1] ?? 1) * 255)},${Math.round((c?.[2] ?? 1) * 255)},${a})`;
 function drawShapeItems(ctx, items, t) {
   // como no AE: preenchimento/contorno valem para as formas ACIMA deles no mesmo grupo; a lista é desenhada de baixo para cima
@@ -256,7 +309,9 @@ function drawShapeItems(ctx, items, t) {
       const above = items.slice(0, k).filter((x) => ['rect', 'ellipse', 'star', 'path'].includes(x.t));
       if (!above.length) continue;
       const path = new Path2D();
-      for (const sItem of above) path.addPath(shapePath(sItem, t));
+      // Trim Paths acima do contorno/preenchimento (no mesmo grupo) cortam cada forma
+      const trim = items.slice(0, k).find((x) => x.t === 'trim');
+      for (const sItem of above) path.addPath(trim ? trimmedPath(sItem, t, trim) : shapePath(sItem, t));
       const op = Math.max(0, Math.min(1, V(it.opacity, t, 100) / 100));
       if (it.t === 'fill') { ctx.fillStyle = css3(V(it.color, t, [1, 0, 0]), op); ctx.fill(path, it.rule === 2 ? 'evenodd' : 'nonzero'); }
       else {

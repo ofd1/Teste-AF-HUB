@@ -6,9 +6,10 @@ import { applyPreset, BUILTIN_PRESETS, stretchPreset } from './presets.js';
 import { renderFrame } from './renderer.js';
 import { toast, storage } from './ui.js';
 import { escapeHtml } from './util.js';
+import { MO_TEXT, MO_INOUT, MO_ELEMENTS, MO_LOGO, shiftShapeKeys } from './mograph.js';
 
 const FAV_KEY = 'motionframe.composerFavs';
-const CATS = ['Entradas', 'Saídas', 'Transições', 'Texto', 'Elementos', 'Impacto'];
+const CATS = ['Motion design', 'Mograph texto', 'Mograph formas', 'Logo reveal', 'Entradas', 'Saídas', 'Transições', 'Texto', 'Elementos', 'Impacto'];
 
 // ---------------------------------------------------------------- definições (tempo normalizado 0..1)
 // tr: { prop: [mode, [[u, valor, ease], ...]] }   fx: [[tipo, { param: [[u, valor, ease]] | constante }]]
@@ -82,7 +83,8 @@ const ELEMENTOS = [
 function key(l, prop, list) { l.transform[prop].keys = list.map(([t, v, ease]) => ({ t, v, ease: ease || 'linear' })); l.transform[prop].value = list[0][1]; }
 
 // ---------------------------------------------------------------- conversão para presets do MotionFrame
-const mirrorEase = (e) => (e === 'easeOut' ? 'easeIn' : e === 'easeIn' ? 'easeOut' : e || 'linear');
+const MIRROR = { easeOut: 'easeIn', easeIn: 'easeOut', expoOut: 'expoIn', expoIn: 'expoOut', elastic: 'backIn', back: 'backIn', backIn: 'back', bounce: 'easeIn' };
+const mirrorEase = (e) => MIRROR[e] || e || 'linear';
 function toPreset(name, tr, fx, d, out = false) {
   const conv = (keys) => {
     let ks = keys.map(([u, v, ease]) => ({ u, v, ease: ease || 'easeInOut' }));
@@ -104,6 +106,14 @@ export function composerItems(W = 1080, H = 1920) {
   for (const [name, a, b] of TRANSICOES(W)) items.push({ id: `tr:${name}`, cat: 'Transições', name, kind: 'trans', dur: 0.5, make: (d) => ({ a: { ...toPreset(name, a[0], a[1], d / (b ? 2 : 1)), anchor: 'end' }, b: b ? toPreset(name, b[0], b[1], d / 2) : null }) });
   for (const p of BUILTIN_PRESETS.filter((x) => x.category === 'Transições')) items.push({ id: `trb:${p.name}`, cat: 'Transições', name: p.name, kind: 'fx', dur: p.duration || 0.5, make: (d) => stretchPreset(p, d / (p.duration || d)) });
   for (const [name, mk] of TEXTOS(100)) items.push({ id: `tx:${name}`, cat: 'Texto', name, kind: 'text', dur: 1, mk });
+  // pacote de motion design (mograph.js)
+  for (const [name, tr, fx] of MO_INOUT(W, H)) {
+    items.push({ id: `mdin:${name}`, cat: 'Motion design', name: `▶ ${name}`, kind: 'in', dur: 0.7, make: (d) => toPreset(name, tr, fx, d) });
+    items.push({ id: `mdout:${name}`, cat: 'Motion design', name: `◀ ${name} (saída)`, kind: 'out', dur: 0.6, make: (d) => toPreset(name, tr, fx, d, true) });
+  }
+  for (const [name, fn] of MO_TEXT) items.push({ id: `mt:${name}`, cat: 'Mograph texto', name, kind: 'text', dur: 1, mk: (d, fs = 100) => fn(d, fs) });
+  for (const [name, mk] of MO_ELEMENTS) items.push({ id: `me:${name}`, cat: 'Mograph formas', name, kind: 'element', dur: 1, mk });
+  for (const [name, tr, fx] of MO_LOGO(W)) items.push({ id: `lg:${name}`, cat: 'Logo reveal', name, kind: 'in', dur: 1.2, make: (d) => toPreset(name, tr, fx, d) });
   for (const [name, mk] of ELEMENTOS) items.push({ id: `el:${name}`, cat: 'Elementos', name, kind: 'element', dur: 0.8, mk });
   for (const p of BUILTIN_PRESETS.filter((x) => /Shakes|Glows|Velocity/.test(x.category))) items.push({ id: `fx:${p.name}`, cat: 'Impacto', name: p.name, kind: 'fx', dur: p.duration || 0.6, native: true, make: (d) => (p.duration ? stretchPreset(p, d / p.duration) : p) });
   return items;
@@ -118,6 +128,7 @@ export function applyComposerItem(item0, dur, store) {
     const l = item.mk(P, dur);
     l.name = item.name;
     for (const p of Object.values(l.transform)) for (const k of p.keys) k.t = +(k.t + t).toFixed(4);
+    if (l.type === 'shape') shiftShapeKeys(l.props.shapes, t);
     l.inPoint = t; l.outPoint = Math.min(P.duration, t + dur);
     store.addLayer(l);
     return `“${item.name}” adicionado em ${t.toFixed(2)} s.`;
@@ -125,7 +136,7 @@ export function applyComposerItem(item0, dur, store) {
   let layer = store.layer();
   if (item.kind === 'text') {
     if (!layer || layer.type !== 'text') { layer = LAYER_FACTORIES.text(P); layer.inPoint = t; layer.outPoint = Math.min(P.duration, t + Math.max(3, dur + 1)); store.addLayer(layer); }
-    const anims = item.mk(dur * 1).map((an) => shiftAnim(an, layer.inPoint));
+    const anims = item.mk(dur * 1, layer.props.fontSize || 100).map((an) => shiftAnim(an, layer.inPoint));
     layer.props.animators = [...(layer.props.animators || []), ...anims];
     store.commit('structure');
     return `Animação de texto “${item.name}” aplicada em “${layer.name}”.`;
@@ -159,10 +170,10 @@ function previewProject(item, dur) {
     return g;
   };
   const s0 = 0.3;
-  if (item.kind === 'element') { const l = item.mk(P, dur); for (const p of Object.values(l.transform)) for (const k of p.keys) k.t += s0; l.inPoint = s0; l.outPoint = s0 + dur; P.layers = [l, bg]; return P; }
+  if (item.kind === 'element') { const l = item.mk(P, dur); for (const p of Object.values(l.transform)) for (const k of p.keys) k.t += s0; if (l.type === 'shape') { l.transform.position = { value: [PW / 2, PH / 2], keys: [] }; shiftShapeKeys(l.props.shapes, s0); } l.inPoint = s0; l.outPoint = s0 + dur; P.layers = [l, bg]; return P; }
   if (item.kind === 'text') {
     const tx = LAYER_FACTORIES.text(P); tx.props.text = 'MOTION'; tx.props.fontSize = 56; tx.inPoint = 0; tx.outPoint = P.duration;
-    tx.props.animators = item.mk(dur).map((an) => shiftAnim(an, s0)); P.layers = [tx, bg]; return P;
+    tx.props.animators = item.mk(dur, 56).map((an) => shiftAnim(an, s0)); P.layers = [tx, bg]; return P;
   }
   if (item.kind === 'trans') {
     const A1 = card('#3d6cff', 'A'), B1 = card('#ff7a3d', 'B');
@@ -184,7 +195,7 @@ function previewProject(item, dur) {
 export class ComposerPanel {
   constructor(root, store, hooks = {}) {
     this.root = root; this.store = store; this.hooks = hooks;
-    this.cat = 'Entradas'; this.q = ''; this.sel = null; this.dur = null;
+    this.cat = 'Motion design'; this.q = ''; this.sel = null; this.dur = null;
     this.favs = new Set(storage.get(FAV_KEY, []));
     this.items = composerItems();
     this.raf = 0; this.thumbs = new Map(); this.ready = false; // monta na primeira vez que o painel abre

@@ -1757,6 +1757,14 @@ const home = new HomeScreen({
   afterDelete: () => cleanUnusedMedia(),
   create: () => createProjectFlow(),
   importProject: () => importProjectFile(),
+  demoLogo: async () => {
+    // projeto de exemplo de motion design: logo feita com o pacote MoGraph (formas com Trim Paths, texto cinético, logo reveal)
+    const { buildLogoDemoProject } = await import('./mograph.js');
+    const p = buildLogoDemoProject();
+    saveProjectData(p, null);
+    await openProjectById(p.id);
+    toast('Projeto de demonstração aberto: toque ▶ para ver a logo animada. Tudo é editável (camadas de forma, texto e efeitos).', 'ok', 5000);
+  },
   importAE: () => importAEFiles(),
   presets: async () => { await ensureSomeProject(); openSheet('presets'); },
   plugins: async () => { await ensureSomeProject(); openSheet('browser'); fxBrowser.cat = 'Meus plugins'; fxBrowser.render(); },
