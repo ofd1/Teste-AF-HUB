@@ -224,7 +224,8 @@ export default [
       bool('caEnable', 'Chromatic Aberration › Enable', false), sel('caChannels', 'Chromatic Aberration › Channels', ['Red & Green', 'Red & Blue', 'Green & Blue'], 2), num('caAmount', 'Chromatic Aberration › Amount', 0.25, 0, 2, 0.01),
       bool('useTint', 'Tint › Enable', false), col('tint', 'Tint › Color', [1, 0.6, 0.2, 1]), sel('tintMode', 'Tint › Mode', ['Standard', 'Overlay', 'Soft Light'], 1), num('tintMix', 'Tint › Mix %', 100, 0, 100),
       num('iterations', 'Glow Iterations', 6, 1, 8, 1), num('sourceOpacity', 'Source Opacity %', 100, 0, 100)],
-    pad: (p) => p.radius * 1.2,
+    // margem para o brilho sair da camada: limitada (raios grandes criavam texturas de 3500×4300 px e a exportação travava)
+    pad: (p) => Math.min(p.radius * 1.2, 360),
     render: (src, p, env) => {
       const { gl } = env;
       const th = gl.pass(THRESH, { u_tex: src, u_thr: p.threshold / 100, u_color: [1, 1, 1], u_useColor: 0, u_knee: (p.knee ?? 15) / 100 });
@@ -239,6 +240,7 @@ export default [
       if (Math.abs((p.aspect ?? 1) - 1) < 0.01 && gl.blurSum && !globalThis.__DG_OLD) {
         // todas as iterações numa pirâmide só (mesmo resultado, bem mais leve na exportação)
         acc = gl.blurSum(th, levels.map((f) => ({ sigma: Math.max(0.5, r * f), w: Math.pow(f, k) })));
+        gl.release(th);
         wsum = levels.reduce((s2, f) => s2 + Math.pow(f, k), 0);
       } else levels.forEach((f, i) => {
         const w = Math.pow(f, k);

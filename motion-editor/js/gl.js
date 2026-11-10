@@ -439,19 +439,28 @@ export class GLEngine {
     const K = Math.max(0, ...plan.map((q) => q.k));
     const chain = [src];
     for (let k = 1; k <= K; k++) chain.push(this.copy(chain[k - 1], Math.max(1, Math.round(src.w / (1 << k))), Math.max(1, Math.round(src.h / (1 << k)))));
+    // cada textura intermediária volta ao pool assim que foi usada (pico de memória de vídeo ~3× menor)
+    const rel = (t) => { if (t && !chain.includes(t)) this.release(t); };
     let acc = null;
-    const addW = (t, w) => { acc = acc ? this.add(acc, t, w) : (w === 1 ? t : this.add(t, t, w - 1)); };
+    const addW = (t, w) => {
+      const prev = acc;
+      acc = prev ? this.add(prev, t, w) : (w === 1 ? t : this.add(t, t, w - 1));
+      if (prev) rel(prev);
+      if (acc !== t) rel(t);
+    };
     for (let k = K; k >= 0; k--) {
       if (acc && k < K) {
-        acc = this.copy(acc, chain[k].w, chain[k].h);
-        if (k > 0) { acc = this.pass(BLUR, { u_tex: acc, u_dir: [1, 0], u_sigma: 1.2 }); acc = this.pass(BLUR, { u_tex: acc, u_dir: [0, 1], u_sigma: 1.2 }); }
+        let up = this.copy(acc, chain[k].w, chain[k].h); rel(acc);
+        if (k > 0) { const h1 = this.pass(BLUR, { u_tex: up, u_dir: [1, 0], u_sigma: 1.2 }); rel(up); up = this.pass(BLUR, { u_tex: h1, u_dir: [0, 1], u_sigma: 1.2 }); rel(h1); }
+        acc = up;
       }
       for (const q of plan) {
         if (q.k !== k && !(k === 0 && q.k === -1)) continue;
         let t = chain[k];
-        if (q.k >= 0) { const sg = q.sigma / (1 << k); t = this.pass(BLUR, { u_tex: t, u_dir: [1, 0], u_sigma: sg }); t = this.pass(BLUR, { u_tex: t, u_dir: [0, 1], u_sigma: sg }); }
+        if (q.k >= 0) { const sg = q.sigma / (1 << k); const h1 = this.pass(BLUR, { u_tex: t, u_dir: [1, 0], u_sigma: sg }); t = this.pass(BLUR, { u_tex: h1, u_dir: [0, 1], u_sigma: sg }); rel(h1); }
         addW(t, q.w);
       }
+      if (k > 0) this.release(chain[k]); // nível da pirâmide já usado
     }
     return acc;
   }
