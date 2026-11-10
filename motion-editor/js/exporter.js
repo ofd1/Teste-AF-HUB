@@ -8,6 +8,7 @@ import { saveFile, keepAwake } from './platform.js';
 import { prepareBgModels } from './bgremove.js';
 import { flatLayers } from './state.js';
 
+const withTimeout = (pr, ms, msg) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
 const even = (n) => Math.max(2, Math.round(n / 2) * 2);
 /** Bitrate alto pela resolução e fps (~0,35 bit por pixel: 1080×1920 a 30 fps ≈ 22 Mbps, 4K ≈ 87 Mbps). */
 export const autoBitrate = (p, scale = 1, fps = p.fps) => Math.round(Math.max(20, Math.min(150, (p.width * scale) * (p.height * scale) * fps * 0.35 / 1e6)));
@@ -130,7 +131,8 @@ export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {})
     for (let i = 0; i < total; i++) {
       if (ui.cancelled || failure) break;
       const t = i / fps;
-      await prepare(project, t, { exact: true });
+      // nunca fica parado num quadro: se o aparelho não entregar o quadro do vídeo em 8 s, segue com o último bom
+      await Promise.race([prepare(project, t, { exact: true }), new Promise((r) => setTimeout(r, 8000))]);
       renderFrame(ctx, project, t, width / project.width, { final: true });
       // se a GPU caiu no meio do quadro, recria o contexto e refaz o quadro (antes saía preto até o fim)
       for (let retry = 0; retry < 3 && glLost(); retry++) {
@@ -141,7 +143,11 @@ export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {})
       const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
       venc.encode(frame, { keyFrame: i % (fps * 2) === 0 });
       frame.close();
-      while (venc.encodeQueueSize > 6) await new Promise((r) => setTimeout(r, 2));
+      // codificador parado (acontece no iPhone com pouca memória): não espera para sempre — avisa e tenta o modo tempo real
+      for (const tq = performance.now(); venc.encodeQueueSize > 6 && !failure; ) {
+        await new Promise((r) => setTimeout(r, 2));
+        if (performance.now() - tq > 15000) { failure = new Error('o codificador de vídeo do aparelho parou de responder'); break; }
+      }
       if (i % 3 === 0) {
         const el = (performance.now() - t0) / 1000;
         const eta = (el / (i + 1)) * (total - i - 1);
@@ -150,7 +156,7 @@ export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {})
     }
     if (failure) throw failure;
     if (ui.cancelled) { venc.close(); toast('Exportação cancelada.'); return true; }
-    await venc.flush();
+    await withTimeout(venc.flush(), 30000, 'o codificador de vídeo não terminou');
 
     if (audio && mix) {
       ui.set(1, 'Codificando áudio…');
@@ -171,7 +177,7 @@ export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {})
         aenc.encode(ad);
         ad.close();
       }
-      await aenc.flush();
+      await withTimeout(aenc.flush(), 30000, 'o codificador de áudio não terminou').catch((e) => { aerr = e; });
       if (aerr) console.warn('áudio falhou', aerr);
     }
     canvas.width = 0; canvas.height = 0; // libera a memória do canvas (o iPhone tem teto de memória para canvases)

@@ -54,7 +54,12 @@ function releaseVideo(v) {
 
 // durante a exportação o cache de quadros pausa (o iPhone tem poucos decodificadores de vídeo)
 let exportBusy = false;
-export function setExporting(b) { exportBusy = b; }
+export function setExporting(b) {
+  exportBusy = b;
+  // exportação começando: cancela caches ainda sendo montados (cada um prende um decodificador de vídeo; no iPhone
+  // isso podia travar a busca de quadros da exportação). Eles são refeitos depois.
+  if (b) for (const m of [caches, pendingCaches]) for (const [id, c] of m) if (!c.ready) { c.cancelled = true; m.delete(id); }
+}
 
 function makeVideo(src, playback = false) {
   const v = document.createElement('video');
@@ -93,8 +98,9 @@ export function getVideo(layer, needB = false) {
   return e;
 }
 
-function seek(v, time) {
-  if (!v || v.readyState < 1) return waitMeta(v).then(() => seek(v, time));
+function seek(v, time, tries = 0) {
+  // sem metadados: espera no máximo 2 vezes (antes repetia para sempre se o aparelho descartasse o vídeo → exportação parada)
+  if (!v || v.readyState < 1) return tries >= 2 || !v ? Promise.resolve() : waitMeta(v).then(() => seek(v, time, tries + 1));
   const target = Math.max(0, Math.min(time, (v.duration || time + 1) - 0.001));
   if (Math.abs(v.currentTime - target) < 0.001 && !v.seeking) return Promise.resolve();
   v._seekGen = (v._seekGen || 0) + 1;
