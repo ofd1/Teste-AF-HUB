@@ -421,6 +421,7 @@ function renderLayerImage(layer, t, scale0, extra) {
   const rect = [pad / tex.w, pad / tex.h, (w * scale) / tex.w, (h * scale) / tex.h];
   gl.env = { u_time: lt, u_scale: scale, u_rect: rect };
   const env = { gl, t: lt, scale, pad, w, h, W: tex.w, H: tex.h, rect, layer, fps, srcCanvas: canvas, final: renderOpts.final, srcW: vf?.a ? vf.a.videoWidth || vf.a.width : layer.type === 'image' ? getImage(layer.props.src)?.naturalWidth : 0 };
+  const tex0 = tex;
   for (const { def, p, prev, fx } of evaluated) {
     try {
       const input = tex;
@@ -428,6 +429,8 @@ function renderLayerImage(layer, t, scale0, extra) {
       // Opacidade do efeito (AE: Compositing Options → Effect Opacity)
       const op = p.fxOpacity ?? 100;
       if (op < 99.95 && tex !== input) tex = gl.mix(input, tex, Math.max(0, op) / 100);
+      // a entrada do efeito já foi usada: volta ao pool (pilhas de efeitos pesados ocupavam centenas de MB de vídeo)
+      if (tex !== input && input !== tex0 && !def.keepInput) gl.release(input);
     } catch (e) { console.warn('efeito falhou', def.type, e); }
   }
   if (gl.gl.isContextLost()) return { src: canvas, sw: W, sh: H, pad, w, h, k: kAll }; // GPU caiu: mostra sem efeitos em vez de preto

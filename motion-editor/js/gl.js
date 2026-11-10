@@ -194,6 +194,13 @@ export class GLEngine {
   }
 
   /** Libera todas as texturas usadas desde o último releaseAll (fim de cada camada). */
+  /** Devolve uma textura ao pool antes do fim da camada (efeitos pesados: menos memória de vídeo ao mesmo tempo). */
+  release(t) {
+    if (!t) return;
+    const i = this.live.indexOf(t);
+    if (i >= 0) { this.live.splice(i, 1); this.pool.push(t); }
+  }
+
   releaseAll() {
     this.pool.push(...this.live);
     this.live = [];

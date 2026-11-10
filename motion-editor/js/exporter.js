@@ -148,7 +148,7 @@ export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {})
         await new Promise((r) => setTimeout(r, 2));
         if (performance.now() - tq > 15000) { failure = new Error('o codificador de vídeo do aparelho parou de responder'); break; }
       }
-      if (i % 3 === 0) {
+      {
         const el = (performance.now() - t0) / 1000;
         const eta = (el / (i + 1)) * (total - i - 1);
         ui.set((i + 1) / total, `Quadro ${i + 1}/${total} · faltam ~${Math.ceil(eta)}s`);

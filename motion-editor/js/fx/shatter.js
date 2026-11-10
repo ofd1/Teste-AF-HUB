@@ -389,7 +389,14 @@ export default [
         const ti = n === 1 ? tt : Math.max(0, tt - (p.shutter / fps) * (i / (n - 1)));
         const tr = p.reverse ? Math.max(0, (p.reverseDur ?? 1) - ti) : ti; // Montar: as peças voltam ao lugar
         const s = gl.mesh(key, build, SHARD_VERT, SHARD_FRAG, { ...base, ...hist(tr), u_t: tr }, src.w, src.h, { depth: true });
-        acc = n === 1 ? s : gl.pass(ACC, { u_tex: acc || s, u_tex2: s, u_w: 1 / n, u_first: acc ? 0 : 1 });
+        if (n === 1) acc = s;
+        else {
+          const prev = acc;
+          acc = gl.pass(ACC, { u_tex: prev || s, u_tex2: s, u_w: 1 / n, u_first: prev ? 0 : 1 });
+          // motion blur: cada amostra é somada e liberada na hora (antes as 8 amostras ficavam na memória de vídeo
+          // até o fim da camada: ~275 MB em 1080p → o iPhone reiniciava a GPU e a exportação parava)
+          gl.release(s); if (prev) gl.release(prev);
+        }
       }
       return p.keepOriginal ? gl.pass(OVER, { u_tex: src, u_tex2: acc }) : acc;
     },
