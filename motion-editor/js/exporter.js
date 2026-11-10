@@ -1,5 +1,5 @@
 // Exportação: MP4 quadro a quadro (WebCodecs + mp4-muxer, com áudio) e fallback em tempo real (MediaRecorder).
-import { renderFrame } from './renderer.js';
+import { renderFrame, resetRenderCaches } from './renderer.js';
 import { getGL, glLost } from './gl.js';
 import { prepare, pauseAll, setExporting } from './media.js';
 import { renderMix, stopAudio } from './audio.js';
@@ -93,7 +93,7 @@ export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {})
   const { Muxer, ArrayBufferTarget } = await import('./vendor/mp4-muxer.mjs');
 
   let ui = progressModal('Exportando vídeo…', `${width}×${height} · ${fps} fps · ${video.config.codec}`);
-  store.exporting = true; setExporting(true);
+  store.exporting = true; setExporting(true); resetRenderCaches();
   try { await prepareBgModels(flatLayers(store.project.layers)); } catch { /* segue sem IA */ }
   stopAudio();
   pauseAll();
@@ -195,6 +195,7 @@ export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {})
     return true;
   } finally {
     ui.close();
+    resetRenderCaches();
     store.exporting = false; setExporting(false);
     keepAwake(false);
   }

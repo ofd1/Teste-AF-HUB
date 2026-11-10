@@ -236,7 +236,11 @@ export default [
       const k = ((p.spread ?? 33) - 33) / 33;
       const h = Math.min(1, p.aspect ?? 1), v = Math.min(1, 1 / (p.aspect ?? 1));
       let acc = null, wsum = 0;
-      levels.forEach((f, i) => {
+      if (Math.abs((p.aspect ?? 1) - 1) < 0.01 && gl.blurSum && !globalThis.__DG_OLD) {
+        // todas as iterações numa pirâmide só (mesmo resultado, bem mais leve na exportação)
+        acc = gl.blurSum(th, levels.map((f) => ({ sigma: Math.max(0.5, r * f), w: Math.pow(f, k) })));
+        wsum = levels.reduce((s2, f) => s2 + Math.pow(f, k), 0);
+      } else levels.forEach((f, i) => {
         const w = Math.pow(f, k);
         const b = Math.abs((p.aspect ?? 1) - 1) < 0.01 ? gl.blur(th, Math.max(0.5, r * f)) : gl.blur(gl.blur(th, r * f * h, 2), r * f * v, 3);
         acc = acc ? gl.add(acc, b, w) : (w === 1 ? b : gl.add(b, b, w - 1));

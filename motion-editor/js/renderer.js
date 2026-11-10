@@ -13,6 +13,10 @@ const contentCanvases = new Map();
 let accumCanvas = null;
 let snapshotCanvas = null;
 let project = null; // projeto em renderização (para tamanho de camadas de ajuste)
+const groupCache = new Map(); // conteúdo de pré-comps já desenhado (só na exportação)
+const GROUP_CACHE_MAX = 8, GROUP_CACHE_BYTES = (typeof navigator !== 'undefined' && /iP(hone|ad|od)/.test(navigator.userAgent)) ? 36e6 : 160e6;
+/** Limpa caches da exportação (chamar no início e no fim de cada exportação). */
+export function resetRenderCaches() { for (const c of groupCache.values()) { c.width = 0; c.height = 0; } groupCache.clear(); }
 let renderOpts = { final: false }; // final=true na exportação (quadros em resolução total)
 
 // Memória: as telas de cada camada ficam guardadas para o próximo quadro, mas só até um limite. As que não
@@ -371,9 +375,27 @@ function renderLayerImage(layer, t, scale0, extra) {
     cx.setTransform(1, 0, 0, 1, 0, 0);
     cx.clearRect(0, 0, W, H);
     if (layer.type === 'group') {
+      // exportação: o conteúdo da pré-comp num instante já desenhado é reaproveitado (Twixtor/Time Remap na pré-comp
+      // com mistura de quadros pede os mesmos quadros do conteúdo várias vezes — em câmera lenta, 4× ou mais)
+      const ck = renderOpts.final ? `${layer.id}|${tt.toFixed(5)}|${W}x${H}|${pad}|${scale.toFixed(4)}` : null;
+      const hit = ck && groupCache.get(ck);
+      if (hit) { groupCache.delete(ck); groupCache.set(ck, hit); cx.drawImage(hit, 0, 0); return canvas; }
       // grupo (pré-composição): desenha as camadas filhas como uma composição própria
       cx.setTransform(1, 0, 0, 1, pad, pad);
       drawLayerList(cx, layer.props.layers || [], tt, scale, fps);
+      if (ck) {
+        cx.setTransform(1, 0, 0, 1, 0, 0);
+        let keep = null;
+        const bytesOf = () => [...groupCache.values()].reduce((n, c) => n + c.width * c.height * 4, 0);
+        while (groupCache.size && (groupCache.size >= GROUP_CACHE_MAX || bytesOf() + W * H * 4 > GROUP_CACHE_BYTES)) {
+          const [k0, old] = groupCache.entries().next().value; groupCache.delete(k0);
+          if (!keep) keep = old; else { old.width = 0; old.height = 0; }
+        }
+        if (!keep) keep = makeCanvas(W, H);
+        if (keep.width !== W || keep.height !== H) { keep.width = W; keep.height = H; }
+        const kx = keep.getContext('2d'); kx.clearRect(0, 0, W, H); kx.drawImage(canvas, 0, 0);
+        groupCache.set(ck, keep);
+      }
       return canvas;
     }
     cx.translate(pad, pad);
@@ -408,7 +430,7 @@ function renderLayerImage(layer, t, scale0, extra) {
       const hq = (renderOpts.final || renderOpts.hq) && !fast;
       const flow = computeFlow(gl, tex, texB, hq ? 'final' : 'preview');
       const mbAmt = vectorBlur(layer, lt);
-      if (hq && fim !== 3 && vf.f > 0.001 && vf.f < 0.999) tex = interpBidirectional(gl, tex, texB, flow, computeFlow(gl, texB, tex, 'final'), vf.f);
+      if (hq && fim !== 3 && layer.type !== 'group' && vf.f > 0.001 && vf.f < 0.999) tex = interpBidirectional(gl, tex, texB, flow, computeFlow(gl, texB, tex, 'final'), vf.f);
       else tex = interpWithFlow(gl, tex, texB, flow, vf.f);
       if (mbAmt > 0) {
         // obturador de 180° (0,5 quadro) × quadros de origem avançados por quadro de saída
@@ -920,4 +942,9 @@ export function reparent(layer, newParent, proj, t) {
   if (Math.abs(dr) > 1e-6) { if (tr.rotation.keys?.length) for (const k of tr.rotation.keys) k.v += dr; tr.rotation.value += dr; }
   if (Math.abs(ks - 1) > 1e-6) { const f = (v) => v.map((x) => Math.round(x * ks * 100) / 100); if (tr.scale.keys?.length) for (const k of tr.scale.keys) k.v = f(k.v); tr.scale.value = f(tr.scale.value); }
   layer.parent = newParent ? newParent.id : null;
+}
+/** Diagnóstico: memória dos canvases da renderização (MB). */
+export function __canvasStats() {
+  const list = [...contentCanvases.values()].map((c) => c.width * c.height * 4);
+  return { n: list.length, mb: Math.round(list.reduce((a, b) => a + b, 0) / 1e6), max: Math.round(Math.max(0, ...list) / 1e6), gcache: groupCache.size };
 }

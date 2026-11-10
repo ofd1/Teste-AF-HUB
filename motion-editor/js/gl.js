@@ -214,9 +214,9 @@ export class GLEngine {
     const budget = this.poolBudget || (this.poolBudget = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)) ? 160e6 : 480e6);
     const bytes = (t) => t.w * t.h * (t.u8 ? 4 : 8);
     let total = this.pool.reduce((s, t) => s + bytes(t), 0);
-    if (total <= budget && this.pool.length <= 48) return;
+    if (total <= budget && this.pool.length <= 96) return;
     const gl = this.gl;
-    while (this.pool.length && (total > budget * 0.75 || this.pool.length > 48)) {
+    while (this.pool.length && (total > budget * 0.75 || this.pool.length > 96)) {
       const t = this.pool.shift();
       total -= bytes(t);
       gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo);
@@ -427,6 +427,33 @@ export class GLEngine {
       }
     }
     return t;
+  }
+
+  /**
+   * Soma de vários desfoques do mesmo src (Σ wᵢ·blur(src, σᵢ)) — mesmo resultado que chamar blur() várias vezes,
+   * mas a pirâmide reduzida é feita uma vez só e a soma é ampliada uma vez só (Deep Glow: 6 desfoques → ~3× mais rápido).
+   */
+  blurSum(src, items) {
+    const lv = (sg) => { let k = 0; while (sg / (1 << k) > 8 && k < 4) k++; return k; };
+    const plan = items.map(({ sigma, w }) => ({ sigma, w, k: sigma < 0.3 ? -1 : lv(sigma) }));
+    const K = Math.max(0, ...plan.map((q) => q.k));
+    const chain = [src];
+    for (let k = 1; k <= K; k++) chain.push(this.copy(chain[k - 1], Math.max(1, Math.round(src.w / (1 << k))), Math.max(1, Math.round(src.h / (1 << k)))));
+    let acc = null;
+    const addW = (t, w) => { acc = acc ? this.add(acc, t, w) : (w === 1 ? t : this.add(t, t, w - 1)); };
+    for (let k = K; k >= 0; k--) {
+      if (acc && k < K) {
+        acc = this.copy(acc, chain[k].w, chain[k].h);
+        if (k > 0) { acc = this.pass(BLUR, { u_tex: acc, u_dir: [1, 0], u_sigma: 1.2 }); acc = this.pass(BLUR, { u_tex: acc, u_dir: [0, 1], u_sigma: 1.2 }); }
+      }
+      for (const q of plan) {
+        if (q.k !== k && !(k === 0 && q.k === -1)) continue;
+        let t = chain[k];
+        if (q.k >= 0) { const sg = q.sigma / (1 << k); t = this.pass(BLUR, { u_tex: t, u_dir: [1, 0], u_sigma: sg }); t = this.pass(BLUR, { u_tex: t, u_dir: [0, 1], u_sigma: sg }); }
+        addW(t, q.w);
+      }
+    }
+    return acc;
   }
 
   add(a, b, amount = 1) { return this.pass(ADD, { u_tex: a, u_tex2: b, u_amount: amount }); }
