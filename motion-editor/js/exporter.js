@@ -54,19 +54,44 @@ async function pickAudioCodec(sampleRate) {
 }
 
 function progressModal(title, detail) {
+  // janela de progresso como a Render Queue do AE: mostra o quadro que acabou de ser renderizado;
+  // "Minimizar" vira um cartão no canto e o app continua livre (a exportação usa uma cópia do projeto)
   const wrap = document.createElement('div');
   wrap.className = 'modal-wrap';
   wrap.innerHTML = `<div class="modal"><header><h2>${title}</h2></header><div class="modal-body">
+    <div class="exp-pv"><canvas width="320" height="320"></canvas></div>
     <div class="progress"><div class="bar"></div></div><p class="muted small prog-text">${detail}</p>
-    </div><footer><button class="danger">Cancelar</button></footer></div>`;
+    </div><footer><button data-x="min">Minimizar</button><button class="danger" data-x="cancel">Cancelar</button></footer></div>`;
   document.body.appendChild(wrap);
-  const state = { cancelled: false };
-  wrap.querySelector('button').onclick = () => { state.cancelled = true; };
+  const chip = document.createElement('div');
+  chip.className = 'exp-chip'; chip.hidden = true;
+  chip.innerHTML = '<canvas width="96" height="96"></canvas><div class="exp-chip-info"><b>Exportando</b><span class="exp-chip-pct">0%</span><div class="progress"><div class="bar"></div></div></div><button aria-label="Cancelar exportação">✕</button>';
+  document.body.appendChild(chip);
+  const state = { cancelled: false, frac: 0 };
+  const big = wrap.querySelector('.exp-pv canvas'), small = chip.querySelector('canvas');
+  wrap.querySelector('[data-x="cancel"]').onclick = () => { state.cancelled = true; };
+  wrap.querySelector('[data-x="min"]').onclick = () => { wrap.hidden = true; chip.hidden = false; };
+  chip.addEventListener('click', (e) => { if (e.target.closest('button')) { state.cancelled = true; return; } chip.hidden = true; wrap.hidden = false; });
   state.set = (f, text) => {
+    state.frac = f;
     wrap.querySelector('.bar').style.width = `${Math.round(f * 100)}%`;
+    chip.querySelector('.bar').style.width = `${Math.round(f * 100)}%`;
+    chip.querySelector('.exp-chip-pct').textContent = `${Math.round(f * 100)}%${text ? ` · ${text.replace(/^Quadro \d+\/\d+ · /, '')}` : ''}`;
     if (text) wrap.querySelector('.prog-text').textContent = text;
   };
-  state.close = () => wrap.remove();
+  let lastPv = 0;
+  /** Prévia do quadro exportado (no máximo ~6 vezes por segundo, para não atrasar a exportação). */
+  state.preview = (src) => {
+    const now = performance.now();
+    if (now - lastPv < 160) return;
+    lastPv = now;
+    const target = wrap.hidden ? small : big;
+    const k = Math.min(target === big ? 320 : 96, 4096) / Math.max(src.width, src.height);
+    const w = Math.max(1, Math.round(src.width * k)), h = Math.max(1, Math.round(src.height * k));
+    if (target.width !== w || target.height !== h) { target.width = w; target.height = h; }
+    target.getContext('2d').drawImage(src, 0, 0, w, h);
+  };
+  state.close = () => { wrap.remove(); chip.remove(); };
   return state;
 }
 
@@ -85,7 +110,8 @@ export async function fitExportScale(project, scale, fps = 30, bitrate = 16) {
 
 export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {}) {
   bitrate = bitrate || autoBitrate(store.project, scale, fpsOverride || store.project.fps);
-  const { project } = store;
+  // cópia do projeto: dá para minimizar e continuar editando sem mudar o vídeo que está saindo
+  const project = JSON.parse(JSON.stringify(store.project));
   const fps = fpsOverride || project.fps;
   const width = even(project.width * scale), height = even(project.height * scale);
   const video = await pickVideoCodec(width, height, bitrate * 1e6, fps);
@@ -128,11 +154,13 @@ export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {})
     const ctx = canvas.getContext('2d', { alpha: false });
     const total = Math.max(1, Math.round(project.duration * fps));
     const t0 = performance.now();
+    // nunca fica parado num quadro: se o aparelho não entregar o quadro do vídeo em 8 s, segue com o último bom
+    const prep = (t) => Promise.race([prepare(project, t, { exact: true }), new Promise((r) => setTimeout(r, 8000))]);
+    let nextPrep = prep(0);
     for (let i = 0; i < total; i++) {
       if (ui.cancelled || failure) break;
       const t = i / fps;
-      // nunca fica parado num quadro: se o aparelho não entregar o quadro do vídeo em 8 s, segue com o último bom
-      await Promise.race([prepare(project, t, { exact: true }), new Promise((r) => setTimeout(r, 8000))]);
+      await nextPrep;
       renderFrame(ctx, project, t, width / project.width, { final: true });
       // se a GPU caiu no meio do quadro, recria o contexto e refaz o quadro (antes saía preto até o fim)
       for (let retry = 0; retry < 3 && glLost(); retry++) {
@@ -141,6 +169,9 @@ export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {})
         renderFrame(ctx, project, t, width / project.width, { final: true });
       }
       const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
+      ui.preview?.(canvas);
+      // o próximo quadro começa a ser lido do vídeo enquanto este é codificado
+      nextPrep = i + 1 < total ? prep((i + 1) / fps) : null;
       venc.encode(frame, { keyFrame: i % (fps * 2) === 0 });
       frame.close();
       // codificador parado (acontece no iPhone com pouca memória): não espera para sempre — avisa e tenta o modo tempo real

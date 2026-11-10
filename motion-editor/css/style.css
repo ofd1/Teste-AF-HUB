@@ -628,3 +628,13 @@ a.btn.primary { background: var(--accent); border-color: var(--accent); color: #
 
 .tl-inner { position: relative; }
 .tl-snap { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -0.5px; background: #ffd23f; box-shadow: 0 0 4px #ffd23f; pointer-events: none; z-index: 6; display: none; }
+
+/* ---------- exportação: prévia do quadro e cartão minimizado ---------- */
+.exp-pv { display: flex; justify-content: center; background: #000; border-radius: 10px; margin-bottom: 10px; min-height: 120px; }
+.exp-pv canvas { max-width: 100%; max-height: 38vh; display: block; }
+.exp-chip { position: fixed; right: 12px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 60; display: flex; gap: 8px; align-items: center;
+  background: #1d1d26ee; border: 1px solid #3a3a48; border-radius: 12px; padding: 6px 8px 6px 6px; box-shadow: 0 6px 24px #0008; max-width: 280px; }
+.exp-chip canvas { width: 56px; height: 56px; object-fit: contain; background: #000; border-radius: 6px; }
+.exp-chip-info { display: flex; flex-direction: column; gap: 3px; font-size: 12px; min-width: 120px; }
+.exp-chip-info .progress { height: 4px; }
+.exp-chip button { background: none; border: 0; color: #bbb; font-size: 16px; padding: 4px 6px; }

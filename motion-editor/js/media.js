@@ -54,8 +54,20 @@ function releaseVideo(v) {
 
 // durante a exportação o cache de quadros pausa (o iPhone tem poucos decodificadores de vídeo)
 let exportBusy = false;
+// leitores sequenciais da exportação, um por arquivo (fechados quando a exportação termina)
+const readers = new Map();
+function readerFor(src) {
+  if (!src || typeof VideoDecoder === 'undefined') return Promise.resolve(null);
+  if (!readers.has(src)) readers.set(src, (async () => { try { const blob = await (await fetch(src)).blob(); const { SeqReader } = await import('./seqreader.js'); return await SeqReader.open(blob); } catch { return null; } })());
+  return readers.get(src);
+}
 export function setExporting(b) {
   exportBusy = b;
+  if (!b) {
+    for (const r of readers.values()) r.then((x) => x?.close()).catch(() => {});
+    readers.clear();
+    for (const e of videos.values()) { if (e.snaps) for (const [k, c] of [...e.snaps]) if (c._rd) e.snaps.delete(k); if (e.last?._rd) e.last = null; }
+  }
   // exportação começando: cancela caches ainda sendo montados (cada um prende um decodificador de vídeo; no iPhone
   // isso podia travar a busca de quadros da exportação). Eles são refeitos depois.
   if (b) for (const m of [caches, pendingCaches]) for (const [id, c] of m) if (!c.ready) { c.cancelled = true; m.delete(id); }
@@ -198,14 +210,23 @@ export function prepare(project, t, { exact = false, playing = false } = {}) {
       if (!e.a.paused) e.a.pause();
       if (!e.snaps) e.snaps = new Map();
       jobs.push((async () => {
+        // leitor sequencial (WebCodecs): bem mais rápido que buscar o <video> quadro a quadro; se não der, busca normal
+        const rd = await readerFor(l.props.src);
         for (const st of [fr.a, fr.b]) {
           if (st === null) continue;
           const key = Math.round(st * 1000);
           if (e.snaps.has(key)) continue;
+          if (rd) {
+            const c = await rd.frameAt(st).catch(() => null);
+            if (c) {
+              if (e.snaps.size >= 4) { const [k0, old] = e.snaps.entries().next().value; e.snaps.delete(k0); if (!old._rd) { old.width = 0; old.height = 0; } }
+              c._rd = true; e.snaps.set(key, c); continue;
+            }
+          }
           await seekExact(e.a, st, l.props.sourceFps || project.fps || 30);
           if (e.a.readyState < 2) continue;
           let c = null;
-          if (e.snaps.size >= 4) { const [k0, old] = e.snaps.entries().next().value; e.snaps.delete(k0); c = old; }
+          if (e.snaps.size >= 4) { const [k0, old] = e.snaps.entries().next().value; e.snaps.delete(k0); c = old._rd ? null : old; }
           e.snaps.set(key, snapshot(e.a, c));
         }
         const ka = e.snaps.get(Math.round(fr.a * 1000));
