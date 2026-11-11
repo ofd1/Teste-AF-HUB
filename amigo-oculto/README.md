@@ -9,7 +9,7 @@ cd amigo-oculto
 npm start          # sem dependências, só Node 18+
 ```
 
-Abra http://localhost:3000. Variáveis opcionais: `PORT`, `DATA_DIR` (onde fica o `state.json`), `ADMIN_KEY`.
+Abra http://localhost:8080. Variáveis opcionais: `PORT`, `DATA_DIR` (onde fica o `state.json`), `ADMIN_KEY`.
 
 ## Os dois sites
 
@@ -33,10 +33,25 @@ O login vale para os dois sites no mesmo aparelho.
 Suba o servidor com `ADMIN_KEY=algum-segredo` e rode:
 
 ```bash
-curl -X POST http://localhost:3000/api/admin/liberar \
+curl -X POST http://localhost:8080/api/admin/liberar \
   -H "x-admin-key: algum-segredo" -d '{"nome":"Gabriel"}'
 ```
 
 ## Refazer o sorteio do zero
 
 Pare o servidor e apague `data/state.json`.
+
+## Hospedar no Discloud
+
+Requer o **plano Platinum ou superior** (sites precisam de no mínimo 512 MB de RAM).
+
+1. No painel do Discloud, abra **Domains → + Create subdomain** e crie o subdomínio `amigo-oculto`
+   (se já existir, use outro nome e troque o `ID=` no `discloud.config`).
+2. Compacte o conteúdo **desta pasta** (não a pasta em si), sem a pasta `data/`:
+   `zip -r ../amigo-oculto.zip . -x "data/*" "*.zip"`
+3. Envie o `.zip` pelo painel, pelo bot no Discord ou pela CLI.
+4. Acesse `https://amigo-oculto.discloud.app` (o Discloud pode usar `.discloud.dev`).
+
+**Cuidado com os dados:** o sorteio, as listas e as travas de aparelho ficam em `data/state.json` no servidor.
+Para atualizar o site, use **commit** (substitui só os arquivos enviados) e nunca envie a pasta `data/`.
+Apagar o app e subir de novo apaga esse arquivo: o sorteio é refeito e todos podem entrar de novo.

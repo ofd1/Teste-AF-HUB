@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080; // Discloud exige 8080 em 0.0.0.0
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -217,4 +217,4 @@ http.createServer(async (req, res) => {
   } catch (e) {
     return json(res, 400, { erro: 'Requisição inválida' });
   }
-}).listen(PORT, () => console.log(`Amigo Oculto rodando em http://localhost:${PORT}`));
+}).listen(PORT, '0.0.0.0', () => console.log(`Amigo Oculto rodando na porta ${PORT}`));
