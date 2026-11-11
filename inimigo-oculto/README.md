@@ -22,4 +22,10 @@ npm start   # porta 8080
 3. Envie como um **app novo** (não substitua o do amigo oculto).
 
 Para atualizar depois, use commit e nunca envie `data/`: é lá que ficam o sorteio e as travas.
-Liberar uma conta: veja o README do amigo-oculto (mesmo comando `/api/admin/liberar`).
+
+## Liberar uma conta (alguém trocou de celular ou de navegador)
+
+Abra `/admin` no site, digite a chave de administrador (arquivo `admin.key`, que não vai pro GitHub
+mas vai no zip) e clique em **Liberar**. O nome sorteado e a lista continuam iguais.
+A chave também pode vir da variável de ambiente `ADMIN_KEY`.
+

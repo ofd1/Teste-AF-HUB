@@ -9,7 +9,9 @@ const PORT = process.env.PORT || 8080; // Discloud exige 8080 em 0.0.0.0
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const ADMIN_KEY = process.env.ADMIN_KEY || '';
+// Chave de administrador: variável ADMIN_KEY ou arquivo admin.key ao lado do server.js.
+let ADMIN_KEY = process.env.ADMIN_KEY || '';
+try { if (!ADMIN_KEY) ADMIN_KEY = fs.readFileSync(path.join(__dirname, 'admin.key'), 'utf8').trim(); } catch {}
 
 const PARTICIPANTES = {
   'Gabriel': 'G@bB',
@@ -155,14 +157,23 @@ async function api(req, res, url) {
     return json(res, 200, { token: p.token, ...painel(nome) });
   }
 
-  if (req.method === 'POST' && url.pathname === '/api/admin/liberar') {
-    // Libera uma conta para entrar de novo (ex.: a pessoa trocou de celular).
-    if (!ADMIN_KEY || !safeEq(req.headers['x-admin-key'] || '', ADMIN_KEY)) return json(res, 403, { erro: 'Proibido' });
-    const { nome } = await lerBody(req);
-    if (!NOMES.includes(nome)) return json(res, 404, { erro: 'Nome não encontrado' });
-    estado.pessoas[nome].token = null;
-    salvar(estado);
-    return json(res, 200, { ok: true });
+  if (url.pathname.startsWith('/api/admin/')) {
+    if (bloqueado(ip)) return json(res, 429, { erro: 'Muitas tentativas. Espere alguns minutos.' });
+    if (!ADMIN_KEY || !safeEq(req.headers['x-admin-key'] || '', ADMIN_KEY)) { falhou(ip); return json(res, 403, { erro: 'Chave de administrador incorreta.' }); }
+
+    // Lista quem já entrou e quem já sorteou (sem mostrar quem tirou quem).
+    if (req.method === 'GET' && url.pathname === '/api/admin/contas') {
+      return json(res, 200, NOMES.map((n) => ({ nome: n, emUso: !!estado.pessoas[n].token, sorteou: estado.pessoas[n].sorteou })));
+    }
+    // Libera uma conta para entrar de novo em outro aparelho. Sorteio e lista continuam iguais.
+    if (req.method === 'POST' && url.pathname === '/api/admin/liberar') {
+      const { nome } = await lerBody(req);
+      if (!NOMES.includes(nome)) return json(res, 404, { erro: 'Nome não encontrado' });
+      estado.pessoas[nome].token = null;
+      salvar(estado);
+      return json(res, 200, { ok: true });
+    }
+    return json(res, 404, { erro: 'Rota não encontrada' });
   }
 
   const nome = quemE(req);
@@ -195,7 +206,7 @@ async function api(req, res, url) {
 const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
 
 // Dois sites: /desejos e /sorteio. A raiz mostra os dois links.
-const PAGINAS = { '/': 'index.html', '/desejos': 'desejos.html', '/sorteio': 'sorteio.html' };
+const PAGINAS = { '/admin': 'admin.html', '/': 'index.html', '/desejos': 'desejos.html', '/sorteio': 'sorteio.html' };
 
 function estatico(req, res, url) {
   const rota = url.pathname.replace(/\/+$/, '') || '/';

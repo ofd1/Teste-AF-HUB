@@ -28,14 +28,6 @@ O login vale para os dois sites no mesmo aparelho.
 - Ao abrir o link de novo, o nome já sorteado e a lista aparecem direto.
 - O presentinho 🎁 no canto abre a lista de desejos atualizada de quem você tirou.
 
-## Liberar uma conta (ex.: alguém trocou de celular)
-
-Suba o servidor com `ADMIN_KEY=algum-segredo` e rode:
-
-```bash
-curl -X POST http://localhost:8080/api/admin/liberar \
-  -H "x-admin-key: algum-segredo" -d '{"nome":"Gabriel"}'
-```
 
 ## Refazer o sorteio do zero
 
@@ -55,3 +47,10 @@ Requer o **plano Platinum ou superior** (sites precisam de no mínimo 512 MB de 
 **Cuidado com os dados:** o sorteio, as listas e as travas de aparelho ficam em `data/state.json` no servidor.
 Para atualizar o site, use **commit** (substitui só os arquivos enviados) e nunca envie a pasta `data/`.
 Apagar o app e subir de novo apaga esse arquivo: o sorteio é refeito e todos podem entrar de novo.
+
+## Liberar uma conta (alguém trocou de celular ou de navegador)
+
+Abra `/admin` no site, digite a chave de administrador (arquivo `admin.key`, que não vai pro GitHub
+mas vai no zip) e clique em **Liberar**. O nome sorteado e a lista continuam iguais.
+A chave também pode vir da variável de ambiente `ADMIN_KEY`.
+

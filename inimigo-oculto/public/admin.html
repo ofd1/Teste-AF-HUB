@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Administração</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔑</text></svg>">
+<link rel="stylesheet" href="/comum.css">
+<style>
+  .linha { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 0; border-bottom: 1px solid rgba(128,128,128,.25); }
+  .linha:last-child { border-bottom: 0; }
+  .linha small { display: block; color: var(--muted); }
+  .linha .btn { padding: 8px 14px; font-size: .9rem; }
+</style>
+</head>
+<body class="tema-inimigo">
+<main id="app"></main>
+<script src="/comum.js"></script>
+<script>
+const app = $('#app');
+let chave = '';
+try { chave = sessionStorage.getItem('admin_key') || ''; } catch {}
+
+async function admin(metodo, rota, corpo) {
+  const r = await fetch(rota, { method: metodo, headers: { 'Content-Type': 'application/json', 'x-admin-key': chave }, body: corpo ? JSON.stringify(corpo) : undefined });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(d.erro || 'Erro'), { status: r.status });
+  return d;
+}
+
+function telaChave(msg = '') {
+  app.innerHTML = `<h1>🔑 <span>Administração</span></h1>
+    <div class="card">
+      <h2>Chave de administrador</h2>
+      <form id="f" style="display:flex;gap:10px"><input type="password" id="k" placeholder="Chave" required><button class="btn">Entrar</button></form>
+      <p class="erro">${esc(msg)}</p>
+    </div>`;
+  $('#f').addEventListener('submit', (e) => { e.preventDefault(); chave = $('#k').value.trim(); try { sessionStorage.setItem('admin_key', chave); } catch {} carregar(); });
+}
+
+async function carregar(msg = '') {
+  let contas;
+  try { contas = await admin('GET', '/api/admin/contas'); }
+  catch (e) { return telaChave(e.message); }
+  app.innerHTML = `<h1>🔑 <span>Administração</span></h1>
+    <div class="card">
+      <h2>Contas</h2>
+      <p class="vazio" style="margin-top:-4px">"Liberar" deixa a pessoa entrar de novo num aparelho novo. O nome sorteado e a lista continuam iguais.</p>
+      ${contas.map((c) => `<div class="linha">
+        <div><b>${esc(c.nome)}</b><small>${c.emUso ? '🔒 já entrou' : '⚪ ainda não entrou'} · ${c.sorteou ? '🎩 já sorteou' : 'não sorteou'}</small></div>
+        ${c.emUso ? `<button class="btn" data-nome="${esc(c.nome)}">Liberar</button>` : ''}
+      </div>`).join('')}
+      <p class="ok">${esc(msg)}</p>
+    </div>`;
+  app.querySelectorAll('button[data-nome]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('Liberar a conta de ' + b.dataset.nome + '?')) return;
+    try { await admin('POST', '/api/admin/liberar', { nome: b.dataset.nome }); carregar('✅ Conta de ' + b.dataset.nome + ' liberada. Peça para entrar de novo com a senha.'); }
+    catch (e) { alert(e.message); }
+  }));
+}
+
+chave ? carregar() : telaChave();
+</script>
+</body>
+</html>
