@@ -45,12 +45,12 @@ Pare o servidor e apague `data/state.json`.
 
 Requer o **plano Platinum ou superior** (sites precisam de no mínimo 512 MB de RAM).
 
-1. No painel do Discloud, abra **Domains → + Create subdomain** e crie o subdomínio `amigo-oculto`
+1. No painel do Discloud, abra **Domains → + Create subdomain** e crie o subdomínio `amigooculto-8ano`
    (se já existir, use outro nome e troque o `ID=` no `discloud.config`).
 2. Compacte o conteúdo **desta pasta** (não a pasta em si), sem a pasta `data/`:
    `zip -r ../amigo-oculto.zip . -x "data/*" "*.zip"`
 3. Envie o `.zip` pelo painel, pelo bot no Discord ou pela CLI.
-4. Acesse `https://amigo-oculto.discloud.app` (o Discloud pode usar `.discloud.dev`).
+4. Acesse `https://amigooculto-8ano.discloud.app` (o Discloud pode usar `.discloud.dev`).
 
 **Cuidado com os dados:** o sorteio, as listas e as travas de aparelho ficam em `data/state.json` no servidor.
 Para atualizar o site, use **commit** (substitui só os arquivos enviados) e nunca envie a pasta `data/`.
