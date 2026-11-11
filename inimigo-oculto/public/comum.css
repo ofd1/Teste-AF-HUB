@@ -1,0 +1,136 @@
+  :root {
+    --bg: #0f2a1d; --bg2: #163b29; --card: #fffaf0; --ink: #2b1d14; --muted: #7a6a5c;
+    --red: #c8102e; --red2: #9e0c24; --gold: #f2c14e; --green: #1f7a4d; --paper: #fdf6e3;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink);
+    background: radial-gradient(circle at 20% 10%, var(--bg2), var(--bg) 60%); background-color: var(--bg); min-height: 100vh;
+  }
+  /* neve */
+  .neve { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+  .neve i { position: absolute; top: -10px; color: #fff; opacity: .7; animation: cair linear infinite; }
+  @keyframes cair { to { transform: translateY(110vh) rotate(360deg); } }
+
+  main { position: relative; z-index: 1; max-width: 640px; margin: 0 auto; padding: 24px 16px 120px; }
+  h1 { color: #fff; text-align: center; font-size: 2rem; margin: 8px 0 4px; letter-spacing: .5px; }
+  h1 span { color: var(--gold); }
+  .sub { color: #cfe3d6; text-align: center; margin: 0 0 24px; }
+  .card { background: var(--card); border-radius: 18px; padding: 22px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  .card h2 { margin: 0 0 12px; font-size: 1.25rem; }
+  button { font: inherit; cursor: pointer; border: 0; border-radius: 12px; padding: 12px 18px; font-weight: 600; }
+  .btn { background: var(--red); color: #fff; box-shadow: 0 4px 0 var(--red2); transition: transform .1s; }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--red2); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.sec { background: #e9dfcc; color: var(--ink); box-shadow: 0 4px 0 #cbbda3; }
+  .btn.grande { font-size: 1.2rem; padding: 16px 28px; }
+  input { font: inherit; width: 100%; padding: 12px 14px; border-radius: 10px; border: 2px solid #e2d6bf; background: #fff; color: var(--ink); }
+  input:focus { outline: none; border-color: var(--green); }
+  .erro { color: var(--red); min-height: 1.3em; margin: 10px 0 0; font-weight: 600; }
+  .ok { color: var(--green); min-height: 1.3em; margin: 10px 0 0; font-weight: 600; }
+
+  /* login */
+  .nomes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .nomes button { background: #fff; border: 2px solid #e2d6bf; color: var(--ink); padding: 14px 6px; }
+  .nomes button.sel { border-color: var(--red); background: #fde8ea; }
+  .nomes button small { display: block; font-weight: 400; color: var(--muted); font-size: .72rem; margin-top: 2px; }
+  .senha { margin-top: 16px; display: none; gap: 10px; }
+  .senha.on { display: flex; }
+
+  /* nav */
+  nav { display: flex; gap: 8px; justify-content: center; margin-bottom: 18px; flex-wrap: wrap; }
+  nav a { text-decoration: none; color: #fff; padding: 10px 16px; border-radius: 999px; background: rgba(255,255,255,.1); font-weight: 600; }
+  nav a.on { background: var(--gold); color: var(--ink); }
+  .ola { color: #cfe3d6; text-align: center; margin-bottom: 10px; }
+
+  /* desejos */
+  .item { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 12px; border: 2px dashed #e2d6bf; border-radius: 12px; margin-bottom: 10px; }
+  .item .campos { display: grid; gap: 8px; }
+  .item .rm { background: transparent; color: var(--red); padding: 6px 10px; align-self: start; font-size: 1.2rem; }
+  .acoes { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+
+  /* sorteio */
+  .palco { position: relative; height: 330px; display: flex; align-items: flex-end; justify-content: center; }
+  .pote { position: relative; width: 240px; height: 170px; }
+  .pote .boca { position: absolute; top: 0; left: 0; right: 0; height: 40px; border-radius: 50%; background: #4a2c17; border: 6px solid var(--red2); z-index: 1; }
+  .pote .corpo { position: absolute; top: 20px; left: 0; right: 0; bottom: 0; background: linear-gradient(90deg, var(--red2), var(--red) 40%, var(--red2)); border-radius: 0 0 100px 100px / 0 0 80px 80px; z-index: 3; overflow: hidden; }
+  .pote .corpo::after { content: "🎄 AMIGO OCULTO 🎄"; position: absolute; top: 50%; left: 0; right: 0; text-align: center; color: var(--gold); font-weight: 800; font-size: .85rem; letter-spacing: 1px; }
+  .papel { position: absolute; width: 46px; height: 30px; background: var(--paper); border: 1px solid #d9cba8; border-radius: 3px; z-index: 2; box-shadow: 0 2px 3px rgba(0,0,0,.2); }
+  .papel::before { content: ""; position: absolute; inset: 0; border-top: 1px solid #e5d8b8; top: 50%; }
+  .mexendo .papel { animation: chacoalha .25s ease-in-out infinite alternate; }
+  .mexendo .pote { animation: pote .18s ease-in-out infinite alternate; }
+  @keyframes chacoalha { from { transform: translate(-6px, 4px) rotate(var(--r)); } to { transform: translate(6px, -10px) rotate(calc(var(--r) * -1)); } }
+  @keyframes pote { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+
+  .bilhete { position: absolute; left: 50%; bottom: 120px; width: 70px; height: 44px; transform: translateX(-50%) scale(.6); opacity: 0; z-index: 4; perspective: 800px; }
+  .bilhete.sobe { animation: sobe 1s cubic-bezier(.2,.8,.2,1) forwards; }
+  .bilhete.aberto, .bilhete.fixo { opacity: 1; width: 280px; height: 170px; bottom: 150px; transform: translateX(-50%) scale(1); transition: width .6s ease, height .6s ease, bottom .6s ease; }
+  .bilhete.fixo { transition: none; }
+  @keyframes sobe { 0% { opacity: 1; bottom: 120px; transform: translateX(-50%) scale(.6) rotate(0); } 100% { opacity: 1; bottom: 210px; transform: translateX(-50%) scale(1) rotate(720deg); } }
+  .bilhete .folha { position: absolute; inset: 0; background: var(--paper); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.4); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 10px;
+    background-image: repeating-linear-gradient(transparent 0 27px, #e9dcbc 27px 28px); }
+  .bilhete .aba { position: absolute; left: 0; right: 0; top: 0; height: 50%; background: #f3e8cc; transform-origin: bottom; border-radius: 6px 6px 0 0; border-bottom: 1px solid #d9cba8; z-index: 2; transition: transform .7s ease .1s; }
+  .bilhete.aberto .aba, .bilhete.fixo .aba { transform: rotateX(180deg); opacity: 0; transition: transform .7s ease .1s, opacity .1s linear .6s; }
+  .bilhete .rot { font-size: .85rem; color: var(--muted); opacity: 0; transition: opacity .4s .6s; }
+  .bilhete .nome { font-family: "Segoe Script", "Brush Script MT", cursive; font-size: 2.3rem; color: var(--red); font-weight: 700; opacity: 0; transition: opacity .4s .7s; }
+  .bilhete.aberto .rot, .bilhete.aberto .nome, .bilhete.fixo .rot, .bilhete.fixo .nome { opacity: 1; }
+  .bilhete.fixo .rot, .bilhete.fixo .nome { transition: none; }
+
+  .lista-amigo { margin-top: 16px; }
+  .lista-amigo ul { list-style: none; padding: 0; margin: 0; }
+  .lista-amigo li { padding: 12px; border-radius: 12px; background: #fff; border: 2px solid #efe4cf; margin-bottom: 8px; }
+  .lista-amigo li a { display: inline-block; margin-top: 6px; color: #fff; background: var(--green); padding: 6px 12px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: .9rem; word-break: break-all; }
+  .vazio { color: var(--muted); font-style: italic; }
+  .centro { text-align: center; }
+
+  /* presente no canto */
+  .presente { position: fixed; right: 18px; bottom: 18px; z-index: 20; display: none; align-items: center; gap: 8px; background: var(--card); padding: 8px 14px 8px 8px; border-radius: 999px; box-shadow: 0 8px 20px rgba(0,0,0,.4); color: var(--ink); font-weight: 700; }
+  .presente.on { display: flex; }
+  .presente .ico { font-size: 2rem; animation: pula 1.4s ease-in-out infinite; }
+  @keyframes pula { 0%,100% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-8px) rotate(-10deg); } 60% { transform: translateY(0) rotate(8deg); } }
+
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 30; display: none; align-items: center; justify-content: center; padding: 16px; }
+  .modal.on { display: flex; }
+  .modal .card { width: 100%; max-width: 480px; max-height: 85vh; overflow: auto; }
+
+  .confete { position: fixed; top: -12px; width: 10px; height: 14px; z-index: 50; pointer-events: none; animation: confete 2.6s ease-in forwards; }
+  @keyframes confete { to { transform: translateY(110vh) rotate(900deg); opacity: .8; } }
+
+  @media (max-width: 420px) { .nomes { grid-template-columns: repeat(2, 1fr); } h1 { font-size: 1.6rem; } }
+  @media (prefers-reduced-motion: reduce) { .neve, .presente .ico { animation: none; } }
+
+  /* tema do site de desejos */
+  body.tema-desejos { --bg: #2a1238; --bg2: #4a1f5c; --red: #1f7a4d; --red2: #155a38; }
+  .rodape { text-align: center; margin-top: 18px; color: #cfe3d6; }
+  .rodape a { color: var(--gold); font-weight: 700; }
+  .progresso { height: 14px; background: #efe4cf; border-radius: 999px; overflow: hidden; margin: 10px 0 12px; }
+  .progresso div { height: 100%; background: linear-gradient(90deg, var(--green), var(--gold)); transition: width .6s; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .chips span { padding: 6px 10px; border-radius: 999px; font-size: .85rem; font-weight: 600; }
+  .chips .sim { background: #dff3e7; color: var(--green); }
+  .chips .nao { background: #fde8ea; color: var(--red); }
+  .trava { text-align: center; }
+  .trava .cadeado { font-size: 2.6rem; }
+  .sites { display: grid; gap: 14px; }
+  .sites a { display: block; text-decoration: none; color: var(--ink); background: var(--card); border-radius: 18px; padding: 22px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  .sites a b { font-size: 1.25rem; display: block; margin-bottom: 4px; }
+  .sites a span { color: var(--muted); }
+  a.btn { display: inline-block; text-decoration: none; padding: 12px 18px; border-radius: 12px; font-weight: 600; }
+  .chips .nao { background: #fde8ea; color: #c8102e; }
+
+  /* tema do inimigo oculto */
+  body.tema-inimigo { --bg: #0d0710; --bg2: #3a0d1c; --card: #1d1420; --ink: #f3e9f5; --muted: #a894ad; --red: #b3001b; --red2: #6e0011; --gold: #ff4d4d; --green: #7d2bd1; --paper: #f1e6d0; }
+  body.tema-inimigo input { background: #2a1e2e; border-color: #3d2c42; color: var(--ink); }
+  body.tema-inimigo .nomes button { background: #2a1e2e; border-color: #3d2c42; color: var(--ink); }
+  body.tema-inimigo .nomes button.sel { background: #4a0f1f; border-color: var(--red); }
+  body.tema-inimigo .erro { color: #ff6b6b; }
+  body.tema-inimigo .pote .corpo { background: linear-gradient(90deg, #111, #2d2d2d 40%, #111); border-radius: 0 0 110px 110px / 0 0 90px 90px; }
+  body.tema-inimigo .pote .corpo::after { content: "😈 INIMIGO OCULTO 😈"; color: #ff4d4d; }
+  body.tema-inimigo .pote .boca { background: #3bff6e; border-color: #222; box-shadow: 0 0 25px #3bff6e; }
+  body.tema-inimigo .mexendo .pote .boca { animation: brilho .3s ease-in-out infinite alternate; }
+  @keyframes brilho { from { box-shadow: 0 0 10px #3bff6e; } to { box-shadow: 0 0 45px #3bff6e, 0 0 80px #1aa84a; } }
+  body.tema-inimigo .bilhete .folha { color: #2b1d14; }
+  body.tema-inimigo .bilhete .nome { color: #b3001b; }
+  body.tema-inimigo .bilhete .rot { color: #6b5a4c; }
+  .ameaca { text-align: center; color: var(--muted); margin: 14px 0 0; font-style: italic; }

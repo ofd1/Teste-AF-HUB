@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inimigo Oculto</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>😈</text></svg>">
+<link rel="stylesheet" href="/comum.css">
+</head>
+<body class="tema-inimigo">
+<main id="app"></main>
+<script src="/comum.js"></script>
+<script>
+// partículas sinistras no lugar da neve
+(function () {
+  const box = document.createElement('div'); box.className = 'neve'; document.body.prepend(box);
+  const simbolos = ['💀', '🔥', '🦇', '·'];
+  for (let i = 0; i < 26; i++) {
+    const f = document.createElement('i');
+    f.textContent = simbolos[i % simbolos.length];
+    f.style.left = Math.random() * 100 + 'vw';
+    f.style.fontSize = 8 + Math.random() * 12 + 'px';
+    f.style.opacity = .35;
+    f.style.animationDuration = 8 + Math.random() * 10 + 's';
+    f.style.animationDelay = -Math.random() * 18 + 's';
+    box.appendChild(f);
+  }
+})();
+
+const app = $('#app');
+const CAB = `<h1>😈 Inimigo <span>Oculto</span> 🔪</h1>`;
+const FRASES = ['Prepare sua vingança…', 'Ele(a) nem imagina o que vem aí.', 'Capriche no presente mais inútil possível.', 'Que comece a guerra. ⚔️'];
+let eu = null;
+
+function tela() {
+  const papeis = Array.from({ length: 9 }, (_, i) =>
+    `<div class="papel" style="left:${20 + (i % 5) * 38}px; top:${4 + Math.floor(i / 5) * 12 + (i % 2) * 6}px; --r:${(i * 37) % 50 - 25}deg; transform: rotate(${(i * 37) % 50 - 25}deg); animation-delay:${i * 0.03}s"></div>`).join('');
+  $('#tela').innerHTML = `<div class="card">
+    <div class="palco" id="palco">
+      <div class="bilhete ${eu.sorteou ? 'fixo' : ''}" id="bilhete">
+        <div class="folha"><div class="rot">Seu inimigo é</div><div class="nome">${eu.sorteou ? esc(eu.inimigo) : ''}</div></div>
+        <div class="aba"></div>
+      </div>
+      <div class="pote">${papeis}<div class="boca"></div><div class="corpo"></div></div>
+    </div>
+    <div class="centro" id="acao">${eu.sorteou ? '' : '<button class="btn grande" id="sortear">😈 Sortear meu inimigo</button>'}</div>
+    <p class="ameaca" id="frase">${eu.sorteou ? FRASES[eu.inimigo.length % FRASES.length] : ''}</p>
+  </div>`;
+
+  const b = $('#sortear');
+  if (b) b.addEventListener('click', async () => {
+    b.disabled = true; b.textContent = 'Invocando…';
+    let r;
+    try { r = await api('POST', '/api/sortear'); }
+    catch (err) { b.disabled = false; b.textContent = '😈 Sortear meu inimigo'; alert(err.message); return; }
+    const palco = $('#palco'), bil = $('#bilhete');
+    palco.classList.add('mexendo');
+    await esperar(2200);
+    palco.classList.remove('mexendo');
+    $('.nome', bil).textContent = r.inimigo;
+    bil.classList.add('sobe');
+    await esperar(1000);
+    bil.classList.remove('sobe'); bil.classList.add('aberto');
+    await esperar(900);
+    confete();
+    eu = r;
+    $('#acao').innerHTML = '';
+    $('#frase').textContent = FRASES[eu.inimigo.length % FRASES.length];
+  });
+}
+
+(async () => {
+  eu = await entrar(app, CAB, 'Descubra quem vai sofrer nas suas mãos');
+  if (location.pathname !== '/') history.replaceState({}, '', '/');
+  app.innerHTML = CAB + `<p class="ola">Olá, <b>${esc(eu.nome)}</b>… 👀</p><div id="tela"></div>`;
+  tela();
+})();
+</script>
+</body>
+</html>
