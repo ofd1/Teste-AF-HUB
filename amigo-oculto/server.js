@@ -98,12 +98,18 @@ function limparDesejos(lista) {
     if (link && !/^https?:\/\//i.test(link)) link = 'https://' + link;
     try { if (link) new URL(link); } catch { link = ''; }
     return { item, link };
-  }).filter((d) => d.item || d.link);
+  }).filter((d) => d.item);
+}
+
+const preencheu = (nome) => estado.pessoas[nome].desejos.some((d) => d.item);
+function status() {
+  const faltam = NOMES.filter((n) => !preencheu(n));
+  return { total: NOMES.length, prontos: NOMES.length - faltam.length, faltam, liberado: faltam.length === 0 };
 }
 
 function painel(nome) {
   const p = estado.pessoas[nome];
-  const out = { nome, sorteou: p.sorteou, desejos: p.desejos };
+  const out = { nome, sorteou: p.sorteou, desejos: p.desejos, status: status() };
   if (p.sorteou) {
     const alvo = estado.alvo[nome];
     out.amigo = { nome: alvo, desejos: estado.pessoas[alvo].desejos };
@@ -130,6 +136,8 @@ async function api(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/participantes') {
     return json(res, 200, NOMES.map((n) => ({ nome: n, emUso: !!estado.pessoas[n].token })));
   }
+
+  if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, status());
 
   if (req.method === 'POST' && url.pathname === '/api/login') {
     if (bloqueado(ip)) return json(res, 429, { erro: 'Muitas tentativas. Espere alguns minutos.' });
@@ -164,12 +172,18 @@ async function api(req, res, url) {
 
   if (req.method === 'PUT' && url.pathname === '/api/desejos') {
     const { desejos } = await lerBody(req);
-    estado.pessoas[nome].desejos = limparDesejos(desejos);
+    const limpos = limparDesejos(desejos);
+    if (!limpos.length) return json(res, 400, { erro: 'Coloque pelo menos um desejo (o que você quer ganhar).' });
+    estado.pessoas[nome].desejos = limpos;
     salvar(estado);
     return json(res, 200, painel(nome));
   }
 
   if (req.method === 'POST' && url.pathname === '/api/sortear') {
+    const st = status();
+    if (!estado.pessoas[nome].sorteou && !st.liberado) {
+      return json(res, 423, { erro: `O sorteio só libera quando todos preencherem a lista de desejos. Faltam: ${st.faltam.join(', ')}.`, status: st });
+    }
     estado.pessoas[nome].sorteou = true; // o par já está definido; só revela
     salvar(estado);
     return json(res, 200, painel(nome));
@@ -180,10 +194,16 @@ async function api(req, res, url) {
 
 const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
 
+// Dois sites: /desejos e /sorteio. A raiz mostra os dois links.
+const PAGINAS = { '/': 'index.html', '/desejos': 'desejos.html', '/sorteio': 'sorteio.html' };
+
 function estatico(req, res, url) {
-  let arquivo = path.normalize(path.join(PUBLIC_DIR, decodeURIComponent(url.pathname)));
-  if (!arquivo.startsWith(PUBLIC_DIR) || !fs.existsSync(arquivo) || fs.statSync(arquivo).isDirectory()) {
-    arquivo = path.join(PUBLIC_DIR, 'index.html'); // /, /desejos, /sorteio -> SPA
+  const rota = url.pathname.replace(/\/+$/, '') || '/';
+  let arquivo = PAGINAS[rota] ? path.join(PUBLIC_DIR, PAGINAS[rota])
+    : path.normalize(path.join(PUBLIC_DIR, decodeURIComponent(url.pathname)));
+  if (!arquivo.startsWith(PUBLIC_DIR + path.sep) || !fs.existsSync(arquivo) || fs.statSync(arquivo).isDirectory()) {
+    res.writeHead(302, { Location: '/' });
+    return res.end();
   }
   res.writeHead(200, { 'Content-Type': TIPOS[path.extname(arquivo)] || 'application/octet-stream' });
   fs.createReadStream(arquivo).pipe(res);

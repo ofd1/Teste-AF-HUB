@@ -11,15 +11,19 @@ npm start          # sem dependências, só Node 18+
 
 Abra http://localhost:3000. Variáveis opcionais: `PORT`, `DATA_DIR` (onde fica o `state.json`), `ADMIN_KEY`.
 
-## Links
+## Os dois sites
 
-- `/desejos` — cada um escreve o que quer ganhar e o link de compra.
-- `/sorteio` — sorteia o nome com a animação. Logo depois aparece a lista de desejos de quem foi tirado.
+- **`/desejos`** — Site da lista de desejos: cada um escreve o que quer ganhar e o link de compra. Mostra quantos já preencheram.
+- **`/sorteio`** — Site do sorteio: sorteia o nome com a animação do papelzinho e mostra a lista de desejos de quem foi tirado.
+- `/` — página com os links para os dois sites.
+
+O login vale para os dois sites no mesmo aparelho.
 
 ## Regras
 
 - Na entrada a pessoa escolhe quem é e digita a senha.
 - **Cada conta só funciona no primeiro aparelho que entrou.** Em outro aparelho, mesmo com a senha certa, a entrada é recusada.
+- **O sorteio só libera quando as 9 pessoas tiverem pelo menos um desejo na lista.** Até lá, o site do sorteio mostra quem falta e se atualiza sozinho. Ninguém consegue apagar a lista inteira depois.
 - O sorteio é feito uma vez no servidor, em um único ciclo: ninguém tira a si mesmo e todo mundo é tirado.
 - Ao abrir o link de novo, o nome já sorteado e a lista aparecem direto.
 - O presentinho 🎁 no canto abre a lista de desejos atualizada de quem você tirou.

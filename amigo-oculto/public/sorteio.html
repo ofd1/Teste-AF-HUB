@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sorteio Amigo Oculto</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎩</text></svg>">
+<link rel="stylesheet" href="/comum.css">
+</head>
+<body>
+<main id="app"></main>
+
+<button class="presente" id="presente" aria-label="Ver lista de desejo">
+  <span class="ico">🎁</span><span>Ver lista de desejo</span>
+</button>
+<div class="modal" id="modal"><div class="card" id="modalCard"></div></div>
+
+<script src="/comum.js"></script>
+<script>
+neve();
+const app = $('#app');
+const CAB = `<h1>🎅 Amigo <span>Oculto</span> 🎄</h1>`;
+let eu = null;
+
+function htmlLista(amigo) {
+  if (!amigo.desejos.length) return `<p class="vazio">${esc(amigo.nome)} ainda não tem desejos na lista.</p>`;
+  return `<ul>${amigo.desejos.map((d) => {
+    const l = linkSeguro(d.link);
+    return `<li>🎁 ${esc(d.item)}${l ? `<br><a href="${esc(l)}" target="_blank" rel="noopener noreferrer">🛒 Link de compra</a>` : ''}</li>`;
+  }).join('')}</ul>`;
+}
+
+function telaTravada() {
+  $('#tela').innerHTML = `<div class="card trava">
+    <div class="cadeado">🔒</div>
+    <h2>Sorteio ainda bloqueado</h2>
+    <p>O sorteio só libera quando <b>todo mundo</b> preencher a lista de desejos.</p>
+    ${htmlProgresso(eu.status)}
+    ${eu.desejos.length ? '' : `<p class="erro">Você também ainda não preencheu a sua!</p>`}
+    <p style="margin-top:16px"><a class="btn" href="/desejos">📝 Ir para a lista de desejos</a></p>
+    <p class="vazio">Esta página atualiza sozinha.</p>
+  </div>`;
+}
+
+function telaSorteio() {
+  const papeis = Array.from({ length: 9 }, (_, i) =>
+    `<div class="papel" style="left:${20 + (i % 5) * 38}px; top:${4 + Math.floor(i / 5) * 12 + (i % 2) * 6}px; --r:${(i * 37) % 50 - 25}deg; transform: rotate(${(i * 37) % 50 - 25}deg); animation-delay:${i * 0.03}s"></div>`).join('');
+  $('#tela').innerHTML = `<div class="card">
+    <div class="palco" id="palco">
+      <div class="bilhete ${eu.sorteou ? 'fixo' : ''}" id="bilhete">
+        <div class="folha"><div class="rot">Você tirou</div><div class="nome">${eu.sorteou ? esc(eu.amigo.nome) : ''}</div></div>
+        <div class="aba"></div>
+      </div>
+      <div class="pote">${papeis}<div class="boca"></div><div class="corpo"></div></div>
+    </div>
+    <div class="centro" id="acao">${eu.sorteou ? '' : '<button class="btn grande" id="sortear">🎩 Sortear meu amigo oculto</button>'}</div>
+    <div class="lista-amigo" id="listaAmigo">${eu.sorteou ? `<h2>Lista de desejos de ${esc(eu.amigo.nome)}</h2>` + htmlLista(eu.amigo) : ''}</div>
+  </div>`;
+  $('#presente').classList.toggle('on', !!eu.sorteou);
+
+  const b = $('#sortear');
+  if (b) b.addEventListener('click', async () => {
+    b.disabled = true; b.textContent = 'Sorteando…';
+    let r;
+    try { r = await api('POST', '/api/sortear'); }
+    catch (err) {
+      if (err.status === 423) { eu.status = err.dados.status; return mostrar(); }
+      b.disabled = false; b.textContent = '🎩 Sortear meu amigo oculto'; alert(err.message); return;
+    }
+    const palco = $('#palco'), bil = $('#bilhete');
+    palco.classList.add('mexendo');
+    await esperar(2200);
+    palco.classList.remove('mexendo');
+    $('.nome', bil).textContent = r.amigo.nome;
+    bil.classList.add('sobe');
+    await esperar(1000);
+    bil.classList.remove('sobe'); bil.classList.add('aberto');
+    await esperar(900);
+    confete();
+    eu = r;
+    $('#acao').innerHTML = '';
+    $('#listaAmigo').innerHTML = `<h2>Lista de desejos de ${esc(eu.amigo.nome)}</h2>` + htmlLista(eu.amigo);
+    $('#presente').classList.add('on');
+  });
+}
+
+let travada = null;
+function mostrar() {
+  const agoraTravada = !eu.sorteou && !eu.status.liberado;
+  if (agoraTravada) telaTravada();
+  else if (travada !== false) telaSorteio(); // não redesenha durante/depois da animação
+  travada = agoraTravada;
+}
+
+(async () => {
+  eu = await entrar(app, CAB, 'Site do sorteio');
+  app.innerHTML = CAB + `<p class="ola">Olá, <b>${esc(eu.nome)}</b>! 👋</p><div id="tela"></div>`;
+  mostrar();
+  setInterval(async () => {
+    if (!travada) return;
+    try { eu = await api('GET', '/api/eu'); mostrar(); } catch {}
+  }, 10000);
+})();
+
+$('#presente').addEventListener('click', async () => {
+  try { eu = await api('GET', '/api/eu'); } catch {}
+  if (!eu || !eu.sorteou) return;
+  $('#modalCard').innerHTML = `<h2>🎁 Lista de desejos de ${esc(eu.amigo.nome)}</h2>
+    <div class="lista-amigo">${htmlLista(eu.amigo)}</div>
+    <div class="centro" style="margin-top:12px"><button class="btn" id="fechar">Fechar</button></div>`;
+  $('#modal').classList.add('on');
+});
+$('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal' || e.target.id === 'fechar') $('#modal').classList.remove('on'); });
+</script>
+</body>
+</html>

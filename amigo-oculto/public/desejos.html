@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lista de Desejos</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📝</text></svg>">
+<link rel="stylesheet" href="/comum.css">
+</head>
+<body class="tema-desejos">
+<main id="app"></main>
+<script src="/comum.js"></script>
+<script>
+neve();
+const app = $('#app');
+const CAB = `<h1>📝 Lista de <span>Desejos</span> 🎁</h1>`;
+
+(async () => {
+  let eu = await entrar(app, CAB, 'Amigo oculto — diga o que você quer ganhar');
+  const itens = eu.desejos.length ? eu.desejos.map((d) => ({ ...d })) : [{ item: '', link: '' }];
+
+  app.innerHTML = CAB + `<p class="ola">Olá, <b>${esc(eu.nome)}</b>! 👋</p><div id="tela"></div><div class="card" style="margin-top:16px" id="prog"></div>
+    <p class="rodape">Lista pronta? Vá para o <a href="/sorteio">site do sorteio 🎩</a></p>`;
+  const tela = $('#tela');
+
+  const desenharProgresso = () => {
+    $('#prog').innerHTML = `<h2>🎩 Sorteio</h2>` + htmlProgresso(eu.status) +
+      (eu.status.liberado ? `<p class="ok">🎉 Todo mundo preencheu! O sorteio está liberado.</p>` : `<p class="vazio">O sorteio só libera quando todos preencherem.</p>`);
+  };
+
+  const desenhar = () => {
+    tela.innerHTML = `<div class="card">
+      <h2>Minha lista de desejos</h2>
+      <p class="vazio" style="margin-top:-4px">Quem te tirar vai ver isso junto com o seu nome. Coloque pelo menos um desejo.</p>
+      <div id="itens">${itens.map((d, i) => `
+        <div class="item">
+          <div class="campos">
+            <input data-i="${i}" data-k="item" placeholder="O que você quer? (ex.: camisa do time, tam. M)" value="${esc(d.item)}" maxlength="200">
+            <input data-i="${i}" data-k="link" placeholder="Link de compra (opcional)" value="${esc(d.link)}" inputmode="url">
+          </div>
+          <button class="rm" data-rm="${i}" title="Remover">✕</button>
+        </div>`).join('')}
+      </div>
+      <div class="acoes">
+        <button class="btn sec" id="add">+ Adicionar desejo</button>
+        <button class="btn" id="salvar">Salvar lista</button>
+      </div>
+      <p class="ok" id="msg"></p>
+    </div>`;
+    desenharProgresso();
+  };
+  desenhar();
+
+  tela.addEventListener('input', (e) => { const el = e.target; if (el.dataset.k) itens[el.dataset.i][el.dataset.k] = el.value; });
+  tela.addEventListener('click', async (e) => {
+    if (e.target.id === 'add') { if (itens.length < 20) itens.push({ item: '', link: '' }); desenhar(); }
+    else if (e.target.dataset.rm !== undefined) { itens.splice(+e.target.dataset.rm, 1); if (!itens.length) itens.push({ item: '', link: '' }); desenhar(); }
+    else if (e.target.id === 'salvar') {
+      try {
+        eu = await api('PUT', '/api/desejos', { desejos: itens });
+        itens.length = 0; eu.desejos.forEach((d) => itens.push({ ...d }));
+        desenhar(); $('#msg').textContent = '✅ Lista salva!';
+      } catch (err) { $('#msg').className = 'erro'; $('#msg').textContent = err.message; }
+    }
+  });
+
+  setInterval(async () => { try { eu.status = await api('GET', '/api/status'); desenharProgresso(); } catch {} }, 15000);
+})();
+</script>
+</body>
+</html>
