@@ -11,6 +11,10 @@ import { escapeHtml, formatTime, formatSimple, isSimpleUI } from './util.js';
 const TRANSFORM_LABELS = { position: 'Posição', scale: 'Escala', rotation: 'Rotação', opacity: 'Opacidade', anchor: 'Ponto de ancoragem', posZ: 'Posição Z', rotX: 'Rotação X', rotY: 'Rotação Y', poi: 'Ponto de interesse', poiZ: 'Ponto de interesse Z', zoom: 'Zoom', focusDist: 'Distância de foco', aperture: 'Abertura', blurLevel: 'Nível de desfoque' };
 const ICONS = { camera: '🎥', null: '✛', text: 'T', rect: '▭', ellipse: '◯', solid: '■', image: '▣', video: '▶', audio: '♪', adjustment: '◐' };
 // cores de rótulo no estilo AE
+// interface simples: cores por tipo, fáceis de reconhecer (vídeo azul, texto rosa, áudio verde, efeito amarelo…)
+const TYPE_COLOR = { video: '#2f7fe0', image: '#5b6ee8', text: '#d14fb4', rect: '#e08a2f', ellipse: '#e08a2f', shape: '#e08a2f', solid: '#7a7f8c', audio: '#2fae6b', adjustment: '#d6b22e', group: '#8a63d2', camera: '#8a8f99', null: '#8a8f99' };
+const TYPE_ICON = { video: '▶', image: '▣', text: 'T', rect: '◆', ellipse: '●', shape: '✦', solid: '■', audio: '♪', adjustment: '✺', group: '⊞', camera: '🎥', null: '✛' };
+const TYPE_NAME = { video: 'Vídeo', image: 'Foto', text: 'Texto', rect: 'Forma', ellipse: 'Forma', shape: 'Forma', solid: 'Cor', audio: 'Áudio', adjustment: 'Ajuste', group: 'Grupo', camera: 'Câmera', null: 'Controle' };
 const LABELS = { camera: '#a8a8a8', null: '#c97a3a', text: '#b53838', rect: '#c9b85a', ellipse: '#c9b85a', solid: '#8f8f8f', image: '#7086c4', video: '#4f9b95', audio: '#b98a4f', adjustment: '#8b84c2' };
 
 export class Timeline {
@@ -33,7 +37,7 @@ export class Timeline {
             <div class="tl-cti"></div>
           </div>
         </div>
-        <div class="tl-zoom"><button data-z="-" aria-label="Afastar">−</button><button data-z="+" aria-label="Aproximar">＋</button></div>
+        <div class="tl-zoom"><button data-z="fit" aria-label="Ver o vídeo inteiro" title="Ver o vídeo inteiro">⤢</button><button data-z="-" aria-label="Afastar">−</button><button data-z="+" aria-label="Aproximar">＋</button></div>
       </div>`;
     this.scroll = root.querySelector('.tl-scroll');
     this.firmScroll();
@@ -43,7 +47,7 @@ export class Timeline {
     this.rulerWrap = root.querySelector('.tl-ruler-wrap');
     this.cti = root.querySelector('.tl-cti');
     this.tc = root.querySelector('.tl-tc');
-    root.querySelectorAll('[data-z]').forEach((b) => b.addEventListener('click', () => this.setZoom(this.pps * (b.dataset.z === '+' ? 1.5 : 1 / 1.5))));
+    root.querySelectorAll('[data-z]').forEach((b) => b.addEventListener('click', () => (b.dataset.z === 'fit' ? this.fit() : this.setZoom(this.pps * (b.dataset.z === '+' ? 1.5 : 1 / 1.5)))));
     // dois toques num grupo/pré-comp = abrir (como no AE)
     root.addEventListener('dblclick', (e) => {
       const row = e.target.closest?.('.tl-row.layer');
@@ -67,11 +71,21 @@ export class Timeline {
     this.render();
   }
 
-  get names() { return isSimpleUI() ? (this.scroll.clientWidth < 600 ? 64 : 120) : (this.scroll.clientWidth < 600 ? 116 : 190); }
+  get names() { return isSimpleUI() ? (this.scroll.clientWidth < 600 ? 74 : 132) : (this.scroll.clientWidth < 600 ? 116 : 190); }
   tToX(t) { return t * this.pps; } // relativo à área de trilhas
   xToT(clientX) {
     const r = this.scroll.getBoundingClientRect();
     return (clientX - r.left + this.scroll.scrollLeft - this.names) / this.pps;
+  }
+
+  /** Zoom para o vídeo inteiro caber na largura visível. */
+  fit() {
+    const vw = this.scroll.clientWidth - this.names - 34;
+    if (vw < 40) return;
+    this.pps = Math.max(6, Math.min(2400, vw / Math.max(0.5, this.store.project.duration)));
+    this.render();
+    this.scroll.scrollLeft = 0;
+    this.drawRuler();
   }
 
   setZoom(pps) {
@@ -114,6 +128,12 @@ export class Timeline {
 
   render() {
     const { project } = this.store;
+    // projeto aberto agora: começa vendo o vídeo inteiro (dá para aproximar com a pinça ou ＋)
+    if (this._pid !== project.id && this.scroll.clientWidth > 0) {
+      this._pid = project.id;
+      const vw = this.scroll.clientWidth - this.names - 34;
+      if (vw > 40) this.pps = Math.max(6, Math.min(400, vw / Math.max(0.5, project.duration)));
+    }
     const N = this.names;
     const trackW = project.duration * this.pps + 60;
     this.inner.style.setProperty('--names', `${N}px`);
@@ -123,6 +143,7 @@ export class Timeline {
     const layers = this.store.layers;
     if (!layers.length) html.push('<div class="tl-empty">Toque em <b>＋ Camada</b> para adicionar vídeo, áudio, texto ou formas.</div>');
     layers.forEach((layer, i) => html.push(this.layerRows(layer, i + 1, trackW)));
+    if (layers.length && isSimpleUI()) html.push('<div class="tl-addrow"><button data-act="add-layer">＋ Adicionar camada</button></div>');
     this.rows.innerHTML = html.join('');
     this.bindRows();
     this.updateCTI(false);
@@ -170,7 +191,10 @@ export class Timeline {
     const left = this.tToX(layer.inPoint);
     const width = Math.max(4, (layer.outPoint - layer.inPoint) * this.pps);
     const thumb = this.thumbFor(layer);
-    const color = LABELS[layer.type] || '#888';
+    const simple = isSimpleUI();
+    const color = (simple ? TYPE_COLOR[layer.type] : LABELS[layer.type]) || '#888';
+    const dur = layer.outPoint - layer.inPoint;
+    const label = layer.type === 'text' && layer.props.text && simple ? String(layer.props.text).replace(/\s+/g, ' ').slice(0, 40) : layer.name;
     const times = new Map();
     for (const { prop } of props) for (const k of prop.keys) {
       const key = k.t.toFixed(4);
@@ -180,6 +204,7 @@ export class Timeline {
     let out = `
       <div class="tl-row layer ${sel ? 'sel' : ''} ${layer.visible ? '' : 'off'}" data-layer="${layer.id}">
         <div class="tl-name" data-act="name">
+          ${simple ? `<span class="tbadge" style="--c:${color}" title="${TYPE_NAME[layer.type] || layer.type}">${TYPE_ICON[layer.type] || '•'}</span><span class="tnm">${escapeHtml(TYPE_NAME[layer.type] || '')}</span>` : ''}
           <button class="tw" data-act="expand" aria-label="Propriedades">${props.length || layer.effects.length ? (open ? '▾' : '▸') : ''}</button>
           <button class="eye" data-act="eye" aria-label="Visibilidade">${layer.visible ? '◉' : '○'}</button>
           <span class="lbl" style="background:${color}"></span>
@@ -190,7 +215,8 @@ export class Timeline {
           <div class="clip" data-act="clip" style="left:${left}px;width:${width}px;--c:${color};${thumb ? `background-image:url('${thumb}')` : ''}">
             ${layer.type === 'audio' ? '<canvas class="wave"></canvas>' : ''}
             ${layer.effects.length ? `<span class="fxb">fx</span>` : ''}
-            <span class="cn">${ICONS[layer.type] || ''} ${escapeHtml(layer.name)}</span>
+            <span class="cn">${simple ? '' : `${ICONS[layer.type] || ''} `}${escapeHtml(label)}</span>
+            ${sel && simple ? `<span class="dur">${dur < 10 ? dur.toFixed(1) : Math.round(dur)}s</span>` : ''}
             ${sel ? '<div class="handle l" data-act="trim-in"></div><div class="handle r" data-act="trim-out"></div>' : ''}
           </div>
           ${!open ? [...times.values()].map((k) => `<span class="kf agg ${k.sel ? 'sel' : ''}" data-act="aggkey" data-t="${k.t}" style="left:${this.tToX(k.t)}px"></span>`).join('') : ''}
@@ -310,8 +336,13 @@ export class Timeline {
     const cx = this.store.time * this.pps - sl;
     this.cti.style.display = cx < -1 ? 'none' : '';
     if (cx > -8 && cx < vw + 8) {
-      x.fillStyle = '#2d8ceb';
-      x.beginPath(); x.moveTo(cx - 6, 0); x.lineTo(cx + 6, 0); x.lineTo(cx + 6, 12); x.lineTo(cx, 18); x.lineTo(cx - 6, 12); x.fill();
+      if (isSimpleUI()) { // agulha branca com bolinha (fácil de achar e de pegar)
+        x.fillStyle = '#fff'; x.beginPath(); x.arc(cx, 9, 6, 0, Math.PI * 2); x.fill();
+        x.fillRect(cx - 1, 9, 2, 15);
+      } else {
+        x.fillStyle = '#2d8ceb';
+        x.beginPath(); x.moveTo(cx - 6, 0); x.lineTo(cx + 6, 0); x.lineTo(cx + 6, 12); x.lineTo(cx, 18); x.lineTo(cx - 6, 12); x.fill();
+      }
     }
   }
 
@@ -319,6 +350,7 @@ export class Timeline {
     this.rows.querySelectorAll('.tl-row').forEach((row) => {
       row.addEventListener('pointerdown', (e) => this.onDown(e, row));
     });
+    this.rows.querySelector('[data-act="add-layer"]')?.addEventListener('click', () => this.hooks.onAdd?.());
   }
 
   snapTimes(exceptLayer) {

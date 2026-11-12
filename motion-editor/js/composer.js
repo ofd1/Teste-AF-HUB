@@ -2,14 +2,15 @@
 // entre clipes, animações de texto, elementos (formas) e impactos — com prévia animada, busca, favoritos e duração.
 // Abre também pelos plugins "de painel" importados (.aex de Animation Composer, AEJuice Pack Manager, Motion Bro…).
 import { LAYER_FACTORIES, createProject } from './state.js';
-import { applyPreset, BUILTIN_PRESETS, stretchPreset } from './presets.js';
+import { applyPreset, BUILTIN_PRESETS, stretchPreset, createEffectInstance } from './presets.js';
+import { EFFECTS } from './effects.js';
 import { renderFrame } from './renderer.js';
 import { toast, storage } from './ui.js';
 import { escapeHtml } from './util.js';
-import { MO_TEXT, MO_INOUT, MO_ELEMENTS, MO_LOGO, shiftShapeKeys } from './mograph.js';
+import { MO_TEXT, MO_INOUT, MO_ELEMENTS, MO_LOGO, shiftShapeKeys, TEXT_UNITS } from './mograph.js';
 
 const FAV_KEY = 'motionframe.composerFavs';
-const CATS = ['Motion design', 'Mograph texto', 'Mograph formas', 'Logo reveal', 'Entradas', 'Saídas', 'Transições', 'Texto', 'Elementos', 'Impacto'];
+const CATS = ['Motion design', 'Texto por letra', 'Texto por palavra', 'Texto por linha', 'Fundos animados', 'Mograph texto', 'Mograph formas', 'Logo reveal', 'Entradas', 'Saídas', 'Transições', 'Texto', 'Elementos', 'Impacto'];
 
 // ---------------------------------------------------------------- definições (tempo normalizado 0..1)
 // tr: { prop: [mode, [[u, valor, ease], ...]] }   fx: [[tipo, { param: [[u, valor, ease]] | constante }]]
@@ -111,6 +112,17 @@ export function composerItems(W = 1080, H = 1920) {
     items.push({ id: `mdin:${name}`, cat: 'Motion design', name: `▶ ${name}`, kind: 'in', dur: 0.7, make: (d) => toPreset(name, tr, fx, d) });
     items.push({ id: `mdout:${name}`, cat: 'Motion design', name: `◀ ${name} (saída)`, kind: 'out', dur: 0.6, make: (d) => toPreset(name, tr, fx, d, true) });
   }
+  for (const [name, based, fn] of TEXT_UNITS) {
+    const cat = based === 4 ? 'Texto por linha' : based === 3 ? 'Texto por palavra' : 'Texto por letra';
+    items.push({ id: `tu:${name}`, cat, name: `▶ ${name}`, kind: 'text', dur: based === 1 ? 1.2 : 1, mk: (d, fs = 100) => fn(d, fs) });
+    items.push({ id: `tuo:${name}`, cat, name: `◀ ${name} (saída)`, kind: 'text', exit: true, dur: based === 1 ? 1 : 0.8, mk: (d, fs = 100) => fn(d, fs, true) });
+  }
+  // fundos animados (neve, confete, aurora…): camada de sólido do tamanho do quadro com o efeito no modo Fundo
+  for (const d of EFFECTS.filter((e) => e.category === 'Fundos animados')) items.push({ id: `bg:${d.type}`, cat: 'Fundos animados', name: d.label, kind: 'element', dur: 3, mk: (P) => {
+    const l = LAYER_FACTORIES.solid(P); l.props.fill = '#0b0d17'; l.name = `Fundo · ${d.label}`;
+    l.effects.push(createEffectInstance(d.type, { mode: 3 }));
+    return l;
+  } });
   for (const [name, fn] of MO_TEXT) items.push({ id: `mt:${name}`, cat: 'Mograph texto', name, kind: 'text', dur: 1, mk: (d, fs = 100) => fn(d, fs) });
   for (const [name, mk] of MO_ELEMENTS) items.push({ id: `me:${name}`, cat: 'Mograph formas', name, kind: 'element', dur: 1, mk });
   for (const [name, tr, fx] of MO_LOGO(W)) items.push({ id: `lg:${name}`, cat: 'Logo reveal', name, kind: 'in', dur: 1.2, make: (d) => toPreset(name, tr, fx, d) });
@@ -129,18 +141,21 @@ export function applyComposerItem(item0, dur, store) {
     const list = Array.isArray(made) ? made : [made];
     // várias camadas (templates com texto): adiciona de baixo para cima
     for (const l of [...list].reverse()) {
-      if (!Array.isArray(made)) l.name = item.name;
+      const isBg = item.id.startsWith('bg:');
+      if (!Array.isArray(made) && !isBg) l.name = item.name;
       for (const p of Object.values(l.transform)) for (const k of p.keys) k.t = +(k.t + t).toFixed(4);
       if (l.type === 'shape') shiftShapeKeys(l.props.shapes, t);
-      l.inPoint = t; l.outPoint = Math.min(P.duration, t + dur);
+      // fundo animado: o projeto todo, embaixo de tudo
+      if (isBg) { l.inPoint = 0; l.outPoint = P.duration; } else { l.inPoint = t; l.outPoint = Math.min(P.duration, t + dur); }
       store.addLayer(l);
+      if (isBg) { const i = store.layers.indexOf(l); if (i >= 0) { store.layers.splice(i, 1); store.layers.push(l); store.commit('structure'); } }
     }
     return `“${item.name}” adicionado em ${t.toFixed(2)} s.`;
   }
   let layer = store.layer();
   if (item.kind === 'text') {
     if (!layer || layer.type !== 'text') { layer = LAYER_FACTORIES.text(P); layer.inPoint = t; layer.outPoint = Math.min(P.duration, t + Math.max(3, dur + 1)); store.addLayer(layer); }
-    const anims = item.mk(dur * 1, layer.props.fontSize || 100).map((an) => shiftAnim(an, layer.inPoint));
+    const anims = item.mk(dur * 1, layer.props.fontSize || 100).map((an) => shiftAnim(an, item.exit ? Math.max(layer.inPoint, layer.outPoint - dur) : layer.inPoint));
     layer.props.animators = [...(layer.props.animators || []), ...anims];
     store.commit('structure');
     return `Animação de texto “${item.name}” aplicada em “${layer.name}”.`;

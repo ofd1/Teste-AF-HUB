@@ -40,6 +40,28 @@ export const MO_TEXT = [
 
 // ---------------------------------------------------------------- entradas/saídas de motion design
 // [nome, transform, efeitos] no mesmo formato das entradas do Composer (u = 0..1)
+
+// Animações de texto por letra / palavra / linha (as 25 do Frameify), com entrada e saída.
+// [nome, grupo (1 letra, 3 palavra, 4 linha), x, y, escala, rotação, suavidade]
+const TXT25 = [
+  ['Máquina de escrever', 1, 0, 0, 100, 0, 0], ['Subir', 1, 0, 60, 100, 0], ['Pop', 1, 0, 0, 0, -15], ['Fade suave', 1, 0, 0, 100, 0],
+  ['Cair', 1, 0, -90, 100, 0], ['Da esquerda', 1, -140, 0, 100, 0], ['Da direita', 1, 140, 0, 100, 0], ['Girar entrando', 1, 0, 0, 0, -180],
+  ['Cambalhota', 1, -60, -80, 40, 120], ['Zoom in', 1, 0, 0, 20, 0], ['Zoom descendo', 1, 0, 0, 240, 0], ['Deriva diagonal', 1, 80, 70, 100, 12],
+  ['Desenrolar', 1, 0, 20, 100, -90], ['Palavra por palavra', 3, 0, 0, 100, 0, 0], ['Palavra sobe', 3, 0, 65, 100, 0], ['Palavra pop', 3, 0, 0, 0, 0],
+  ['Palavra desliza', 3, -120, 0, 100, 0], ['Palavra inclina', 3, 0, 50, 80, -35], ['Linha sobe', 4, 0, 80, 100, 0], ['Linha desliza', 4, 160, 0, 100, 0],
+  ['Linha fade', 4, 0, 0, 100, 0], ['Linha expande', 4, 0, 0, 20, 0], ['Linha gira', 4, 0, 0, 70, 45], ['Linha flutua', 4, -40, -60, 110, -8],
+];
+/** [nome, (d, fs, saída) => animadores] — na saída a seleção cresce da 1ª unidade até a última (some na mesma ordem). */
+export const TEXT_UNITS = TXT25.map(([name, based, x, y, sc, rot, smooth = 100]) => [name, based, (d, fs, exit = false) => {
+  const k = fs / 100;
+  const props = { opacity: A(0) };
+  if (x || y) props.position = A([x * k, y * k]);
+  if (sc !== 100) props.scale = A([sc, sc]);
+  if (rot) props.rotation = A(rot);
+  const ease = exit ? 'expoIn' : 'expoOut';
+  return [{ props, selectors: [sel({ based, shape: 1, smooth, ...(exit ? { start: A(0), end: K2(0, 0, d, 100, ease) } : { start: K2(0, 0, d, 100, ease) }) })] }];
+}]);
+
 export const MO_INOUT = (W, H) => [
   ['Expo slide ←', { position: ['rel', [[0, [W * 0.55, 0], 'expoOut'], [1, [0, 0]]]], opacity: ['abs', [[0, 0, 'linear'], [0.25, 100]]] }, [['motionBlur', { amount: 100, samples: 14 }]]],
   ['Expo slide ↑', { position: ['rel', [[0, [0, H * 0.35], 'expoOut'], [1, [0, 0]]]], opacity: ['abs', [[0, 0, 'linear'], [0.25, 100]]] }, [['motionBlur', { amount: 100, samples: 14 }]]],

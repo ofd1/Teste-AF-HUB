@@ -35,7 +35,7 @@ import { calibrateFromImage, CALIB_LABEL } from './calibrate.js';
 import { parseAEP, aepToProject, mainComps } from './aep.js';
 import { xmlToProject } from './xml-import.js';
 import { loadCustomEffects, ensureRecipesFromProject, importRecipe, customRecipes } from './custom-fx.js';
-loadCustomEffects(); // efeitos criados pelo usuário (Efeitos › Meus efeitos) antes de abrir qualquer projeto
+applyUIMode(); loadCustomEffects(); // tema/aparência já na tela inicial · efeitos criados pelo usuário (Efeitos › Meus efeitos) antes de abrir qualquer projeto
 import { ico, iconize } from './icons.js';
 import { translateDOM, getLang, setLang } from './i18n.js';
 import { EFFECTS } from './effects.js';
@@ -481,6 +481,7 @@ const timeline = new Timeline(document.getElementById('timeline'), store, {
   videoThumb: (src) => videoThumb(src),
   multiSelect: () => keyTools?.multi,
   onKeyTap: () => { if (sheetPane !== 'keys') openSheet('keys'); },
+  onAdd: () => commands.add?.(),
 });
 new Inspector(document.getElementById('effectsPanel'), store, 'effects', {
   browse: () => openSheet('browser', 'effects'),
@@ -537,6 +538,20 @@ keyTools = new KeyTools(document.getElementById('keyTools'), store);
 new TopazPanel(document.getElementById('topazPanel'), store);
 const composer = new ComposerPanel(document.getElementById('composerPanel'), store, { onApplied: () => { if (!desktop.matches) closeSheet(); } });
 window.addEventListener('open-composer', () => openSheet('composer'));
+// ---- alça entre prévia e timeline (o tamanho fica salvo)
+{
+  const grip = document.querySelector('.tl-grip'), app = document.querySelector('.app'), KEY = 'motionframe.tlH';
+  const apply = (px) => { if (px) app.style.setProperty('--tl-h', `${px}px`); };
+  try { apply(+localStorage.getItem(KEY) || 0); } catch { /* */ }
+  grip?.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); grip.setPointerCapture(e.pointerId); grip.classList.add('on');
+    const wrap = grip.parentElement, y0 = e.clientY, h0 = wrap.getBoundingClientRect().height;
+    let h = h0;
+    grip.onpointermove = (ev) => { h = Math.max(110, Math.min(window.innerHeight * 0.72, h0 - (ev.clientY - y0))); apply(Math.round(h)); };
+    grip.onpointerup = () => { grip.onpointermove = grip.onpointerup = null; grip.classList.remove('on'); try { localStorage.setItem(KEY, String(Math.round(h))); } catch { /* */ } };
+  });
+  grip?.addEventListener('dblclick', () => { app.style.removeProperty('--tl-h'); try { localStorage.removeItem(KEY); } catch { /* */ } });
+}
 // ---- Criar efeito (efeitos próprios do usuário)
 function cfxPreview(g, c, def) {
   const P = store.project, src = store.layer();
@@ -694,7 +709,10 @@ const TIPS = {
 };
 /** Modo da interface: 'simple' (estilo app de celular, padrão) ou 'ae' (After Effects). */
 function applyUIMode() {
-  document.body.classList.toggle('ui-simple', getSettings().uiMode !== 'ae');
+  const st = getSettings();
+  document.body.classList.toggle('ui-simple', st.uiMode !== 'ae');
+  document.body.dataset.theme = st.theme || 'ae'; // aparência (como os "looks" do Frameify)
+  document.body.dataset.rows = st.rows || 'normal';
 }
 let toolbarMore = false; // modo simples: "Mais" mostra as ferramentas avançadas
 
@@ -771,7 +789,7 @@ function renderToolbar() {
   // faixa de ajuda: diz o que está selecionado e o próximo passo
   hintBar.hidden = !getSettings().showTips;
   if (!store.project.layers.length) hintBar.innerHTML = 'Comece tocando em <b>Vídeo / Foto</b> para importar seu clipe.';
-  else if (!layer) hintBar.innerHTML = simple ? 'Toque num clipe para editar. Arraste a linha azul para andar no vídeo.' : 'Toque numa camada (na timeline ou na prévia) para editar. Arraste a régua azul para mudar o tempo.';
+  else if (!layer) hintBar.innerHTML = simple ? 'Toque num clipe para editar · arraste a agulha branca para andar no vídeo.' : 'Toque numa camada (na timeline ou na prévia) para editar. Arraste a régua azul para mudar o tempo.';
   else if (many > 1) hintBar.innerHTML = `<b>${many} camadas selecionadas</b> — mudanças em Propriedades valem para todas · Pré-compor junta em um grupo · Shift/Ctrl+clique (ou toque longo) adiciona/remove`;
   else hintBar.innerHTML = `<b>${escapeHtml(layer.name)}</b> · ${TYPE_LABEL[t] || t}${layer.effects.length ? ` · ${layer.effects.length} efeito(s)` : ''} — ${t === 'video' ? 'use <b>Presets</b> para CC/shake/reverse ou <b>Velocidade</b> para câmera lenta' : t === 'group' ? 'efeitos e presets valem para o grupo inteiro' : 'use <b>Efeitos</b> ou <b>Presets</b>'}`;
 }

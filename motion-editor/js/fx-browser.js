@@ -10,7 +10,7 @@ import { MY_CAT } from './custom-fx.js';
 
 const ICON = {
   'Looks · Subject': 'adjust', 'Looks · Matte': 'matte', 'Looks · Lens': 'lens', 'Looks · Camera': 'camera', 'Looks · Post': 'sparkle',
-  'Luz e brilho': 'sun', Movimento: 'wave', Tempo: 'speed', Desfoque: 'blur', Estilizar: 'effects', Distorção: 'distort', Cor: 'color', '3D': 'cube', Transições: 'transition',
+  'Luz e brilho': 'sun', Movimento: 'wave', Tempo: 'speed', Desfoque: 'blur', Estilizar: 'effects', Distorção: 'distort', Cor: 'color', '3D': 'cube', Transições: 'transition', 'Fundos animados': 'sparkle',
 };
 const MINE = 'Meus plugins';
 
