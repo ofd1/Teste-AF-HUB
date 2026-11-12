@@ -297,13 +297,13 @@ export const EXTRA_DEFS = () => [SFILM_DEF];
 // poeira e flicker) o resultado é quase a imagem original — a versão antiga punha um "visual de filme" fixo
 // (esquentava, escurecia e tirava saturação) que não existe no AE.
 const SFILM = frag(`
-uniform float u_grain, u_sat, u_scale, u_off, u_dust, u_dustOp, u_scr, u_scrOp, u_vig, u_vigR, u_vigSoft, u_vigRH, u_gain, u_seed, u_fr;
+uniform float u_grain, u_sat, u_sclL, u_off, u_dust, u_dustOp, u_scr, u_scrOp, u_vig, u_vigR, u_vigSoft, u_vigRH, u_gain, u_seed, u_fr;
 uniform vec3 u_tl, u_td, u_d1, u_d2, u_ga;
 void main() {
   vec4 s = texture2D(u_tex, v_uv);
   vec3 c = s.a > 0.0 ? s.rgb / s.a : vec3(0.0);
   c = mix(u_td, u_tl, c);                                 // Tint Darks / Tint Lights (padrão preto/branco = sem mudança)
-  c = c * u_scale + u_off;                                // Scale Lights / Offset Darks
+  c = c * u_sclL + u_off;                                // Scale Lights / Offset Darks
   c = mix(vec3(luma(c)), c, u_sat);                       // Saturation
   vec2 px = v_uv * u_size;
   float fr = u_fr + u_seed * 17.0;
@@ -347,7 +347,7 @@ export const SFILM_DEF = {
     const f = Math.floor(env.t * (p.flickFreq || 10));
     const fl = p.flicker > 0 ? 1 + (hashJS(f * 1.7 + p.seed) - 0.5) * p.flicker * 0.5 : 1;
     return env.gl.pass(SFILM, {
-      u_tex: src, u_grain: p.grain, u_ga: [p.grainR, p.grainG, p.grainB], u_sat: p.sat, u_scale: p.scale, u_off: p.offset, u_tl: rgb(p.tintL), u_td: rgb(p.tintD),
+      u_tex: src, u_grain: p.grain, u_ga: [p.grainR, p.grainG, p.grainB], u_sat: p.sat, u_sclL: p.scale, u_off: p.offset, u_tl: rgb(p.tintL), u_td: rgb(p.tintD),
       u_dust: p.dust, u_dustOp: p.dustOp, u_d1: rgb(p.dust1), u_d2: rgb(p.dust2), u_scr: p.scratches, u_scrOp: p.scrOp,
       u_vig: p.vig, u_vigR: p.vigR, u_vigSoft: p.vigSoft, u_vigRH: p.vigRH, u_gain: fl, u_seed: p.seed % 97, u_fr: Math.floor(env.t * (env.fps || 30)),
     });

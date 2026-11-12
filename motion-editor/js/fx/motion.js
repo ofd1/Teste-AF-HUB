@@ -161,7 +161,7 @@ export default [
       num('stillness', 'Stillness (pausas entre trancos)', 0, 0, 0.95, 0.01), num('twitchFreq', 'Twitch Frequency (rajadas/s)', 2, 0.1, 20, 0.1),
       num('drift', 'Drift (deriva lenta)', 0, 0, 2, 0.01), num('rgbShake', 'RGB separado (px)', 0, 0, 100),
       // modo S_Shake exato (definição tirada do sapphire_ae.dll): Style Normal/Twitchy/Jumpy, Tilt e Z × Amplitude
-      num('hardness', 'Dureza (tranco seco)', 70, 0, 100, 1),
+      num('hard2', 'Dureza (tranco seco)', 0, 0, 100, 1),
       num('tilt', 'Inclinação 3D (tilt X/Y, °)', 0, 0, 45, 0.5), num('focal', 'Lente da inclinação (px)', 1500, 200, 6000, 10),
       bool('sapphire', 'Modo S_Shake (Sapphire)', false), sel('style', 'S_Shake – Style', ['Normal', 'Twitchy', 'Jumpy'], 1), num('centerBias', 'S_Shake – Center Bias', 0, 0, 1, 0.01),
     ],
@@ -175,7 +175,8 @@ export default [
       const wigSmooth = (f, seed) => { let v = 0, a = 1, n = 0; for (let o = 0; o < oct; o++) { v += noiseG(f * 2 ** o + o * 0.37, seed + o * 7.7) * a; n += a * a; a *= 0.5; } const x = (v / Math.sqrt(n)) * 1.8; return x / (1 + Math.abs(x) * 0.25); };
       // Dureza: o tremor de edit é seco — pula de uma posição para outra a cada batida (quase sem curva no meio) e os
       // picos chegam perto da amplitude máxima. Mistura o ruído suave com saltos por período e empurra para os extremos.
-      const hard = Math.max(0, Math.min(1, (p.hardness ?? 0) / 100));
+      // (a Dureza não vale no modo S_Shake, que segue o plugin; padrão 0 = tremor suave como antes da v100)
+      const hard = p.sapphire ? 0 : Math.max(0, Math.min(1, (p.hard2 ?? 0) / 100));
       const stepped = (f, seed) => {
         const i = Math.floor(f), u = f - i;
         const r = (k) => (hash1(k * 1.618 + seed * 7.13 + 0.71) * 2 - 1) * 1.15;
@@ -215,14 +216,26 @@ export default [
         const on = Math.max(0, Math.min(1, (u - p.stillness) / 0.06));
         return 0.22 + 0.78 * on;
       };
+      // Impacto: tranco garantido no instante da batida (mola amortecida que começa no pico, direção pela semente)
+      // — antes o ruído podia estar perto de zero justamente na batida e o "impacto" quase não aparecia.
+      const kickDir = hash1((p.seed || 0) * 3.7 + 1.1) * Math.PI * 2;
+      const kick = (t) => {
+        if (p.mode !== 2) return 0;
+        const tt = t - (env.layer?.inPoint || 0) - (p.impactAt || 0);
+        if (tt < 0) return 0;
+        const w = Math.PI * 2 * Math.max(2, p.frequency * 0.5);
+        return Math.min(1, tt * fps * 2) * Math.cos(w * tt) * Math.exp(-tt / Math.max(0.02, (p.decay ?? 0.45) / 4));
+      };
       const at = (t) => {
-        const f = t * p.frequency * freqMul, k = env0(t) * burst(t);
+        const f = t * p.frequency * freqMul, k = env0(t) * burst(t), kk = kick(t);
         const ax = (p.ampX ?? 100) / 100, ay = (p.ampY ?? 100) / 100, dr = sap && style !== 3 ? 0 : (p.drift || 0) * p.amount;
         const am = sap ? p.amount / 100 : 1; // no S_Shake a Amplitude multiplica também o Tilt (graus) e o Z
+        const nk = p.mode === 2 ? 0.75 : 1; // no impacto: tranco + tremor por cima
         return {
-          dx: p.axis === 3 ? 0 : wig(f, p.seed) * p.amount * ax * k + noiseG(t * 0.35, p.seed + 7) * dr,
-          dy: p.axis === 2 ? 0 : wig(f, p.seed + 17) * p.amount * ay * k + noiseG(t * 0.3, p.seed + 8) * dr,
-          rot: wig(f, p.seed + 33) * p.rotation * am * k, s: sap ? 1 + wig(f * 0.9, p.seed + 51) * (p.zoom / 100) * am * k : 1 + Math.abs(wig(f * 0.9, p.seed + 51)) * (p.zoom / 100) * k,
+          dx: p.axis === 3 ? 0 : wig(f, p.seed) * p.amount * ax * k * nk + Math.cos(kickDir) * kk * p.amount * ax * 1.15 + noiseG(t * 0.35, p.seed + 7) * dr,
+          dy: p.axis === 2 ? 0 : wig(f, p.seed + 17) * p.amount * ay * k * nk + Math.sin(kickDir) * kk * p.amount * ay * 1.15 + noiseG(t * 0.3, p.seed + 8) * dr,
+          rot: wig(f, p.seed + 33) * p.rotation * am * k * nk + kk * p.rotation * 0.9,
+          s: sap ? 1 + wig(f * 0.9, p.seed + 51) * (p.zoom / 100) * am * k : 1 + Math.abs(wig(f * 0.9, p.seed + 51)) * (p.zoom / 100) * k * nk + Math.abs(kk) * (p.zoom / 100) * 1.2,
         };
       };
       // S_Shake: o borrão vai do quadro atual até o próximo × Mo Blur Length
