@@ -34,6 +34,8 @@ import { TrackerPanel } from './tracker-panel.js';
 import { calibrateFromImage, CALIB_LABEL } from './calibrate.js';
 import { parseAEP, aepToProject, mainComps } from './aep.js';
 import { xmlToProject } from './xml-import.js';
+import { loadCustomEffects, ensureRecipesFromProject, importRecipe, customRecipes } from './custom-fx.js';
+loadCustomEffects(); // efeitos criados pelo usuário (Efeitos › Meus efeitos) antes de abrir qualquer projeto
 import { ico, iconize } from './icons.js';
 import { translateDOM, getLang, setLang } from './i18n.js';
 import { EFFECTS } from './effects.js';
@@ -525,6 +527,7 @@ const fxBrowser = new FxBrowser(document.getElementById('fxBrowser'), (type, ext
   const inst = createEffectInstance(type, extra?.params || {});
   if (extra?.label) inst.label = extra.label; // plugin .aex instalado: aparece com o nome do plugin
   getEffectDef(type).init?.(inst, layer);
+  if (getEffectDef(type).custom) inst.recipe = getEffectDef(type).recipe; // o projeto leva a receita (abre em outro aparelho)
   layer.effects.push(inst);
   store.commit('structure');
   openSheet('effects');
@@ -534,6 +537,49 @@ keyTools = new KeyTools(document.getElementById('keyTools'), store);
 new TopazPanel(document.getElementById('topazPanel'), store);
 const composer = new ComposerPanel(document.getElementById('composerPanel'), store, { onApplied: () => { if (!desktop.matches) closeSheet(); } });
 window.addEventListener('open-composer', () => openSheet('composer'));
+// ---- Criar efeito (efeitos próprios do usuário)
+function cfxPreview(g, c, def) {
+  const P = store.project, src = store.layer();
+  const ar = P.width / P.height;
+  c.width = ar >= 1 ? 320 : Math.round(200 * ar); c.height = ar >= 1 ? Math.round(320 / ar) : 200;
+  const proj = JSON.parse(JSON.stringify({ ...P, layers: [] }));
+  const t = store.time;
+  let l;
+  if (src && src.type !== 'audio' && src.type !== 'adjustment' && t >= src.inPoint && t < src.outPoint) l = JSON.parse(JSON.stringify(src));
+  else {
+    l = LAYER_FACTORIES.text(proj); l.props.text = 'MOTION'; l.props.fontSize = Math.round(P.width / 6); l.props.color = '#ffffff';
+    l.inPoint = 0; l.outPoint = Math.max(1, P.duration);
+    const bg = LAYER_FACTORIES.rect(proj); bg.props.width = P.width * 0.5; bg.props.height = P.width * 0.5; bg.props.fill = '#2d8cf0'; bg.inPoint = 0; bg.outPoint = l.outPoint;
+    bg.transform.position.value = [P.width / 2, P.height / 2 + P.width * 0.3]; bg.transform.rotation.value = 20;
+    proj.layers.push(bg);
+  }
+  l.id = 'cfxpv';
+  l.effects = def ? [createEffectInstance('__cfx_preview')] : []; // só o efeito sendo criado
+  proj.layers.unshift(l);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = P.background || '#000'; g.fillRect(0, 0, c.width, c.height);
+  try { renderFrame(g, proj, t, c.width / P.width, { hq: true }); } finally { forgetLayer?.('cfxpv'); }
+}
+window.addEventListener('custom-fx', async (e) => {
+  const { action, type } = e.detail || {};
+  const { createEffectDialog } = await import('./custom-fx-ui.js');
+  if (action === 'import') {
+    const files = await pickFiles('.mfx,application/json');
+    for (const f of files) { try { const r = await importRecipe(f); toast(`Efeito “${r.name}” importado em Efeitos › Meus efeitos ✓`, 'ok'); } catch (err) { toast(`${f.name}: ${err.message}`, 'error', 5000); } }
+    return;
+  }
+  const recipe = action === 'edit' ? customRecipes().find((r) => r.type === type) : null;
+  const res = await createEffectDialog({ recipe, layer: store.layer(), renderPreview: cfxPreview });
+  if (res?.export) { await saveFile(`${res.name.replace(/[^\w-]+/g, '_')}.mfx`, res.export); return; }
+  if (res?.type) {
+    // efeito editado: atualiza a receita nas camadas que já usam
+    for (const l of flatLayers(store.project.layers)) for (const fx of l.effects || []) if (fx.type === res.type) {
+      fx.recipe = res;
+      for (const pd of getEffectDef(res.type).params) if (!fx.params[pd.key]) fx.params[pd.key] = { value: JSON.parse(JSON.stringify(pd.default)), keys: [] };
+    }
+    store.commit('structure');
+    fxBrowser.cat = 'Meus efeitos'; fxBrowser.render();
+  }
+});
 window.addEventListener('app-updated', () => toast('Versão nova do MotionFrame instalada. Volte para a tela inicial (⌂) para usar.', 'ok', 8000));
 if (dock.open.includes('composer')) setTimeout(() => composer.startPreview(), 300);
 
@@ -1572,6 +1618,7 @@ async function openProjectById(id) {
   const data = await loadProjectDataAsync(id);
   if (!data) { toast('Não consegui ler este projeto agora. Ele não foi apagado: tente abrir de novo.', 'error', 6000); home.render(); return; }
   data.id = id;
+  ensureRecipesFromProject(data); // efeitos próprios usados no projeto (mesmo se não estiverem salvos neste aparelho)
   await saveBackup(data, true); // versão de segurança de como o projeto estava ao abrir
   await relinkMedia(data);
   const missing = flatLayers(data.layers).filter((l) => l.missing);

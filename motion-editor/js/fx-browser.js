@@ -6,6 +6,7 @@ import { fxMatch } from './i18n.js';
 import { installedPlugins, allPlugins, importAexFiles, removePlugin, clearPlugins } from './plugins-installed.js';
 import { toast, modal } from './ui.js';
 import { PANEL_PLUGINS } from './composer.js';
+import { MY_CAT } from './custom-fx.js';
 
 const ICON = {
   'Looks · Subject': 'adjust', 'Looks · Matte': 'matte', 'Looks · Lens': 'lens', 'Looks · Camera': 'camera', 'Looks · Post': 'sparkle',
@@ -32,6 +33,7 @@ export class FxBrowser {
     this.q = '';
     this.busy = null;
     window.addEventListener('aex-plugins-changed', () => this.render());
+    window.addEventListener('custom-fx-changed', () => this.render());
     this.render();
   }
 
@@ -102,24 +104,36 @@ export class FxBrowser {
     } else {
       const list = EFFECTS.filter((e) => (this.cat === 'Todos' || (this.cat === 'Plugins' ? e.plugin : e.category === this.cat)) && fxMatch(e, this.q));
       const plugs = this.cat === 'Todos' && q ? mine.filter((p) => p.effect && plugHits(p)).slice(0, 24) : [];
-      body = `${plugs.length ? `<div class="fx-group-title" style="margin:4px 0;font-weight:600">${MINE}</div><div class="fx-grid">${this.pluginTiles(plugs)}</div><div class="fx-group-title" style="margin:10px 0 4px;font-weight:600">Efeitos</div>` : ''}
+      const myBar = this.cat === MY_CAT ? `<div class="aex-bar"><button class="primary" data-cfx="new">✦ Criar efeito</button><button data-cfx="import">${ico('import')} Importar .mfx</button></div>
+        <p class="muted" style="font-size:12px;margin:6px 0 10px">Junte vários efeitos num só, escolha os controles e use em qualquer camada. Toque e segure (ou clique com o botão direito) num efeito seu para editar, exportar ou apagar.</p>` : '';
+      body = `${myBar}${plugs.length ? `<div class="fx-group-title" style="margin:4px 0;font-weight:600">${MINE}</div><div class="fx-grid">${this.pluginTiles(plugs)}</div><div class="fx-group-title" style="margin:10px 0 4px;font-weight:600">Efeitos</div>` : ''}
         <div class="fx-grid">${list.map((e) => `
         <button class="fx-tile" data-type="${e.type}">
           <span class="fx-ico">${ico(ICON[e.category] || 'effects')}</span>
           <span class="fx-name">${escapeHtml(e.label)}</span>
-          ${e.plugin ? `<span class="fx-plugin">estilo ${escapeHtml(e.plugin.split(' / ')[0])}</span>` : `<span class="fx-plugin muted">${e.category}</span>`}
+          ${e.custom ? `<span class="fx-plugin">seu efeito · ${e.recipe.steps.length} etapa(s)</span>` : e.plugin ? `<span class="fx-plugin">estilo ${escapeHtml(e.plugin.split(' / ')[0])}</span>` : `<span class="fx-plugin muted">${e.category}</span>`}
         </button>`).join('')}</div>
-      ${list.length || plugs.length ? '' : '<div class="empty-note">Nenhum efeito encontrado.</div>'}`;
+      ${list.length || plugs.length ? '' : `<div class="empty-note">${this.cat === MY_CAT ? 'Você ainda não criou efeitos. Toque em ✦ Criar efeito.' : 'Nenhum efeito encontrado.'}</div>`}`;
     }
     this.root.innerHTML = `
+      <div class="fx-topbar"><button class="fx-create" data-cfx="new">✦ Criar efeito</button><button class="chip ${this.cat === MY_CAT ? 'on' : ''}" data-cat="${MY_CAT}">★ ${MY_CAT}${EFFECTS.some((e) => e.custom) ? ` · ${EFFECTS.filter((e) => e.custom).length}` : ''}</button></div>
       <input type="search" class="fx-search" placeholder="Buscar efeito ou plugin (ex.: glow, twixtor, S_WipeStar)…" value="${escapeHtml(this.q)}">
-      <div class="chips">${['Todos', MINE, 'Plugins', ...CATEGORIES].map((c) => `<button class="chip ${c === this.cat ? 'on' : ''}" data-cat="${c}">${c === 'Plugins' ? `${ico('presets')} Plugins (recriados)` : c === MINE ? `${ico('import')} ${MINE} (.aex)${mine.length ? ` · ${mine.filter((p) => p.effect).length}` : ''}` : c}</button>`).join('')}</div>
+      <div class="chips">${['Todos', MINE, 'Plugins', ...CATEGORIES.filter((c) => c !== MY_CAT)].map((c) => `<button class="chip ${c === this.cat ? 'on' : ''}" data-cat="${c}">${c === 'Plugins' ? `${ico('presets')} Plugins (recriados)` : c === MINE ? `${ico('import')} ${MINE} (.aex)${mine.length ? ` · ${mine.filter((p) => p.effect).length}` : ''}` : c}</button>`).join('')}</div>
       ${body}`;
     this.updateProgress();
     const s = this.root.querySelector('.fx-search');
     s.addEventListener('input', () => { this.q = s.value; this.render(); const n = this.root.querySelector('.fx-search'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); });
     this.root.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => { this.cat = b.dataset.cat; this.render(); }));
     this.root.querySelectorAll('[data-type]').forEach((b) => b.addEventListener('click', () => this.onPick(b.dataset.type)));
+    this.root.querySelectorAll('[data-cfx]').forEach((b) => b.addEventListener('click', () => window.dispatchEvent(new CustomEvent('custom-fx', { detail: { action: b.dataset.cfx } }))));
+    this.root.querySelectorAll('[data-type]').forEach((b) => {
+      const d = getEffectDef(b.dataset.type); if (!d.custom) return;
+      const edit = (e) => { e?.preventDefault(); window.dispatchEvent(new CustomEvent('custom-fx', { detail: { action: 'edit', type: d.type } })); };
+      b.addEventListener('contextmenu', edit);
+      let tm = 0; b.addEventListener('pointerdown', () => { tm = setTimeout(() => { tm = -1; edit(); }, 600); });
+      b.addEventListener('pointerup', () => clearTimeout(tm)); b.addEventListener('pointerleave', () => clearTimeout(tm));
+      b.addEventListener('click', (e) => { if (tm === -1) { e.stopImmediatePropagation(); tm = 0; } }, true);
+    });
     this.root.querySelectorAll('[data-plugin]').forEach((b) => b.addEventListener('click', () => {
       const p = allPlugins().find((x) => x.id === b.dataset.plugin);
       if (p) this.onPick(p.effect, { label: p.name, params: p.set, plugin: p });

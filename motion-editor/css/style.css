@@ -638,3 +638,26 @@ a.btn.primary { background: var(--accent); border-color: var(--accent); color: #
 .exp-chip-info { display: flex; flex-direction: column; gap: 3px; font-size: 12px; min-width: 120px; }
 .exp-chip-info .progress { height: 4px; }
 .exp-chip button { background: none; border: 0; color: #bbb; font-size: 16px; padding: 4px 6px; }
+
+/* ---- Criar efeito */
+.fx-topbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.fx-create { background: linear-gradient(135deg, var(--accent, #2d8cf0), #8a5cf6); color: #fff; border: 0; border-radius: 10px; padding: 8px 14px; font-weight: 600; }
+.cfx-modal .modal { max-width: 640px; }
+.cfx-top { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.cfx-name { flex: 1 1 200px; font-size: 16px; padding: 8px 10px; }
+.cfx-pv { background: #000; border-radius: 8px; max-width: 100%; border: 1px solid #fff2; }
+.cfx-step { border: 1px solid #fff1; background: #ffffff08; border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+.cfx-step header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.cfx-step header button { min-width: 30px; padding: 2px 6px; margin-left: 4px; }
+.cfx-row { display: grid; grid-template-columns: minmax(90px, 34%) 1fr auto; gap: 8px; align-items: center; padding: 3px 0; font-size: 13px; }
+.cfx-in { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.cfx-in input[type=range] { flex: 1; min-width: 0; }
+.cfx-in output { width: 44px; text-align: right; font-variant-numeric: tabular-nums; opacity: .8; }
+.cfx-ex { font-size: 11px; opacity: .85; white-space: nowrap; display: flex; gap: 3px; align-items: center; }
+.cfx-add { border: 1px dashed #fff3; border-radius: 10px; padding: 8px; margin-top: 8px; }
+.cfx-q { width: 100%; margin-bottom: 6px; }
+.cfx-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; max-height: 260px; overflow: auto; margin-top: 6px; }
+.cfx-list button { text-align: left; padding: 8px; border-radius: 8px; font-size: 13px; }
+.cfx-list small { display: block; }
+.cfx-actions { margin-top: 8px; }
+.cfx-from { margin-top: 8px; width: 100%; }
