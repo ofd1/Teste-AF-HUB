@@ -161,6 +161,7 @@ export default [
       num('stillness', 'Stillness (pausas entre trancos)', 0, 0, 0.95, 0.01), num('twitchFreq', 'Twitch Frequency (rajadas/s)', 2, 0.1, 20, 0.1),
       num('drift', 'Drift (deriva lenta)', 0, 0, 2, 0.01), num('rgbShake', 'RGB separado (px)', 0, 0, 100),
       // modo S_Shake exato (definição tirada do sapphire_ae.dll): Style Normal/Twitchy/Jumpy, Tilt e Z × Amplitude
+      num('hardness', 'Dureza (tranco seco)', 70, 0, 100, 1),
       num('tilt', 'Inclinação 3D (tilt X/Y, °)', 0, 0, 45, 0.5), num('focal', 'Lente da inclinação (px)', 1500, 200, 6000, 10),
       bool('sapphire', 'Modo S_Shake (Sapphire)', false), sel('style', 'S_Shake – Style', ['Normal', 'Twitchy', 'Jumpy'], 1), num('centerBias', 'S_Shake – Center Bias', 0, 0, 1, 0.01),
     ],
@@ -171,7 +172,24 @@ export default [
       // passavam do limite de 30 q/s e o tremor pulava longe de um quadro para o outro (rastros enormes).
       const oct = p.sapphire ? 1 : Math.max(1, Math.round(p.complexity ?? 1));
       // ruído normalizado como o random do S_Shake (desvio ~0,55, picos ~±1,4): o noiseG cru tem desvio 0,3 e deixava o tremor fraco
-      const wig = (f, seed) => { let v = 0, a = 1, n = 0; for (let o = 0; o < oct; o++) { v += noiseG(f * 2 ** o + o * 0.37, seed + o * 7.7) * a; n += a * a; a *= 0.5; } const x = (v / Math.sqrt(n)) * 1.8; return x / (1 + Math.abs(x) * 0.25); };
+      const wigSmooth = (f, seed) => { let v = 0, a = 1, n = 0; for (let o = 0; o < oct; o++) { v += noiseG(f * 2 ** o + o * 0.37, seed + o * 7.7) * a; n += a * a; a *= 0.5; } const x = (v / Math.sqrt(n)) * 1.8; return x / (1 + Math.abs(x) * 0.25); };
+      // Dureza: o tremor de edit é seco — pula de uma posição para outra a cada batida (quase sem curva no meio) e os
+      // picos chegam perto da amplitude máxima. Mistura o ruído suave com saltos por período e empurra para os extremos.
+      const hard = Math.max(0, Math.min(1, (p.hardness ?? 0) / 100));
+      const stepped = (f, seed) => {
+        const i = Math.floor(f), u = f - i;
+        const r = (k) => (hash1(k * 1.618 + seed * 7.13 + 0.71) * 2 - 1) * 1.15;
+        const e = Math.min(1, u / 0.18); // transição em ~18% do período: um tranco, não um deslize
+        return r(i - 1) + (r(i) - r(i - 1)) * e * e * (3 - 2 * e);
+      };
+      const wig = (f, seed) => {
+        let x = wigSmooth(f, seed);
+        if (hard > 0) {
+          x = x + (stepped(f, seed + 3.1) - x) * hard * 0.85;
+          x = Math.sign(x) * Math.pow(Math.min(1.6, Math.abs(x)), 1 - 0.45 * hard); // picos mais secos
+        }
+        return x;
+      };
       // Impacto: começa forte e decai (curva exponencial), como um tranco de câmera em batida
       const env0 = (t) => {
         if (p.mode !== 2) return 1;
