@@ -707,6 +707,15 @@ export const IMPORT_RULES = [
   // S_Glow → Glow/Diffusion, igual ao Frameify: intensidade = Brightness × 50, raio = Width × 0,75, limiar = Threshold × 100, cor
   // S_Glow / S_HueSatBright / S_Flicker: efeitos próprios com os controles oficiais (nomes iguais → casam 1 a 1)
   { vendor: 'Sapphire', plugin: 'S_Glow', to: 'sGlow', match: ['S_Glow'], test: /^s_glow$/i },
+  // conversões iguais às do Frameify (tabela de regras dele: valor do AE × fator + deslocamento)
+  { vendor: 'Sapphire', plugin: 'S_Tint', to: 'tint', match: ['S_Tint'], test: /^s_tint$/i, map: { black: { n: ['tint darks'] }, white: { n: ['tint lights'] } }, set: { amount: 100 } },
+  { vendor: 'Sapphire', plugin: 'S_Gamma', to: 'levels', match: ['S_Gamma'], test: /^s_gamma$/i, map: { gamma: { n: ['gamma'] } } },
+  { vendor: 'Sapphire', plugin: 'S_DropShadow', to: 'dropShadow', match: ['S_DropShadow'], test: /^s_dropshadow$/i,
+    map: { color: { n: ['shadow color'] }, opacity: { n: ['shadow opacity'], conv: (v) => (v <= 1 ? v * 100 : v) }, softness: { n: ['shadow blur'] }, distance: { n: ['shift x'], conv: (v) => Math.abs(v) * 1.414 } }, set: { angle: 135 } },
+  { vendor: 'Red Giant', plugin: 'Universe Ecto', to: 'glow', match: ['Universe_Text_Ecto', 'UNI.Ecto'], test: /ecto/i,
+    map: { radius: { n: ['size'], conv: (v) => v * 2 }, intensity: { n: ['glow intensity'], conv: (v) => v * 0.6 }, color: { n: ['outer color'] } }, set: { threshold: 25, useColor: true } },
+  { vendor: 'Crumplepop / CS', plugin: 'CS Vignette', to: 'vignette', match: ['CS Vignette'], test: /^cs vignette$/i,
+    map: { amount: { n: ['amount'], conv: (v) => Math.min(100, Math.abs(v)) }, size: { n: ['angle of view'], conv: (v) => Math.max(10, Math.min(100, 100 - v * 0.5)) } }, set: { feather: 70 } },
   { vendor: 'Sapphire', plugin: 'S_ZoomBlur', to: 'radialBlur', test: /s_zoomblur|s_blurzoom|s_radialblur/i, set: { mode: 1 },
     map: { amount: { n: ['zoom amount', 'blur amount', 'amount', 'length'], conv: (v) => (v <= 2 ? v * 100 : v) }, center: { n: ['center', 'center xy'] } } },
   { vendor: 'Sapphire', plugin: 'S_Blur', to: 'blur', test: /s_blur/i, map: { radius: { n: ['width', 'blur amount'], conv: (v) => (v < 5 ? v * 100 : v) } } },
@@ -831,7 +840,8 @@ export const IMPORT_RULES = [
   { vendor: 'Cycore (CC)', plugin: 'CC Radial Blur', to: 'radialBlur', match: ['CC Radial Blur', 'CC Radial Fast Blur'], map: { amount: { n: ['amount'] }, mode: { n: ['type'], conv: (v) => (v === 4 ? 2 : 1) } } },
   { vendor: ADOBE, plugin: 'Pixel Motion Blur / CC Force Motion Blur', to: 'motionBlur', match: ['ADBE Pixel Motion Blur', 'CC Force Motion Blur'], map: { amount: { n: ['shutter angle'], conv: (v) => (v / 180) * 100 }, samples: { n: ['shutter samples', 'motion blur levels'] } } },
   { vendor: ADOBE, plugin: 'Glow', to: 'glow', match: ['ADBE Glo2', 'ADBE Glow'],
-    map: { threshold: { i: 2, n: ['glow threshold'], conv: pct }, radius: { i: 3, n: ['glow radius'] }, intensity: { i: 4, n: ['glow intensity'] }, color: { i: 9, n: ['color a'] } } },
+    // limiar do Glow no .ffx vai de 0 a 255 (o Frameify converte × 100/255; 153 = 60 %) — antes 153 virava 153 % e o glow sumia
+    map: { threshold: { i: 2, n: ['glow threshold'], conv: (v) => (Math.abs(v) <= 1 ? v * 100 : Math.min(100, (v * 100) / 255)) }, radius: { i: 3, n: ['glow radius'] }, intensity: { i: 4, n: ['glow intensity'] }, color: { i: 9, n: ['color a'] } } },
   { vendor: ADOBE, plugin: 'Brightness & Contrast', to: 'brightnessContrast', match: ['ADBE Brightness & Contrast 2', 'ADBE Brightness & Contrast'], map: { brightness: { i: 1, n: ['brightness'] }, contrast: { i: 2, n: ['contrast'] } } },
   { vendor: ADOBE, plugin: 'Levels', to: 'levels', match: ['ADBE Easy Levels2', 'ADBE Pro Levels2', 'ADBE Easy Levels'],
     map: { inBlack: { n: ['input black'], conv: to255 }, inWhite: { n: ['input white'], conv: to255 }, gamma: { n: ['gamma'] }, outBlack: { n: ['output black'], conv: to255 }, outWhite: { n: ['output white'], conv: to255 } } },

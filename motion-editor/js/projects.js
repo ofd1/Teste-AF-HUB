@@ -5,7 +5,7 @@ import { escapeHtml, uid } from './util.js';
 import { flatLayers } from './state.js';
 import { putMedia, getMedia, deleteMedia, listKeys } from './idb.js';
 
-export const APP_VERSION = 'v104';
+export const APP_VERSION = 'v105';
 const INDEX = 'motionframe.projects.v1';
 const KEY = (id) => `motionframe.project.${id}`;
 const SETTINGS = 'motionframe.settings.v1';
@@ -140,7 +140,7 @@ export class HomeScreen {
     const list = listProjects();
     this.el.innerHTML = `
       <header class="home-top">
-        <div class="home-logo"><span class="logo-mark">◆</span> MotionFrame <span class="muted small" style="font-weight:400">${APP_VERSION}</span></div>
+        <div class="home-logo"><img class="logo-mark" src="icons/icon.svg" alt="" width="28" height="28" style="vertical-align:-7px;border-radius:7px"> MotionFrame <span class="muted small" style="font-weight:400">${APP_VERSION}</span></div>
         <button class="icon" data-h="settings" aria-label="Configurações">⚙</button>
       </header>
       <div class="home-body">

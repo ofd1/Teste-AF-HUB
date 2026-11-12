@@ -31,7 +31,7 @@ test('converte para preset com efeitos mapeados', () => {
   assert.equal(blur.keys.length, 2);
   assert.equal(blur.keys[0].ease, 'bezier');
   const glow = preset.effects[1].params;
-  assert.equal(glow.threshold, 55);
+  near(glow.threshold, (55 * 100) / 255); // AE guarda o limiar do Glow de 0 a 255 (padrão 153 = 60 %)
   assert.equal(glow.radius, 32);
   near(glow.intensity, 1.8);
   const sh = preset.effects[2].params;
