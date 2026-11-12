@@ -121,7 +121,7 @@ export default [
   {
     type: 'crossGlow', label: 'BCC Cross Glow', category: 'Luz e brilho', plugin: 'BCC Cross Glow',
     description: 'Brilho em cruz/estrela saindo das luzes, com glow suave em volta (Boris FX).',
-    params: [num('threshold', 'Limiar %', 70, 0, 100), num('length', 'Comprimento dos raios', 120, 1, 800), num('amount', 'Intensidade', 1.2, 0, 6, 0.05), ang('angle', 'Ângulo', 0), num('glow', 'Glow suave', 60, 0, 300), col('color', 'Cor', [1, 0.95, 0.85, 1])],
+    params: [num('threshold', 'Limiar %', 80, 0, 100), num('length', 'Comprimento dos raios', 120, 1, 800), num('amount', 'Intensidade', 0.8, 0, 6, 0.05), ang('angle', 'Ângulo', 0), num('glow', 'Glow suave', 40, 0, 300), col('color', 'Cor', [1, 0.95, 0.85, 1])],
     pad: (p) => p.length,
     render: (src, p, env) => {
       const { gl } = env;

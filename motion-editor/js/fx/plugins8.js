@@ -101,7 +101,7 @@ export const SAPPHIRE_EXACT = [
     type: 'sGlow', label: 'S_Glow', category: 'Luz e brilho', plugin: 'Sapphire S_Glow',
     description: 'Como o S_Glow do Sapphire: só o que passa do Threshold brilha; larguras por eixo e por cor (vermelho/verde/azul) e Combine.',
     params: [
-      num('brightness', 'Brightness', 2, 0, 20, 0.01), col('color', 'Color', [1, 1, 1, 1]), num('threshold', 'Threshold', 0.5, 0, 1, 0.01), col('thAdd', 'Threshold Add Color', [0, 0, 0, 1]),
+      num('brightness', 'Brightness', 1, 0, 20, 0.01), col('color', 'Color', [1, 1, 1, 1]), num('threshold', 'Threshold', 0.5, 0, 1, 0.01), col('thAdd', 'Threshold Add Color', [0, 0, 0, 1]),
       num('width', 'Glow Width', 0.4, 0, 500, 0.01), num('wx', 'Width X', 1, 0, 5, 0.01), num('wy', 'Width Y', 1, 0, 5, 0.01),
       num('wr', 'Width Red', 1, 0, 5, 0.01), num('wg', 'Width Green', 1.2, 0, 5, 0.01), num('wb', 'Width Blue', 1.4, 0, 5, 0.01),
       sel('combine', 'Combine', ['Mult', 'Add', 'Screen', 'Difference', 'Overlay'], 3), num('under', 'Glow Under Source', 0, 0, 1, 0.01), num('srcOp', 'Source Opacity', 1, 0, 1, 0.01),

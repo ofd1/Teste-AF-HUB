@@ -219,7 +219,7 @@ export default [
   },
   {
     type: 'noise', label: 'Ruído / Grão', category: 'Estilizar',
-    params: [num('amount', 'Quantidade %', 20, 0, 100), num('size', 'Tamanho do grão', 1, 1, 8, 0.5), bool('animated', 'Animado', true), bool('color', 'Colorido')],
+    params: [num('amount', 'Quantidade %', 0, 0, 100), num('size', 'Tamanho do grão', 1, 1, 8, 0.5), bool('animated', 'Animado', true), bool('color', 'Colorido')],
     render: (src, p, env) => env.gl.pass(NOISE, { u_tex: src, u_amount: p.amount / 100, u_size2: p.size * env.scale, u_color: p.color, u_seed: p.animated ? Math.floor(env.t * 24) * 0.37 : 0.5 }),
   },
   {
@@ -265,22 +265,22 @@ export default [
   },
   {
     type: 'linearWipe', label: 'Wipe linear', category: 'Transições',
-    params: [num('completion', 'Conclusão %', 50, 0, 100), ang('angle', 'Ângulo', 90), num('feather', 'Suavidade', 20, 0, 1000)],
+    params: [num('completion', 'Conclusão %', 0, 0, 100), ang('angle', 'Ângulo', 90), num('feather', 'Suavidade', 20, 0, 1000)],
     render: (src, p, env) => env.gl.pass(LINEAR_WIPE, { u_tex: src, u_comp: p.completion / 100, u_dir: dirVec(p.angle), u_feather: p.feather * env.scale }),
   },
   {
     type: 'radialWipe', label: 'Wipe radial', category: 'Transições',
-    params: [num('completion', 'Conclusão %', 50, 0, 100), ang('start', 'Ângulo inicial', 0), sel('direction', 'Direção', ['Horário', 'Anti-horário']), pos('center', 'Centro'), num('feather', 'Suavidade %', 2, 0, 50, 0.5)],
+    params: [num('completion', 'Conclusão %', 0, 0, 100), ang('start', 'Ângulo inicial', 0), sel('direction', 'Direção', ['Horário', 'Anti-horário']), pos('center', 'Centro'), num('feather', 'Suavidade %', 2, 0, 50, 0.5)],
     render: (src, p, env) => env.gl.pass(RADIAL_WIPE, { u_tex: src, u_comp: p.completion / 100, u_start: rad(p.start), u_dirn: p.direction === 1 ? 1 : -1, u_c: cuv(env, p.center), u_feather: p.feather / 100 }),
   },
   {
     type: 'blinds', label: 'Persianas (Venetian Blinds)', category: 'Transições',
-    params: [num('completion', 'Conclusão %', 50, 0, 100), ang('direction', 'Direção', 0), num('width', 'Largura', 60, 2, 1000), num('feather', 'Suavidade %', 2, 0, 50, 0.5)],
+    params: [num('completion', 'Conclusão %', 0, 0, 100), ang('direction', 'Direção', 0), num('width', 'Largura', 60, 2, 1000), num('feather', 'Suavidade %', 2, 0, 50, 0.5)],
     render: (src, p, env) => env.gl.pass(BLINDS, { u_tex: src, u_comp: p.completion / 100, u_dir: dirVec(p.direction), u_w: Math.max(2, p.width * env.scale), u_feather: p.feather / 100 }),
   },
   {
     type: 'blockDissolve', label: 'Dissolver em blocos', category: 'Transições',
-    params: [num('completion', 'Conclusão %', 50, 0, 100), num('block', 'Tamanho do bloco', 24, 1, 400), num('seed', 'Semente', 1, 0, 999)],
+    params: [num('completion', 'Conclusão %', 0, 0, 100), num('block', 'Tamanho do bloco', 24, 1, 400), num('seed', 'Semente', 1, 0, 999)],
     render: (src, p, env) => env.gl.pass(DISSOLVE, { u_tex: src, u_comp: p.completion / 100, u_block: Math.max(1, p.block * env.scale), u_seed: p.seed }),
   },
 ];

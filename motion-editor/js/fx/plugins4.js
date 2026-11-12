@@ -322,8 +322,8 @@ export default [
   {
     type: 'bokeh', label: 'Bokeh', category: 'Desfoque', plugin: 'S_Bokeh / BCC Bokeh',
     description: 'Transforma os pontos de luz em discos de bokeh (círculo ou íris poligonal) e desfoca o fundo.',
-    params: [num('radius', 'Tamanho do disco', 30, 1, 300), num('threshold', 'Limiar %', 70, 0, 100), num('amount', 'Brilho do bokeh %', 100, 0, 400),
-      num('defocus', 'Desfocar imagem %', 60, 0, 100), num('sides', 'Lados da íris (0 = círculo)', 0, 0, 10, 1)],
+    params: [num('radius', 'Tamanho do disco', 14, 1, 300), num('threshold', 'Limiar %', 82, 0, 100), num('amount', 'Brilho do bokeh %', 40, 0, 400),
+      num('defocus', 'Desfocar imagem %', 40, 0, 100), num('sides', 'Lados da íris (0 = círculo)', 0, 0, 10, 1)],
     pad: (p) => p.radius,
     render: (src, p, env) => {
       const { gl } = env;

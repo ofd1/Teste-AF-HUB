@@ -912,8 +912,9 @@ async function saveProject() {
 }
 
 async function openProject() {
-  const [f] = await pickFiles('.json,application/json', false);
+  const [f] = await pickFiles('.json,.amproj,.xml,.fcpxml,.zip,application/json', false);
   if (!f) return;
+  if (/\.(amproj|xml|fcpxml|zip)$/i.test(f.name)) return openXMLFlow(f);
   try {
     const data = JSON.parse(await f.text());
     if (data.format?.startsWith('motionframe-preset') || data.preset || data.presets) { library.importFiles([f]); openSheet('presets'); return; }
@@ -1203,7 +1204,7 @@ function timeReverse(l) {
 }
 
 const commands = {
-  'open-any': async () => { const files = await pickFiles('.ffx,.aep,.xml,.fcpxml,.json,.rgx,.cube,.aex,.ttf,.otf,.woff,.woff2,video/*,image/*,audio/*'); if (files.length) routeFiles(files); },
+  'open-any': async () => { const files = await pickFiles('.ffx,.aep,.xml,.fcpxml,.amproj,.json,.rgx,.cube,.aex,.ttf,.otf,.woff,.woff2,video/*,image/*,audio/*'); if (files.length) routeFiles(files); },
   menu: showMenu,
   more: async () => {
     // modo simples: as ferramentas avançadas aparecem numa grade (como o "Mais" dos apps de celular)
@@ -1509,11 +1510,11 @@ window.addEventListener('drop', (e) => {
 /** Abre qualquer arquivo no lugar certo (preset, projeto do AE, XML, fonte ou mídia). */
 function routeFiles(files) {
   const fonts = files.filter((f) => isFontFile(f.name));
-  const xml = files.filter((f) => /\.(xml|fcpxml)$/i.test(f.name));
+  const xml = files.filter((f) => /\.(xml|fcpxml|amproj)$/i.test(f.name));
   const aep = files.filter((f) => /\.aep$/i.test(f.name));
   const aex = files.filter((f) => /\.aex$/i.test(f.name));
   const presets = files.filter((f) => /\.(ffx|frameify|rgx|cube|json)$/i.test(f.name));
-  const media = files.filter((f) => !/\.(ffx|frameify|rgx|cube|json|aex|xml|fcpxml|aep|ttf|otf|woff2?)$/i.test(f.name));
+  const media = files.filter((f) => !/\.(ffx|frameify|rgx|cube|json|aex|xml|fcpxml|amproj|aep|ttf|otf|woff2?)$/i.test(f.name));
   if (fonts.length) importFontsFlow(fonts);
   if (xml.length) openXMLFlow(xml[0]);
   if (aep.length) openAEPFlow(aep[0]);
@@ -1611,8 +1612,9 @@ async function createProjectFlow() {
 }
 
 async function importProjectFile() {
-  const [f] = await pickFiles('.json,application/json', false);
+  const [f] = await pickFiles('.json,.amproj,.xml,.fcpxml,.zip,application/json', false);
   if (!f) return;
+  if (/\.(amproj|xml|fcpxml|zip)$/i.test(f.name)) return openXMLFlow(f);
   try {
     const data = JSON.parse(await f.text());
     if (!Array.isArray(data.layers) || !data.width) throw new Error('arquivo não é um projeto do MotionFrame');
@@ -1669,10 +1671,34 @@ async function openAEPFlow(file) {
 }
 
 async function openXMLFlow(file) {
-  if (!file) { [file] = await pickFiles('.xml,.fcpxml,.fcpxmld,text/xml,application/xml', false); if (!file) return; }
-  const base = file.name.replace(/\.(fcp)?xml$/i, '');
-  let res;
-  try { res = xmlToProject(await file.text(), base); } catch (e) { toast(`${file.name}: ${e.message}`, 'error', 5000); return; }
+  if (!file) { [file] = await pickFiles('.xml,.fcpxml,.fcpxmld,.amproj,.zip,text/xml,application/xml', false); if (!file) return; }
+  const base = file.name.replace(/\.(fcp)?xml$|\.amproj$|\.zip$/i, '');
+  let res, zipMedia = null;
+  try {
+    if (/\.(amproj|zip)$/i.test(file.name)) {
+      // .amproj (Alight Motion, Gold Motion, Alemon…) = ZIP com o XML do projeto + as mídias usadas
+      const { readZip } = await import('./zip.js');
+      const z = await readZip(file);
+      const xmlName = z.names.find((n) => /\.xml$/i.test(n)) || z.names.find((n) => !/\.(jpe?g|png|webp|gif|mp4|mov|m4v|webm|mp3|m4a|aac|wav|ogg|ttf|otf)$/i.test(n));
+      if (!xmlName) throw new Error('o arquivo não tem o XML do projeto');
+      res = xmlToProject(await (await z.get(xmlName)).text(), base);
+      const TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', ogg: 'audio/ogg' };
+      zipMedia = [];
+      for (const n of z.names) {
+        const short = n.split('/').pop(), ext = short.split('.').pop().toLowerCase();
+        if (TYPES[ext]) zipMedia.push(new File([await z.get(n, TYPES[ext])], short, { type: TYPES[ext] }));
+        else if (/^(ttf|otf)$/.test(ext)) await importFonts([new File([await z.get(n)], short)]).catch(() => {});
+      }
+    } else res = xmlToProject(await file.text(), base);
+  } catch (e) { toast(`${file.name}: ${e.message}`, 'error', 5000); return; }
+  if (zipMedia) {
+    const p = res.project; p.id = uid('prj');
+    saveProjectData(p, null);
+    await openProjectById(p.id);
+    if (zipMedia.length) await relinkAEMedia({ files: zipMedia });
+    toast(`Projeto do Alight Motion “${p.name || base}” aberto: ${flatLayers(p.layers).length} camada(s)${res.notes.length ? ' — ' + res.notes[res.notes.length - 1] : ''}`, 'ok', 6000);
+    return;
+  }
   if (!res.project.layers.length) { toast(`${file.name}: a sequência não tem clipes.`, 'warn'); return; }
   const p = res.project;
   p.id = uid('prj');
@@ -1708,8 +1734,8 @@ async function importFontsFlow(files) {
 
 /** Troca os espaços reservados das mídias do .aep pelos arquivos escolhidos (casando pelo nome do arquivo). */
 const AUD_RE = /\.(mp3|wav|aiff?|m4a|aac|ogg|flac)$/i;
-async function relinkAEMedia({ substitute = false } = {}) {
-  const files = await pickFiles('video/*,image/*,audio/*');
+async function relinkAEMedia({ substitute = false, files = null } = {}) {
+  if (!files) files = await pickFiles('video/*,image/*,audio/*');
   if (!files.length) return;
   const used = new Set();
   const saved = new Map();

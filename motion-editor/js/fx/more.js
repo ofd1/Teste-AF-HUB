@@ -216,7 +216,7 @@ export default [
   {
     type: 'starGlow', label: 'Starglow / S_Glint (estrelas)', category: 'Luz e brilho', plugin: 'Trapcode Starglow / S_Glint',
     description: 'Raios em estrela saindo das partes mais claras (4, 6 ou 8 pontas).',
-    params: [num('threshold', 'Limiar %', 70, 0, 100), num('length', 'Comprimento', 60, 1, 400), num('amount', 'Intensidade', 1.2, 0, 6, 0.05), sel('rays', 'Pontas', ['4', '6', '8'], 1), ang('angle', 'Rotação', 45), col('color', 'Cor', [1, 0.95, 0.85, 1])],
+    params: [num('threshold', 'Limiar %', 80, 0, 100), num('length', 'Comprimento', 60, 1, 400), num('amount', 'Intensidade', 0.8, 0, 6, 0.05), sel('rays', 'Pontas', ['4', '6', '8'], 1), ang('angle', 'Rotação', 45), col('color', 'Cor', [1, 0.95, 0.85, 1])],
     pad: (p) => p.length,
     render: (src, p, env) => {
       const { gl } = env;
@@ -234,7 +234,7 @@ export default [
   {
     type: 'lightSweep', label: 'CC Light Sweep', category: 'Luz e brilho', plugin: 'CC Light Sweep',
     description: 'Faixa de luz que atravessa a imagem (anime o centro para o brilho passar por textos e logos).',
-    params: [pos('center', 'Centro', [0.2, 0.5]), ang('direction', 'Direção', 35), sel('shape', 'Forma', ['Linear', 'Suave', 'Dura'], 2), num('width', 'Largura', 60, 1, 800), num('intensity', 'Intensidade', 0.9, 0, 4, 0.05), col('color', 'Cor', [1, 1, 1, 1])],
+    params: [pos('center', 'Centro', [0.2, 0.5]), ang('direction', 'Direção', 35), sel('shape', 'Forma', ['Linear', 'Suave', 'Dura'], 2), num('width', 'Largura', 50, 1, 800), num('intensity', 'Intensidade', 0.5, 0, 4, 0.05), col('color', 'Cor', [1, 1, 1, 1])],
     render: (src, p, env) => env.gl.pass(SWEEP, { u_tex: src, u_c: cuv(env, p.center), u_dirA: rad(p.direction), u_width: p.width * env.scale, u_int: p.intensity, u_shape: p.shape, u_col: rgb(p.color) }),
   },
   {

@@ -126,7 +126,7 @@ export default [
   },
   {
     type: 'twirl', label: 'Twirl (redemoinho)', category: 'Distorção',
-    params: [ang('angle', 'Ângulo', 180), num('radius', 'Raio', 400, 1, 3000), pos('center', 'Centro')],
+    params: [ang('angle', 'Ângulo', 0), num('radius', 'Raio', 400, 1, 3000), pos('center', 'Centro')],
     render: (src, p, env) => env.gl.pass(TWIRL, { u_tex: src, u_c: cuv(env, p.center), u_r: p.radius * env.scale, u_a: rad(p.angle) }),
   },
   {

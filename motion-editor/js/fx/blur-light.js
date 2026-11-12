@@ -206,7 +206,7 @@ export default [
   },
   {
     type: 'glow', label: 'Glow (AE)', category: 'Luz e brilho',
-    params: [num('threshold', 'Limiar %', 50, 0, 100), num('radius', 'Raio', 25, 0, 300), num('intensity', 'Intensidade', 1.2, 0, 8, 0.05), col('color', 'Cor'), bool('useColor', 'Usar cor')],
+    params: [num('threshold', 'Limiar %', 60, 0, 100), num('radius', 'Raio', 10, 0, 300), num('intensity', 'Intensidade', 1, 0, 8, 0.05), col('color', 'Cor'), bool('useColor', 'Usar cor')],
     pad: (p) => p.radius * 1.5,
     render: (src, p, env) => {
       const { gl } = env;
@@ -258,7 +258,7 @@ export default [
   },
   {
     type: 'lightRays', label: 'Raios de luz', category: 'Luz e brilho', plugin: 'CC Light Rays / Shine / S_Rays',
-    params: [pos('center', 'Origem'), num('intensity', 'Intensidade', 2, 0, 10, 0.05), num('length', 'Comprimento %', 40, 0, 100), num('threshold', 'Limiar %', 30, 0, 100), col('color', 'Cor', [1, 0.95, 0.85, 1])],
+    params: [pos('center', 'Origem'), num('intensity', 'Intensidade', 1, 0, 10, 0.05), num('length', 'Comprimento %', 40, 0, 100), num('threshold', 'Limiar %', 55, 0, 100), col('color', 'Cor', [1, 0.95, 0.85, 1])],
     render: (src, p, env) => env.gl.pass(RAYS, { u_tex: src, u_center: cuv(env, p.center), u_len: p.length / 100, u_int: p.intensity, u_thr: p.threshold / 100, u_color: rgb(p.color) }),
   },
   {
@@ -266,8 +266,8 @@ export default [
     description: 'Flare de lente completo: brilho, starburst, halo cromático, ghosts poligonais, streak anamórfico, sujeira de lente e estilos prontos.',
     params: [sel('style', 'Estilo', ['Clássico (cor livre)', 'Anamórfico azul', 'Sol quente', 'Sci-fi neon', 'Spotlight branco', 'Cinema 35mm', 'Verde-água'], 1),
       pos('position', 'Posição da luz', [0.25, 0.25]), pos('axis', 'Centro da lente', [0.5, 0.5]),
-      num('brightness', 'Brilho %', 100, 0, 400), num('size', 'Escala', 220, 10, 2000), col('color', 'Cor', [1, 0.85, 0.65, 1]),
-      num('glow', 'Glow %', 100, 0, 300), num('rays', 'Starburst %', 60, 0, 300), num('raysN', 'Nº de raios', 8, 2, 40, 1),
+      num('brightness', 'Brilho %', 100, 0, 400), num('size', 'Escala', 130, 10, 2000), col('color', 'Cor', [1, 0.85, 0.65, 1]),
+      num('glow', 'Glow %', 55, 0, 300), num('rays', 'Starburst %', 60, 0, 300), num('raysN', 'Nº de raios', 8, 2, 40, 1),
       num('streak', 'Streak anamórfico', 0.8, 0, 3, 0.05), num('halo', 'Halo %', 100, 0, 300), num('chroma', 'Aberração cromática %', 60, 0, 200),
       num('ghosts', 'Ghosts %', 100, 0, 300), num('ghostN', 'Nº de ghosts', 7, 0, 16, 1), num('sides', 'Lados da íris', 6, 0, 12, 1),
       num('dirt', 'Sujeira de lente %', 0, 0, 200), num('flicker', 'Flicker %', 0, 0, 100), num('seed', 'Semente', 1, 0, 100, 1)],

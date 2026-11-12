@@ -98,5 +98,5 @@ test('arquivo inválido e truncado', () => {
 test('instância de efeito usa defaults', () => {
   const fx = createEffectInstance('glow', { radius: 10 });
   assert.equal(fx.params.radius.value, 10);
-  assert.equal(fx.params.threshold.value, 50);
+  assert.equal(fx.params.threshold.value, 60); // padrão do Glow do AE
 });
