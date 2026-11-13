@@ -68,13 +68,13 @@ export const WATERMARKS = [
   },
   {
     id: 'wm-full3d', name: 'Marca d’água 3D “FULL” (textura dos clipes)', dur: 0, full: true, src: 'edits (marca no meio)',
-    fields: [['text', 'Texto', 'FULL'], ['material', 'Material', 1, MATERIAL_NAMES], ['size', 'Tamanho %', 85, [30, 140]], ['opacity', 'Opacidade %', 100, [10, 100]]],
+    fields: [['text', 'Texto', 'FULL'], ['fill', 'Preenchimento', 1, ['Clipes (textura)', 'Branco liso (edit 2)']], ['material', 'Material', 1, MATERIAL_NAMES], ['size', 'Tamanho %', 85, [30, 140]], ['opacity', 'Opacidade %', 100, [10, 100]]],
     build(P, o, t0, d) {
       const adj = LAYER_FACTORIES.adjustment(P); adj.name = `Marca 3D · ${o.text || 'FULL'}`;
       adj.transform.opacity.value = +o.opacity || 100;
       adj.effects.push(fx('element3d', {
         object: 1, text: o.text || 'FULL', font: 1, extrude: 0.38, bevel: 0.03, objSize: (P.width * (+o.size || 85)) / 100,
-        material: +o.material || 1, texMode: 3, gloss: 75, reflect: 45, envMode: 2, ambient: 45, lightInt: 1.3, rim: 60,
+        material: +o.fill === 2 ? 6 : +o.material || 1, texMode: +o.fill === 2 ? 1 : 3, color: [1, 1, 1, 1], gloss: 75, reflect: 45, envMode: 2, ambient: 45, lightInt: 1.3, rim: 60,
         rotX: [[0, -10, 'easeInOut'], [d / 2, 6, 'easeInOut'], [d, -10]], rotY: [[0, -32, 'easeInOut'], [d, 32]], composite: 1,
       }, t0));
       return [adj];

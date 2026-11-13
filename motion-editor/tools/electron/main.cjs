@@ -28,6 +28,11 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '
   '.gif': 'image/gif', '.wasm': 'application/wasm', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ttf': 'font/ttf',
   '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ffx': 'application/octet-stream', '.cube': 'text/plain', '.onnx': 'application/octet-stream' };
 
+// registro das quedas (para diagnosticar): <dados do usuário>/quedas.log
+function logCrash(msg) { try { fs.appendFileSync(path.join(app.getPath('userData'), 'quedas.log'), `${new Date().toISOString()} ${msg}\n`); } catch { /* ok */ } }
+// a GPU caiu (driver/memória de vídeo): o Chromium recria sozinho; só registra
+app.on('child-process-gone', (_e, d) => { if (d.reason !== 'clean-exit') logCrash(`${d.type}: ${d.reason} (código ${d.exitCode})`); });
+
 function serve() {
   return new Promise((resolve, reject) => {
     const srv = http.createServer((req, res) => {
@@ -82,7 +87,7 @@ async function checkUpdate() {
     if (vnum(readVer(tmp)) !== vnum(info.version)) throw new Error('pacote incompleto');
     fs.rmSync(LIVE, { recursive: true, force: true }); fs.renameSync(tmp, LIVE); liveOk = true;
     if (!win || win.isDestroyed()) return;
-    const { response } = await dialog.showMessageBox(win, { type: 'info', buttons: ['Atualizar agora', 'Depois'], defaultId: 0, title: 'MotionFrame', message: `MotionFrame ${info.version} baixado.`, detail: 'O editor recarrega com a versão nova (seu projeto já está salvo).' });
+    const { response } = await dialog.showMessageBox(win, { type: 'info', buttons: ['Atualizar agora', 'Depois'], defaultId: 0, title: 'MotionFrame', message: `MotionFrame ${info.label || info.version} baixado.`, detail: 'O editor recarrega com a versão nova (seu projeto já está salvo).' });
     if (response === 0) win.webContents.reloadIgnoringCache();
   } catch (e) { console.warn('atualização:', e.message); }
 }
@@ -101,6 +106,7 @@ function createWindow() {
   // a tela do editor caiu (falta de memória/GPU): reabre sozinha. O projeto é salvo automaticamente pelo editor.
   win.webContents.on('render-process-gone', (_e, d) => {
     if (d.reason === 'clean-exit') return;
+    logCrash(`editor: ${d.reason} (código ${d.exitCode})`);
     const now = Date.now(); crashes = crashes.filter((t) => now - t < 60000); crashes.push(now);
     if (crashes.length > 3) {
       dialog.showMessageBox(win, { type: 'error', title: 'MotionFrame', message: 'O editor caiu várias vezes seguidas.', detail: `Motivo: ${d.reason}. Feche e abra o MotionFrame de novo. Se continuar, diminua a qualidade da prévia em Configurações.` });

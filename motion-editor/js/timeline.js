@@ -181,6 +181,73 @@ export class Timeline {
     };
     sc.addEventListener('pointerup', end);
     sc.addEventListener('pointercancel', end);
+    this.marquee();
+  }
+
+  /**
+   * Seleção por arrasto (como no AE): botão esquerdo numa área vazia da timeline + arrastar desenha um retângulo;
+   * tudo que ele toca é selecionado — camadas (clipes) e keyframes. Shift/Ctrl soma à seleção atual.
+   */
+  marquee() {
+    const sc = this.scroll, store = this.store;
+    let m = null;
+    const empty = (el) => !el.closest('.clip, .kf, .handle, .tl-cti, .tl-ruler-wrap, .tl-name, button, input, select, textarea, .tl-add');
+    sc.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0 || !empty(e.target)) return;
+      if (!e.target.closest('.tl-track, .tl-inner, .tl-rows') && e.target !== sc) return;
+      const add = e.shiftKey || e.ctrlKey || e.metaKey;
+      m = { id: e.pointerId, x: e.clientX, y: e.clientY, add, keys0: add ? store.selectedKeys.slice() : [], multi0: add ? new Set(store.selectedLayers().map((l) => l.id)) : new Set(), box: null };
+      e.preventDefault();
+    });
+    sc.addEventListener('pointermove', (e) => {
+      if (!m || e.pointerId !== m.id) return;
+      if (!m.box) {
+        if (Math.hypot(e.clientX - m.x, e.clientY - m.y) < 5) return;
+        try { sc.setPointerCapture(e.pointerId); } catch { /* ok */ }
+        m.box = document.createElement('div'); m.box.className = 'tl-marquee'; document.body.appendChild(m.box);
+      }
+      const x0 = Math.min(m.x, e.clientX), y0 = Math.min(m.y, e.clientY), x1 = Math.max(m.x, e.clientX), y1 = Math.max(m.y, e.clientY);
+      Object.assign(m.box.style, { left: `${x0}px`, top: `${y0}px`, width: `${x1 - x0}px`, height: `${y1 - y0}px` });
+      // rola sozinho perto da borda
+      const r = sc.getBoundingClientRect();
+      if (e.clientX > r.right - 24) sc.scrollLeft += 12; else if (e.clientX < r.left + this.names + 24) sc.scrollLeft -= 12;
+      if (e.clientY > r.bottom - 20) sc.scrollTop += 10; else if (e.clientY < r.top + 20) sc.scrollTop -= 10;
+      const hit = (el) => { const b = el.getBoundingClientRect(); return b.right >= x0 && b.left <= x1 && b.bottom >= y0 && b.top <= y1; };
+      const ids = new Set(m.multi0);
+      sc.querySelectorAll('.clip').forEach((c) => { const row = c.closest('[data-layer]'); if (row && hit(c)) ids.add(row.dataset.layer); });
+      const keys = m.keys0.slice();
+      sc.querySelectorAll('.kf').forEach((k) => {
+        if (!hit(k)) return;
+        const row = k.closest('[data-layer]'), layer = row && store.layer(row.dataset.layer);
+        if (!layer) return;
+        const t0 = parseFloat(k.dataset.t);
+        const list = k.dataset.act === 'key'
+          ? [{ layerId: layer.id, path: k.dataset.path, key: resolveProp(layer, k.dataset.path)?.keys.find((kk) => Math.abs(kk.t - t0) < 1e-4) }]
+          : animProps(layer).flatMap(({ path, prop }) => prop.keys.filter((kk) => Math.abs(kk.t - t0) < 1e-4).map((key) => ({ layerId: layer.id, path, key })));
+        for (const it of list) if (it.key && !keys.some((s) => s.key === it.key)) keys.push(it);
+        ids.add(layer.id);
+      });
+      m.sel = { ids, keys };
+    });
+    const end = (e) => {
+      if (!m || e.pointerId !== m.id) return;
+      const box = m.box, sel = m.sel;
+      box?.remove();
+      if (!box && !m.add) { store.setKeySelection([]); } // clique simples no vazio: limpa a seleção de keyframes
+      if (sel) {
+        const ids = [...sel.ids];
+        if (!store.multi) store.multi = new Set();
+        store.multi = ids.length > 1 ? new Set(ids) : new Set();
+        if (ids.length) store.selectedLayerId = ids.includes(store.selectedLayerId) ? store.selectedLayerId : ids[ids.length - 1];
+        store.selectedKeys = sel.keys;
+        store.emit('selection'); store.emit('keys');
+        const stop = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+        sc.addEventListener('click', stop, { capture: true, once: true }); setTimeout(() => sc.removeEventListener('click', stop, { capture: true }), 50);
+      }
+      m = null;
+    };
+    sc.addEventListener('pointerup', end);
+    sc.addEventListener('pointercancel', end);
   }
 
   layerRows(layer, num, trackW) {

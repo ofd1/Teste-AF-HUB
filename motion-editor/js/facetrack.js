@@ -6,7 +6,7 @@ import { sourceTime } from './timing.js';
 import { contentSize, layerTransform, toLayerSpace } from './renderer.js';
 import { valueAt, sortKeys } from './anim.js';
 import { setExporting } from './media.js';
-import { analysisVideo, seek } from './tracker.js';
+import { frameSource, yieldUI } from './tracker.js';
 
 const BASE = new URL('../vendor/mediapipe/', import.meta.url).href;
 let detPromise = null;
@@ -18,7 +18,7 @@ export function ensureFaceModel() {
       const { FilesetResolver, FaceDetector } = await import(`${BASE}vision_bundle.mjs`);
       const fileset = await FilesetResolver.forVisionTasks(`${BASE}wasm`);
       const opts = (delegate) => ({ baseOptions: { modelAssetPath: `${BASE}models/blaze_face_short_range.tflite`, delegate }, runningMode: 'IMAGE', minDetectionConfidence: 0.4 });
-      try { return await FaceDetector.createFromOptions(fileset, opts('GPU')); } catch { return FaceDetector.createFromOptions(fileset, opts('CPU')); }
+      return FaceDetector.createFromOptions(fileset, opts('CPU')); // CPU: não disputa a GPU com a prévia (antes travava/caía)
     })();
     detPromise.catch(() => { detPromise = null; });
   }
@@ -41,15 +41,15 @@ export function ensureFaceLandmarker() {
     lmPromise = (async () => {
       const { FilesetResolver, FaceLandmarker } = await import(`${BASE}vision_bundle.mjs`);
       const fileset = await FilesetResolver.forVisionTasks(`${BASE}wasm`);
-      const opts = (delegate) => ({ baseOptions: { modelAssetPath: `${BASE}models/face_landmarker.task`, delegate }, runningMode: 'IMAGE', numFaces: 4, minFaceDetectionConfidence: 0.4, minFacePresenceConfidence: 0.4 });
-      try { return await FaceLandmarker.createFromOptions(fileset, opts('GPU')); } catch { return FaceLandmarker.createFromOptions(fileset, opts('CPU')); }
+      const opts = (delegate) => ({ baseOptions: { modelAssetPath: `${BASE}models/face_landmarker.task`, delegate }, runningMode: 'IMAGE', numFaces: 2, minFaceDetectionConfidence: 0.4, minFacePresenceConfidence: 0.4 });
+      return FaceLandmarker.createFromOptions(fileset, opts('CPU')); // CPU (WASM SIMD): estável e rápido em 384 px
     })();
     lmPromise.catch(() => { lmPromise = null; });
   }
   return lmPromise;
 }
 
-const AW = 512; // largura de análise
+const AW = 384; // largura de análise (o modelo trabalha em 192–256 px; maior só pesa)
 
 /** Escolhe o rosto: o maior no primeiro quadro (ou o mais perto do toque); depois o mais perto do anterior. */
 function pick(dets, prev, hint) {
@@ -73,9 +73,9 @@ export async function analyzeFace({ layer, project, times, hintLocal, onFrame, i
   if (detailed) { try { lm = await ensureFaceLandmarker(); } catch { lm = null; } }
   const det = lm ? null : await ensureFaceModel();
   setExporting(true);
+  const fs = await frameSource(layer.props.src);
   try {
-    const v = await analysisVideo(layer.props.src);
-    const vw = v.videoWidth || 1080, vh = v.videoHeight || 1920;
+    const vw = fs.w, vh = fs.h;
     const aw = Math.min(AW, vw), ah = Math.round((aw * vh) / vw);
     const c = document.createElement('canvas');
     c.width = aw; c.height = ah;
@@ -88,8 +88,7 @@ export async function analyzeFace({ layer, project, times, hintLocal, onFrame, i
     for (let i = 0; i < times.length; i++) {
       if (isCancelled?.()) break;
       const t = times[i];
-      await seek(v, sourceTime(layer, t) + 0.3 / fps);
-      ctx.drawImage(v, 0, 0, aw, ah);
+      await fs.draw(ctx, sourceTime(layer, t) + 0.3 / fps, aw, ah);
       let smp;
       if (lm) {
         // Detailed Features: escolhe o rosto mais perto do anterior (ou do toque / o maior) e guarda os pontos nomeados
@@ -127,9 +126,10 @@ export async function analyzeFace({ layer, project, times, hintLocal, onFrame, i
       Object.assign(smp, { lx: (P.cx / aw) * w - w / 2, ly: (P.cy / ah) * h - h / 2, lsize: (P.size / aw) * w, angle: P.angle });
       out.push(smp);
       onFrame?.(smp, (i + 1) / times.length);
+      await yieldUI();
     }
     return out;
-  } finally { setExporting(false); }
+  } finally { fs.close(); setExporting(false); }
 }
 
 /** Amostras cruas (espaço da camada) → rastro suavizado em coordenadas da composição (formato de trackFace). */
@@ -203,22 +203,41 @@ export function applyFaceFollow(target, track, { position = true, scale = true, 
  * "Câmera no rosto": reenquadra o próprio vídeo — âncora no rosto, posição no ponto escolhido da tela,
  * escala para o rosto ficar do tamanho `faceFrac` da largura da composição, e (opcional) endireita a cabeça.
  */
-export function applyFaceCamera(layer, track, project, { faceFrac = 0.4, center = [0.5, 0.42], level = false, follow = 1 } = {}) {
+export function applyFaceCamera(layer, track, project, { faceFrac = 0.4, center = [0.5, 0.5], level = false, follow = 1, scale = true } = {}) {
   if (!track.length) return 0;
   const t0 = track[0].t, t1 = track[track.length - 1].t;
   const tr = layer.transform;
   const s0 = valueAt(tr.scale, t0), p0 = valueAt(tr.position, t0), a0 = valueAt(tr.anchor, t0), r0 = valueAt(tr.rotation, t0);
   const cx = project.width * center[0], cy = project.height * center[1];
-  const mean = track.reduce((s, p) => s + p.lsize, 0) / track.length;
+  // câmera segue o ponto escolhido: a âncora vai para o ponto e a posição fica fixa no lugar da tela —
+  // o vídeo se move por baixo, como um Stabilize/Track Camera do AE
   setKeys(tr.anchor, t0, t1, track.map((p) => [p.t, [Math.round((a0[0] + (p.lx - a0[0]) * follow) * 10) / 10, Math.round((a0[1] + (p.ly - a0[1]) * follow) * 10) / 10]]));
   setKeys(tr.position, t0, t1, track.map((p) => [p.t, [Math.round((p0[0] + (cx - p0[0]) * follow) * 10) / 10, Math.round((p0[1] + (cy - p0[1]) * follow) * 10) / 10]]));
-  setKeys(tr.scale, t0, t1, track.map((p) => {
-    const want = ((project.width * faceFrac) / Math.max(1, p.lsize * 0.6 + mean * 0.4)) * 100;
-    const v = s0[0] + (want - s0[0]) * follow;
-    return [p.t, [Math.round(v * 10) / 10, Math.round(v * (s0[1] / (s0[0] || 1)) * 10) / 10]];
-  }));
+  if (scale) {
+    const mean = track.reduce((s2, p) => s2 + p.lsize, 0) / track.length;
+    setKeys(tr.scale, t0, t1, track.map((p) => {
+      const want = ((project.width * faceFrac) / Math.max(1, p.lsize * 0.6 + mean * 0.4)) * 100;
+      const v = s0[0] + (want - s0[0]) * follow;
+      return [p.t, [Math.round(v * 10) / 10, Math.round(v * (s0[1] / (s0[0] || 1)) * 10) / 10]];
+    }));
+  } else {
+    // sem escala: aproxima o suficiente para a borda do vídeo nunca aparecer quando ele se move
+    let need = 0;
+    const { w, h } = contentSize(layer, project);
+    for (const p of track) need = Math.max(need, (Math.abs(p.lx - a0[0]) * 2) / w, (Math.abs(p.ly - a0[1]) * 2) / h);
+    const k = 1 + need * follow * 1.05;
+    const v = s0[0] * k;
+    tr.scale.value = [Math.round(v * 10) / 10, Math.round(s0[1] * k * 10) / 10];
+  }
   if (level) setKeys(tr.rotation, t0, t1, track.map((p) => [p.t, Math.round((r0 - (p.angle - r0)) * 100) / 100]));
   return track.length;
+}
+
+/** Track Motion com a câmera seguindo o ponto (sem rosto): amostras de ponto → mesmo reenquadramento. */
+export function applyPointCamera(layer, samples, project, { smoothAmt = 0.5, follow = 1, center = [0.5, 0.5] } = {}) {
+  const raw = samples.slice().sort((a, b) => a.t - b.t).map((r) => ({ ...r, cx: r.lx, cy: r.ly, size: 1, angle: 0 }));
+  const sm = smoothAmt < 1 ? smooth(raw, smoothAmt) : raw;
+  return applyFaceCamera(layer, sm.map((r) => ({ t: r.t, lx: r.cx, ly: r.cy, lsize: 1, angle: 0 })), project, { follow, center, scale: false });
 }
 
 /** Face Track Points (Detailed Features): um Null por ponto do rosto, com keyframes de posição — como no AE. */

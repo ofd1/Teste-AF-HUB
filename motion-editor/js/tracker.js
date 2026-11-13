@@ -31,8 +31,36 @@ export function seek(v, t) {
   });
 }
 
+/**
+ * Fonte de quadros para análise: lê o vídeo em ordem com o decodificador de hardware (WebCodecs, como a exportação)
+ * — bem mais rápido e leve que "pular" o <video> a cada quadro. Sem suporte, cai na busca normal.
+ */
+export async function frameSource(src) {
+  const v = await analysisVideo(src);
+  let rd = null;
+  try {
+    const blob = await (await fetch(src)).blob();
+    const { SeqReader } = await import('./seqreader.js');
+    rd = await SeqReader.open(blob);
+  } catch { rd = null; }
+  return {
+    v, w: v.videoWidth || 1080, h: v.videoHeight || 1920, fast: !!rd,
+    async draw(ctx, st, w, h) {
+      if (rd) {
+        try { const c = await rd.frameAt(st); if (c) { ctx.drawImage(c, 0, 0, w, h); return; } } catch { /* cai na busca */ }
+        rd.close(); rd = null;
+      }
+      await seek(v, st);
+      ctx.drawImage(v, 0, 0, w, h);
+    },
+    close() { rd?.close(); rd = null; },
+  };
+}
+/** Devolve o controle ao navegador (a tela não congela durante a análise). */
+export const yieldUI = () => new Promise((r) => setTimeout(r, 0));
+
 export function grayFrame(v, ctx, w, h) {
-  ctx.drawImage(v, 0, 0, w, h);
+  if (v) ctx.drawImage(v, 0, 0, w, h);
   const d = ctx.getImageData(0, 0, w, h).data;
   const g = new Float32Array(w * h);
   for (let i = 0, j = 0; j < g.length; i += 4, j++) g[j] = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
@@ -162,9 +190,9 @@ export function releaseAnalysisVideo() {
  */
 export async function analyzePoint({ layer, project, times, start, featureK = 1, searchK = 1, onFrame, isCancelled }) {
   setExporting(true);
+  const fs = await frameSource(layer.props.src);
   try {
-    const v = await analysisVideo(layer.props.src);
-    const vw = v.videoWidth || 1080, vh = v.videoHeight || 1920;
+    const vw = fs.w, vh = fs.h;
     const aw = Math.min(AW, vw), ah = Math.round((aw * vh) / vw);
     const c = document.createElement('canvas'); c.width = aw; c.height = ah;
     const ctx = c.getContext('2d', { willReadFrequently: true });
@@ -172,33 +200,42 @@ export async function analyzePoint({ layer, project, times, start, featureK = 1,
     let x = ((start.lx + w / 2) / w) * aw, y = ((start.ly + h / 2) / h) * ah;
     const R = Math.max(5, Math.round((aw / 28) * featureK)), S = Math.max(8, Math.round((aw / 12) * searchK));
     const fps = project.fps;
-    await seek(v, sourceTime(layer, times[0]) + 0.3 / fps);
-    let g = grayFrame(v, ctx, aw, ah);
+    await fs.draw(ctx, sourceTime(layer, times[0]) + 0.3 / fps, aw, ah);
+    let g = grayFrame(null, ctx, aw, ah);
     const tpl = patch(g, aw, ah, x, y, R), ref = tpl.slice();
     const out = [];
+    let vx = 0, vy = 0; // velocidade: a busca começa onde o ponto deve estar (movimento rápido não perde o ponto)
     const emit = (t, conf) => { const s = { t, lx: (x / aw) * w - w / 2, ly: (y / ah) * h - h / 2, conf }; out.push(s); onFrame?.(s, out.length / times.length); };
     emit(times[0], 1);
     for (let i = 1; i < times.length; i++) {
       if (isCancelled?.()) break;
-      await seek(v, sourceTime(layer, times[i]) + 0.3 / fps);
-      g = grayFrame(v, ctx, aw, ah);
-      const cx0 = Math.round(x), cy0 = Math.round(y);
+      await fs.draw(ctx, sourceTime(layer, times[i]) + 0.3 / fps, aw, ah);
+      g = grayFrame(null, ctx, aw, ah);
+      const cx0 = Math.round(x + vx), cy0 = Math.round(y + vy);
+      // busca em 2 etapas (grossa de 3 em 3 px, depois fina): ~6× mais rápida que a busca completa
       let best = Infinity, bx = cx0, by = cy0;
-      for (let dy = -S; dy <= S; dy++) for (let dx = -S; dx <= S; dx++) {
-        const s = sad(g, aw, ah, tpl, cx0 + dx, cy0 + dy, R, best);
-        if (s < best) { best = s; bx = cx0 + dx; by = cy0 + dy; }
+      for (let dy = -S; dy <= S; dy += 3) for (let dx = -S; dx <= S; dx += 3) {
+        const s2 = sad(g, aw, ah, tpl, cx0 + dx, cy0 + dy, R, best);
+        if (s2 < best) { best = s2; bx = cx0 + dx; by = cy0 + dy; }
+      }
+      const gx = bx, gy = by;
+      for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+        const s2 = sad(g, aw, ah, tpl, gx + dx, gy + dy, R, best);
+        if (s2 < best) { best = s2; bx = gx + dx; by = gy + dy; }
       }
       const cxm = sad(g, aw, ah, tpl, bx - 1, by, R, Infinity), cxp = sad(g, aw, ah, tpl, bx + 1, by, R, Infinity);
       const cym = sad(g, aw, ah, tpl, bx, by - 1, R, Infinity), cyp = sad(g, aw, ah, tpl, bx, by + 1, R, Infinity);
-      x = bx + Math.max(-0.5, Math.min(0.5, (cxm - cxp) / (2 * (cxm + cxp - 2 * best) || 1)));
-      y = by + Math.max(-0.5, Math.min(0.5, (cym - cyp) / (2 * (cym + cyp - 2 * best) || 1)));
+      const nx = bx + Math.max(-0.5, Math.min(0.5, (cxm - cxp) / (2 * (cxm + cxp - 2 * best) || 1)));
+      const ny = by + Math.max(-0.5, Math.min(0.5, (cym - cyp) / (2 * (cym + cyp - 2 * best) || 1)));
+      vx = (nx - x) * 0.7; vy = (ny - y) * 0.7; x = nx; y = ny;
       const now = patch(g, aw, ah, x, y, R);
       for (let k = 0; k < tpl.length; k++) tpl[k] = tpl[k] * 0.8 + now[k] * 0.12 + ref[k] * 0.08;
       // confiança como no AE: 100% = idêntico ao modelo
       emit(times[i], Math.max(0, 1 - best / (tpl.length * 60)));
+      if (i % 3 === 0) await yieldUI();
     }
     return out;
-  } finally { setExporting(false); }
+  } finally { fs.close(); setExporting(false); }
 }
 
 /** Ponto do conteúdo da camada (px, centro = 0) → composição, no tempo t. */

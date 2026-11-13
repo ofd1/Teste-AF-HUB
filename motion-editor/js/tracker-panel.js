@@ -2,7 +2,7 @@
 // Current Track, Position/Rotation/Scale, Edit Target, Analyze ◀◀ ◀ ▶ ▶▶, Reset e Apply.
 // Os rastros ficam guardados na camada (layer.tracks) e aparecem no preview (caixa + caminho), como no AE.
 import { analyzePoint, applyPointTrack, localToComp, compToLocal, releaseAnalysisVideo } from './tracker.js';
-import { analyzeFace, faceSamplesToTrack, applyFaceFollow, applyFaceCamera, ensureFaceModel, ensureFaceLandmarker, FACE_FEATURES, faceTrackPointNulls } from './facetrack.js';
+import { analyzeFace, faceSamplesToTrack, applyFaceFollow, applyFaceCamera, applyPointCamera, ensureFaceModel, ensureFaceLandmarker, FACE_FEATURES, faceTrackPointNulls } from './facetrack.js';
 import { LAYER_FACTORIES, flatLayers } from './state.js';
 import { modal, toast } from './ui.js';
 import { uid } from './util.js';
@@ -43,7 +43,7 @@ export class TrackerPanel {
     const l = this.layer;
     if (!l) return;
     const n = l.tracks.filter((t) => t.kind === kind).length + 1;
-    const tr = { id: uid('tk'), kind, name: kind === 'face' ? `Face Track ${n}` : `Tracker ${n}`, samples: [], target: null, position: true, rotation: kind === 'face', scale: kind === 'face', applyAs: 'follow', faceFrac: 40, smooth: 45, feature: 1, search: 1 };
+    const tr = { id: uid('tk'), kind, name: kind === 'face' ? `Face Track ${n}` : `Tracker ${n}`, samples: [], target: null, position: true, rotation: false, scale: false, applyAs: 'camera', faceFrac: 40, smooth: 45, feature: 1, search: 1 };
     const t = this.snap(this.store.time);
     if (kind === 'point') {
       toast('Toque no ponto que quer rastrear (Track Point). Escolha algo com detalhe: número da camisa, olho, canto.', 'info', 5000);
@@ -91,6 +91,7 @@ export class TrackerPanel {
         <label title="${isFace ? '' : 'Rotação e escala precisam de face tracking'}"><input type="checkbox" data-f="rotation" ${tr?.rotation ? 'checked' : ''} ${isFace ? '' : 'disabled'}> Rotation</label>
         <label><input type="checkbox" data-f="scale" ${tr?.scale ? 'checked' : ''} ${isFace ? '' : 'disabled'}> Scale</label>
       </div>
+      <label class="trk-row"><span>Aplicar como:</span><select data-f="applyAs"><option value="camera" ${tr?.applyAs !== 'follow' ? 'selected' : ''}>🎥 Câmera segue o ponto</option><option value="follow" ${tr?.applyAs === 'follow' ? 'selected' : ''}>Outra camada segue (Edit Target)</option></select></label>
       <div class="trk-row"><span>Motion Target:</span><b class="trk-target">${esc(targetName)}</b></div>
       <div class="trk-row trk-two"><button data-a="target">Edit Target…</button><button data-a="options">Options…</button></div>
       <div class="trk-row trk-two"><button data-a="setpoint">Mover Track Point</button><span class="muted small">${isFace ? 'toque no ponto do rosto a seguir' : 'toque no preview'}</span></div>
@@ -125,7 +126,7 @@ export class TrackerPanel {
   targetName() {
     const tr = this.track;
     if (!tr) return '—';
-    if (tr.kind === 'face' && tr.applyAs === 'camera') return `${this.layer?.name || ''} (câmera no rosto)`;
+    if (tr.applyAs !== 'follow') return `${this.layer?.name || ''} (câmera segue o ponto)`;
     if (!tr.target) return 'Nenhum (escolha em Edit Target)';
     if (tr.target === '__text') return 'Novo texto';
     if (tr.target === '__null') return 'Novo Null';
@@ -151,6 +152,7 @@ export class TrackerPanel {
     if (this.track && ['position', 'rotation', 'scale'].includes(f)) { this.track[f] = e.target.checked; this.store.commit('change'); }
     if (this.track && f === 'detailed') { this.track.detailed = e.target.value === '1'; if (this.track.detailed) ensureFaceLandmarker().catch(() => {}); this.store.commit('change'); this.render(); this.cb.redraw(); }
     if (this.track && f === 'part') { this.track.part = e.target.value; this.store.commit('change'); this.cb.redraw(); }
+    if (this.track && f === 'applyAs') { this.track.applyAs = e.target.value; this.store.commit('change'); this.render(); return; }
     if (this.track && (f === 'offX' || f === 'offY')) { this.track[f] = +e.target.value || 0; this.store.commit('change'); this.cb.redraw(); }
   }
 
@@ -251,11 +253,13 @@ export class TrackerPanel {
     const seed = this.near(t0);
     if (tr.kind === 'point' && !seed) { toast('Defina o Track Point primeiro (Mover Track Point).', 'warn'); return; }
     this.busy = true; this.cancel = false; this.render();
-    let i = 0, lastT = t0;
+    let lastT = t0, lastUI = 0;
+    window.__mfAnalyzing = true;
     const onFrame = (s) => {
       this.upsert(s); lastT = s.t;
-      if (++i % 2 === 0 || times.length < 4) this.cb.setTime(s.t);
-      this.cb.redraw(); this.updateStatus();
+      // a prévia acompanha só ~4×/s (antes re-renderizava todos os efeitos a cada 2 quadros e travava)
+      const now = performance.now();
+      if (now - lastUI > 250 || times.length < 4) { lastUI = now; this.cb.setTime(s.t); this.cb.redraw(); this.updateStatus(); }
     };
     try {
       if (tr.kind === 'point') {
@@ -269,7 +273,7 @@ export class TrackerPanel {
     } catch (e) {
       toast(`Tracker: ${e.message}`, 'error', 5000);
     } finally {
-      this.busy = false;
+      this.busy = false; window.__mfAnalyzing = false;
       if (tr.kind === 'face' && tr.attach) this.fitAttach();
       this.store.commit('change');
       this.render(); this.cb.redraw();
@@ -281,9 +285,12 @@ export class TrackerPanel {
     if (tr.samples.length < 2) { toast('Analise o movimento antes de aplicar (▶▶).', 'warn'); return; }
     try {
       let n = 0;
-      if (tr.kind === 'face' && tr.applyAs === 'camera') {
-        const track = faceSamplesToTrack(l, tr.samples, Math.max(0.05, 1 - (tr.smooth ?? 45) / 100));
-        n = applyFaceCamera(l, track, P, { faceFrac: Math.max(0.05, (tr.faceFrac ?? 40) / 100), follow: Math.max(0, Math.min(1, (tr.follow ?? 100) / 100)), level: !!tr.rotation });
+      if (tr.applyAs !== 'follow') {
+        const follow = Math.max(0, Math.min(1, (tr.follow ?? 100) / 100));
+        if (tr.kind === 'face') {
+          const track = faceSamplesToTrack(l, tr.samples, Math.max(0.05, 1 - (tr.smooth ?? 45) / 100), { part: tr.part || 'centro', offset: [tr.offX || 0, tr.offY || 0] });
+          n = applyFaceCamera(l, track, P, { faceFrac: Math.max(0.05, (tr.faceFrac ?? 40) / 100), follow, level: !!tr.rotation, scale: !!tr.scale });
+        } else n = applyPointCamera(l, tr.samples, P, { smoothAmt: Math.max(0.05, 1 - (tr.smooth ?? 45) / 100), follow });
         this.store.selectedLayerId = l.id;
       } else {
         let dims = 'xy';

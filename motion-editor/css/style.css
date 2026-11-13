@@ -764,3 +764,4 @@ body.ui-simple[data-rows="big"] .clip .cn { font-size: 13.5px; }
 .help-card p { margin: 3px 0 0; font-size: 13px; opacity: .85; }
 /* modo simples: só o essencial no transporte (os outros ficam no painel de keyframes) */
 body.ui-simple .tp-tools [data-cmd="select-all-keys"], body.ui-simple .tp-tools [data-cmd="stretch-keys"], body.ui-simple .tp-tools [data-cmd="marker"] { display: none; }
+.tl-marquee { position: fixed; z-index: 50; border: 1px solid #4d8dff; background: rgba(77,141,255,.15); pointer-events: none; border-radius: 2px; }

@@ -20,7 +20,7 @@ export function showUpdateBanner(info) {
   const apk = !!window.Capacitor?.isNativePlatform?.();
   const el = document.createElement('div');
   el.id = 'updBanner'; el.className = 'upd-banner';
-  el.innerHTML = `<span>✨ <b>MotionFrame ${info.version}</b> disponível</span><button class="primary">${apk ? 'Baixar APK' : 'Atualizar agora'}</button><button class="x" aria-label="Depois">✕</button>`;
+  el.innerHTML = `<span>✨ <b>MotionFrame ${info.label || info.version}</b> disponível</span><button class="primary">${apk ? 'Baixar APK' : 'Atualizar agora'}</button><button class="x" aria-label="Depois">✕</button>`;
   el.querySelector('.primary').addEventListener('click', async () => {
     if (apk) { window.open(REMOTE + info.apk, '_system'); return; }
     try { const reg = await navigator.serviceWorker?.getRegistration(); await reg?.update(); } catch { /* ok */ }

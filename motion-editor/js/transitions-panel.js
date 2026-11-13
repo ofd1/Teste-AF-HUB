@@ -1,7 +1,7 @@
 // Aba "Transições" (no estilo do CapCut): grade com prévia animada, duração, aplicar no corte e exportar .ffx.
 // Traz as transições recriadas das edits de referência + as básicas do Composer.
 import { createProject, LAYER_FACTORIES } from './state.js';
-import { applyPreset } from './presets.js';
+import { applyPreset, stretchPreset, presetDuration } from './presets.js';
 import { renderFrame } from './renderer.js';
 import { composerItems } from './composer.js';
 import { EDIT_TRANSITIONS } from './edit-transitions.js';
@@ -11,6 +11,17 @@ import { getImage } from './media.js';
 import { WATERMARKS } from './watermarks.js';
 
 const WM_CAT = 'Marcas d’água';
+const MY_CAT = 'Meus efeitos (AE)';
+
+/** Preset importado (.ffx do AE, Frameify…) usado como transição: camada de ajuste por cima do corte, como no AE. */
+function adjOverCut(P, item, cut, d) {
+  const adj = LAYER_FACTORIES.adjustment(P);
+  adj.name = `Transição · ${item.name}`;
+  adj.inPoint = Math.max(0, cut - d / 2); adj.outPoint = Math.min(P.duration, cut + d / 2);
+  const d0 = item.preset.duration || presetDuration(item.preset) || d;
+  applyPreset(adj, { ...stretchPreset(item.preset, d / d0), anchor: 'playhead' }, adj.inPoint);
+  return adj;
+}
 const WM_KEY = (id) => `motionframe.wm.${id}`;
 
 const PW = 180, PH = 240; // prévia vertical (formato das edits)
@@ -42,6 +53,7 @@ function previewProject(item, dur, opts) {
   const A = LAYER_FACTORIES.image(P, s.a, PW, PH), B = LAYER_FACTORIES.image(P, s.b, PW, PH);
   for (const l of [A, B]) l.transform.position.value = [PW / 2, PH / 2];
   A.inPoint = 0; A.outPoint = cut; B.inPoint = cut; B.outPoint = P.duration;
+  if (item.adj) { P.layers = [adjOverCut(P, item, cut, dur), A, B]; return { P, cut }; }
   const { a, b } = item.make(dur);
   applyPreset(A, a, cut);
   if (b) applyPreset(B, b, cut);
@@ -81,7 +93,9 @@ export class TransitionsPanel {
   get item() { return this.items.find((x) => x.id === this.sel) || null; }
 
   render() {
-    const cats = ['Das edits', 'Básicas', WM_CAT];
+    const mine = (this.hooks.userPresets?.() || []).map((p) => ({ id: `my:${p.id}`, name: p.name, cat: MY_CAT, src: '', adj: true, preset: p, dur: Math.min(1.5, Math.max(0.2, p.duration || presetDuration(p) || 0.5)) }));
+    this.items = [...this.items.filter((x) => !x.adj), ...mine];
+    const cats = ['Das edits', 'Básicas', WM_CAT, ...(mine.length ? [MY_CAT] : [])];
     const list = this.items.filter((x) => x.cat === this.cat);
     const it = this.item;
     const d = this.dur ?? it?.dur ?? 0.5;
@@ -91,7 +105,7 @@ export class TransitionsPanel {
           <canvas class="tr-big" width="${PW}" height="${PH}"></canvas>
           <div class="tr-info">
             <b>${it ? escapeHtml(it.name) : 'Escolha uma transição'}</b>
-            <span class="muted small">${it ? (it.wm ? (it.full ? 'Fica por cima do vídeo inteiro, com os próprios clipes como textura. Edite aqui e toque em Aplicar de novo para atualizar.' : 'Entra depois do último clipe. Edite o @ e toque em Aplicar de novo para atualizar.') : it.src ? `Recriada da ${escapeHtml(it.src)}` : 'Transição básica') : 'Selecione o clipe que SAI (o que entra é o que começa logo depois dele) e toque numa transição.'}</span>
+            <span class="muted small">${it ? (it.wm ? (it.full ? 'Fica por cima do vídeo inteiro, com os próprios clipes como textura. Edite aqui e toque em Aplicar de novo para atualizar.' : 'Entra depois do último clipe. Edite o @ e toque em Aplicar de novo para atualizar.') : it.adj ? 'Seu efeito importado (.ffx / preset) numa camada de ajuste por cima do corte — como no After Effects.' : it.src ? `Recriada da ${escapeHtml(it.src)}` : 'Transição básica') : 'Selecione o clipe que SAI (o que entra é o que começa logo depois dele) e toque numa transição.'}</span>
             ${it?.wm ? this.wmFields(it) : `<label class="tr-dur">Duração <input type="range" min="0.15" max="1.5" step="0.05" value="${d}" ${it ? '' : 'disabled'}><output>${d.toFixed(2)} s</output></label>`}
             ${it?.wm ? `<div class="tr-actions"><button class="primary" data-act="wm">${this.wmLayers(it).length ? '↻ Atualizar marca' : 'Aplicar'}</button>${this.wmLayers(it).length ? '<button data-act="wmdel" class="danger">Remover</button>' : ''}</div>` : `<div class="tr-actions">
               <button class="primary" data-act="apply" ${it ? '' : 'disabled'}>Aplicar no corte</button>
@@ -232,6 +246,13 @@ export class TransitionsPanel {
       }
     }
     if (!pairs.length) { toast('Não achei um corte: selecione o clipe que sai (o próximo clipe tem que começar no fim dele).', 'warn', 5000); return; }
+    if (it.adj) {
+      for (const [a] of pairs) { const adj = adjOverCut(st.project, it, a.outPoint, d); st.project.layers.unshift(adj); }
+      st.commit('structure');
+      toast(pairs.length > 1 ? `“${it.name}” aplicada em ${pairs.length} cortes ✓` : `“${it.name}” aplicada no corte (camada de ajuste) ✓`, 'ok', 4000);
+      this.hooks.onApplied?.();
+      return;
+    }
     for (const [a, b] of pairs) {
       const { a: pa, b: pb } = it.make(d);
       applyPreset(a, pa, a.outPoint);

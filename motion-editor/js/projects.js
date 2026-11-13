@@ -5,7 +5,10 @@ import { escapeHtml, uid } from './util.js';
 import { flatLayers } from './state.js';
 import { putMedia, getMedia, deleteMedia, listKeys } from './idb.js';
 
-export const APP_VERSION = 'v109';
+// APP_VERSION = número interno, só cresce (o atualizador automático compara por ele — não mexer no formato).
+// APP_LABEL = a versão que aparece para o usuário (v1 = primeira versão depois da distribuição do app).
+export const APP_VERSION = 'v110';
+export const APP_LABEL = 'v1';
 const INDEX = 'motionframe.projects.v1';
 const KEY = (id) => `motionframe.project.${id}`;
 const SETTINGS = 'motionframe.settings.v1';
@@ -147,7 +150,7 @@ export class HomeScreen {
     const list = listProjects();
     this.el.innerHTML = `
       <header class="home-top">
-        <div class="home-logo"><img class="logo-mark" src="icons/icon.svg" alt="" width="28" height="28" style="vertical-align:-7px;border-radius:7px"> MotionFrame <span class="muted small" style="font-weight:400">${APP_VERSION}</span></div>
+        <div class="home-logo"><img class="logo-mark" src="icons/icon.svg" alt="" width="28" height="28" style="vertical-align:-7px;border-radius:7px"> MotionFrame <span class="muted small" style="font-weight:400" title="build ${APP_VERSION}">${APP_LABEL}</span></div>
         <button class="icon" data-h="settings" aria-label="Configurações">⚙</button>
       </header>
       <div class="home-body">

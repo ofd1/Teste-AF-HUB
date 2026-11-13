@@ -207,7 +207,8 @@ function loop(now) {
     // rascunho; quando para de mexer, sai o quadro nítido (e vai para o cache).
     // celular/tablet: entra em rascunho mais cedo (o scrub não trava); PC só em projetos pesados
     const interacting = performance.now() - lastEdit < 380;
-    const draftK = !store.playing && qualitySel.value === 'auto' && interacting && hqMs > DRAFT_MS ? Math.max(0.3, Math.min(0.8, Math.sqrt((DRAFT_MS * 0.65) / hqMs))) : 1;
+    // análise do tracker rodando: prévia em rascunho (a análise ganha o processador; antes travava o app)
+    const draftK = window.__mfAnalyzing ? 0.35 : !store.playing && qualitySel.value === 'auto' && interacting && hqMs > DRAFT_MS ? Math.max(0.3, Math.min(0.8, Math.sqrt((DRAFT_MS * 0.65) / hqMs))) : 1;
     const key = `${fi}|${quality}|${store.playing ? 'p' : 'hq'}`;
     const live = store.playing && liveVideoAt(viewProject(), fi / fps);
     const cached = live ? null : (store.playing && frameCacheGet(`${fi}|${quality}|hq`)) || frameCacheGet(key);
@@ -546,6 +547,7 @@ new TopazPanel(document.getElementById('topazPanel'), store);
 const composer = new ComposerPanel(document.getElementById('composerPanel'), store, { onApplied: () => { if (!desktop.matches) closeSheet(); } });
 window.addEventListener('open-composer', () => openSheet('composer'));
 const transPanel = new TransitionsPanel(document.getElementById('transPanel'), store, {
+  userPresets: () => (library?.user || []).filter((p) => !p.lazy && (p.effects?.length || Object.keys(p.transform || {}).length)),
   onApplied: () => { if (!desktop.matches) closeSheet(); },
   exportFFX: async (items, dur) => {
     toast('Gerando os .ffx…', 'info', 2000);
@@ -1339,7 +1341,7 @@ const commands = {
   effects: () => openSheet('effects'),
   presets: () => openSheet('presets'),
   composer: () => openSheet('composer'),
-  transitions: () => openSheet('trans'),
+  transitions: () => { transPanel.render(); openSheet('trans'); },
   'logo-anim': () => animateLogoFlow(),
   'font-id': async () => { const { fontIdDialog } = await import('./fontid-ui.js'); await fontIdDialog(store, { toast }); renderToolbar(); },
   props: () => openSheet('props'),
