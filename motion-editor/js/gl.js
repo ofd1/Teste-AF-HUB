@@ -211,7 +211,7 @@ export class GLEngine {
    * ocupa ~17 MB e as 4K ~66 MB — 40 delas passavam de 1 GB. Libera as mais antigas além do limite.
    */
   trimPool() {
-    const budget = this.poolBudget || (this.poolBudget = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)) ? 160e6 : 480e6);
+    const budget = this.poolBudget || (this.poolBudget = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)) ? 160e6 : 320e6); // texturas livres guardadas para reaproveitar (acima disso a memória de vídeo enchia em sessões longas)
     const bytes = (t) => t.w * t.h * (t.u8 ? 4 : 8);
     let total = this.pool.reduce((s, t) => s + bytes(t), 0);
     if (total <= budget && this.pool.length <= 96) return;

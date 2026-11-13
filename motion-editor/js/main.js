@@ -9,7 +9,7 @@ import { setGLLostListener, glLost } from './gl.js';
 import { createEffectInstance, setPluginLookup, upgradeLayerEffects } from './presets.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
 import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, cacheVersion, detectFps, mediaReady, framesDrawable } from './media.js';
-import { loadAudio, playAudio, stopAudio, detectBeats } from './audio.js';
+import { loadAudio, playAudio, stopAudio, detectBeats, pruneAudio } from './audio.js';
 import { valueAt, setValue, setKey, anim } from './anim.js';
 import { setThreeD } from './three-d.js';
 import { Timeline } from './timeline.js';
@@ -1639,6 +1639,7 @@ async function openProjectById(id) {
   ensureRecipesFromProject(data); // efeitos próprios usados no projeto (mesmo se não estiverem salvos neste aparelho)
   await saveBackup(data, true); // versão de segurança de como o projeto estava ao abrir
   await relinkMedia(data);
+  pruneAudio(new Set(flatLayers(data.layers).map((l) => l.props?.src).filter(Boolean))); // áudio de outros projetos sai da memória
   const missing = flatLayers(data.layers).filter((l) => l.missing);
   if (missing.length) toast(`${missing.length} mídia(s) não encontrada(s) neste aparelho: as camadas continuam no projeto (marcadas como offline). Toque na camada › Substituir mídia para religar.`, 'warn', 8000);
   store.load(data);

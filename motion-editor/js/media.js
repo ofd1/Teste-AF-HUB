@@ -101,10 +101,26 @@ function makeVideo(src, playback = false) {
   return v;
 }
 
+function dropVideoEntry(e) {
+  for (const v of [e.a, e.b]) if (v) { try { v.pause(); releaseVideo(v); } catch { /* já liberado */ } if (v._scrub) { v._scrub.width = 0; v._scrub.height = 0; } }
+  if (e.snaps) { for (const c of e.snaps.values()) if (!c._rd) { c.width = 0; c.height = 0; } e.snaps.clear(); }
+  if (e.last && !e.last._rd) { e.last.width = 0; e.last.height = 0; }
+  e.last = null;
+}
+/** Libera vídeos de camadas que não existem mais no projeto (apagadas, divididas, trocadas, outro projeto aberto).
+ *  Antes ficavam para sempre: em sessões longas a memória de vídeo enchia e o editor caía depois de alguns minutos. */
+export function pruneMedia(project) {
+  const ids = new Set();
+  const walk = (ls) => { for (const l of ls || []) { ids.add(l.id); if (l.props?.layers) walk(l.props.layers); } };
+  walk(project?.layers);
+  for (const [id, e] of videos) if (!ids.has(id)) { dropVideoEntry(e); videos.delete(id); }
+}
+
 export function getVideo(layer, needB = false) {
   const src = layer.props.src;
   let e = videos.get(layer.id);
-  if (e && e.src !== src) { e.a.pause(); e.b?.pause(); e = null; }
+  // mídia trocada: libera os <video> antigos (antes só pausava — cada um continuava prendendo um decodificador e memória)
+  if (e && e.src !== src) { dropVideoEntry(e); videos.delete(layer.id); e = null; }
   if (!e) { e = { src, a: makeVideo(src, true), b: null, snaps: new Map() }; videos.set(layer.id, e); }
   if (needB && !e.b) e.b = makeVideo(src, true);
   return e;
@@ -385,6 +401,7 @@ const WIN = 10; // s de vídeo guardados em volta do cursor quando só efeitos d
  *  mostrava o mesmo quadro em todas as faixas). Clipes longos só com efeito de tempo: janela de 10 s no fps real em volta
  *  do cursor, que acompanha a reprodução (antes o cache inteiro caía para poucos quadros por segundo). */
 export function ensureCaches(project, t = null) {
+  if (!exportBusy) pruneMedia(project);
   const ids = new Set();
   const need = [];
   const walk = (layers, inTemporalGroup) => {

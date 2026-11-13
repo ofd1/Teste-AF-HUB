@@ -56,6 +56,8 @@ export async function loadAudio(src) {
   return buf;
 }
 
+/** Esquece o áudio decodificado que o projeto aberto não usa (ao trocar de projeto o áudio dos outros ficava na memória). */
+export function pruneAudio(keep) { for (const k of [...buffers.keys()]) if (!keep.has(k)) buffers.delete(k); }
 export function audioBuffer(src) { return buffers.get(src) || null; }
 
 /** Picos normalizados (para desenhar a forma de onda). */
