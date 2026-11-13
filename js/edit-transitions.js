@@ -1,0 +1,255 @@
+// Transições recriadas das edits de referência (Neymar / futebol), para a aba Transições.
+// Cada transição tem a SAÍDA (fim do clipe que sai, "A") e a ENTRADA (começo do clipe que entra, "B") — como nas
+// edits, o corte é seco e o efeito acontece dos dois lados dele (sem sobrepor os clipes).
+// Formato das chaves: [u (0..1 da metade), valor, curva]. Os efeitos usados têm equivalente no After Effects
+// (S_BlurMoCurves, Exposure, Tint, Fill, S_Glow, BCC, Twitch, Shatter, Deep Glow…) para exportar em .ffx.
+
+const k = (...list) => list; // [[u, v, ease], ...]
+const MAG = [1, 0.1, 0.85, 1], RED = [1, 0.08, 0.12, 1], BLUE = [0.1, 0.3, 1, 1];
+
+// [id, nome, edit de origem, duração total (s), proporção A (0..1), efeitos A, efeitos B, transform A, transform B]
+const LIST = [
+  ['luz-verde-zoom', 'Luz verde + zoom', 'Edit 1 · 0:01', 0.7, 0.35,
+    [['exposure', { exposure: k([0, 0], [1, -3, 'easeIn']) }]],
+    [['blurMoCurves', { zDist: k([0, 0.45, 'expoOut'], [1, 1]), shutter: 2.4, samples: 24 }], ['sGlow', { brightness: k([0, 7], [1, 0, 'easeOut']), color: [0.35, 1, 0.25, 1], threshold: 0.35, width: 1.2 }]]],
+  ['giro-blur', 'Giro com blur', 'Edit 1 · 0:01', 0.4, 0.45,
+    [['blurMoCurves', { rotate: k([0, 0, 'expoIn'], [1, -80]), zDist: k([0, 1, 'expoIn'], [1, 0.7]), shutter: 2.5, samples: 24 }]],
+    [['blurMoCurves', { rotate: k([0, 70, 'expoOut'], [1, 0]), zDist: k([0, 0.65, 'expoOut'], [1, 1]), shutter: 2.5, samples: 24 }]]],
+  ['espelho-esticado', 'Espelho esticado (zoom out)', 'Edit 1 · 0:02', 0.45, 0.4,
+    [['blurMoCurves', { zDist: k([0, 1, 'expoIn'], [1, 0.5]), shutter: 3, samples: 24, wrap: 3, wrapY: 3 }]],
+    [['blurMoCurves', { zDist: k([0, 0.35, 'expoOut'], [1, 1]), shutter: 3, samples: 24, wrap: 3, wrapY: 3 }]]],
+  ['mergulho-preto', 'Mergulho no preto + brilho', 'Edit 1 · 0:02', 0.6, 0.55,
+    [['exposure', { exposure: k([0, 0], [1, -4.5, 'easeIn']) }], ['sGlow', { brightness: k([0, 0], [1, 4]), threshold: 0.75, width: 0.8 }]],
+    [['exposure', { exposure: k([0, -3], [1, 0, 'easeOut']) }], ['sGlow', { brightness: k([0, 3], [1, 0]), threshold: 0.7, width: 0.8 }]]],
+  ['estouro-branco', 'Estouro branco (silhueta)', 'Edit 1 · 0:03', 0.45, 0.4,
+    [['exposure', { exposure: k([0, 0], [1, 4, 'easeIn']) }], ['sGlow', { brightness: k([0, 0], [1, 8]), threshold: 0.45, width: 1 }]],
+    [['exposure', { exposure: k([0, 3.5], [1, 0, 'expoOut']) }]]],
+  ['iris-circulo', 'Íris (círculo abrindo)', 'Edit 1 · 0:04', 0.5, 0.25,
+    [['exposure', { exposure: k([0, 0], [1, 3, 'easeIn']) }]],
+    [['pkWipe', { mode: 3, pct: k([0, 100], [1, 0, 'easeOut']), soft: 6, invert: true }]]],
+  ['onda-magenta', 'Onda magenta', 'Edit 1 · 0:04', 0.45, 0.5,
+    [['fill', { color: MAG, opacity: k([0, 0], [1, 85, 'easeIn']) }], ['pkWipe', { mode: 8, pct: k([0, 0], [1, 40]), freq: 14, invert: true, soft: 10 }]],
+    [['fill', { color: RED, opacity: k([0, 70], [1, 0, 'easeOut']) }]]],
+  ['cortina-v', 'Cortina em V', 'Edit 1 · 0:05', 0.45, 0.3,
+    [['exposure', { exposure: k([0, 0], [1, -2]) }]],
+    [['pkWipe', { mode: 10, pct: k([0, 100], [1, 0, 'easeOut']), soft: 3, angle: 90 }]]],
+  ['flash-vermelho-glitch', 'Flash vermelho glitch', 'Edit 2 · 0:08', 0.5, 0.4,
+    [['tint', { black: [0.25, 0, 0, 1], white: [1, 0.25, 0.25, 1], amount: k([0, 0], [1, 100, 'easeIn']) }]],
+    [['tint', { black: [0.25, 0, 0, 1], white: [1, 0.25, 0.25, 1], amount: k([0, 100], [1, 0, 'easeOut']) }], ['twitch', { amount: k([0, 160], [1, 0]), speed: 80, blur: false, light: true, lightAmt: 60, color: true, colorAmt: 80, slide: true, slideAmt: 80, slideDir: 2 }]]],
+  ['zoom-streak', 'Zoom streak (soco)', 'Edit 2 · 0:10', 0.4, 0.45,
+    [['blurMoCurves', { zDist: k([0, 1, 'expoIn'], [1, 0.4]), shutter: 3, samples: 28 }]],
+    [['blurMoCurves', { zDist: k([0, 0.4, 'expoOut'], [1, 1]), shutter: 3, samples: 28 }], ['exposure', { exposure: k([0, 1.5, 'expoOut'], [1, 0]) }]]],
+  ['zoom-blur-luz', 'Zoom blur com luz', 'Edit 2 · 0:11', 0.5, 0.5,
+    [['blurMoCurves', { zDist: k([0, 1, 'expoIn'], [1, 0.5]), shutter: 2.6, samples: 24 }], ['exposure', { exposure: k([0, 0, 'expoIn'], [1, 2.2]) }]],
+    [['blurMoCurves', { zDist: k([0, 0.5, 'expoOut'], [1, 1]), shutter: 2.6, samples: 24 }], ['exposure', { exposure: k([0, 2.2, 'expoOut'], [1, 0]) }]]],
+  ['whip-vertical', 'Whip vertical (smear p/ baixo)', 'Edit 2 · 0:10', 0.36, 0.45,
+    [['blurMoCurves', { shiftY: k([0, 0, 'expoIn'], [1, 900]), shutter: 3, samples: 28, wrap: 3, wrapY: 3 }]],
+    [['blurMoCurves', { shiftY: k([0, -900, 'expoOut'], [1, 0]), shutter: 3, samples: 28, wrap: 3, wrapY: 3 }], ['exposure', { exposure: k([0, 1.2, 'expoOut'], [1, 0]) }]]],
+  ['zoom-escuro', 'Zoom escuro (vinheta)', 'Edit 2 · 0:11', 0.4, 0.45,
+    [['blurMoCurves', { zDist: k([0, 1, 'expoIn'], [1, 0.55]), shutter: 2.4, samples: 24 }], ['exposure', { exposure: k([0, 0, 'expoIn'], [1, -2.5]) }], ['vignette', { amount: k([0, 0], [1, 100]) }]],
+    [['blurMoCurves', { zDist: k([0, 0.55, 'expoOut'], [1, 1]), shutter: 2.4, samples: 24 }], ['exposure', { exposure: k([0, -2, 'expoOut'], [1, 0]) }]]],
+  ['iris-escura', 'Íris escura (blur)', 'Edit 2 · 0:12', 0.5, 0.35,
+    [['blurMoCurves', { zDist: k([0, 1], [1, 0.8]), shutter: 2.5 }], ['exposure', { exposure: k([0, 0], [1, 1.5]) }]],
+    [['pkWipe', { mode: 3, pct: k([0, 100], [1, 0, 'easeOut']), soft: 1.5, border: 3, borderColor: [0.05, 0.05, 0.1, 1], invert: true }]]],
+  ['whip-diagonal', 'Whip diagonal', 'Edit 2 · 0:12', 0.36, 0.45,
+    [['blurMoCurves', { shiftX: k([0, 0, 'expoIn'], [1, -700]), shiftY: k([0, 0, 'expoIn'], [1, 400]), rotate: k([0, 0, 'expoIn'], [1, -20]), shutter: 2.5, samples: 24, wrap: 3, wrapY: 3 }]],
+    [['blurMoCurves', { shiftX: k([0, 700, 'expoOut'], [1, 0]), shiftY: k([0, -400, 'expoOut'], [1, 0]), rotate: k([0, 20, 'expoOut'], [1, 0]), shutter: 2.5, samples: 24, wrap: 3, wrapY: 3 }]]],
+  ['espelho-flip', 'Espelho (flip) + amarelo', 'Edit 3 · 0:08', 0.5, 0.4,
+    [], [['tint', { black: [0.2, 0.15, 0, 1], white: [1, 0.95, 0.2, 1], amount: k([0, 100], [1, 0, 'easeOut']) }], ['exposure', { exposure: k([0, 1], [1, 0]) }]],
+    { scale: ['abs', k([0, [100, 100], 'hold'], [0.5, [-100, 100], 'hold'], [1, [-100, 100]])] }],
+  ['flash-amarelo', 'Flash amarelo (duotone)', 'Edit 3 · 0:08', 0.4, 0.35,
+    [['tint', { black: [0.2, 0.15, 0, 1], white: [1, 0.95, 0.2, 1], amount: k([0, 0], [1, 100, 'easeIn']) }]],
+    [['tint', { black: [0.2, 0.15, 0, 1], white: [1, 0.95, 0.2, 1], amount: k([0, 100], [1, 0, 'easeOut']) }]]],
+  ['smear-lateral', 'Smear lateral', 'Edit 3 · 0:09', 0.4, 0.5,
+    [['bccDirBlur', { amount: k([0, 0], [1, 220, 'easeIn']), angle: 90 }], ['blurMoCurves', { shiftX: k([0, 0], [1, -300, 'easeIn']), shutter: 1.5 }]],
+    [['bccDirBlur', { amount: k([0, 220], [1, 0, 'easeOut']), angle: 90 }], ['blurMoCurves', { shiftX: k([0, 300], [1, 0, 'expoOut']), shutter: 1.5 }]]],
+  ['flash-duotone-roxo', 'Flash duotone roxo/ciano', 'Edit 3 · 0:09', 0.55, 0.5,
+    [['tint', { black: [0.45, 0.08, 0.7, 1], white: [0.4, 1, 0.85, 1], amount: k([0, 0], [0.15, 100, 'hold'], [1, 100]) }]],
+    [['tint', { black: [0.45, 0.08, 0.7, 1], white: [0.4, 1, 0.85, 1], amount: k([0, 100], [1, 0, 'easeOut']) }], ['bccDirBlur', { amount: k([0, 160], [1, 0, 'easeOut']), angle: 90 }]]],
+  ['desfoque-foco', 'Desfoque (focus pull)', 'Edit 3 · 0:06', 0.5, 0.45,
+    [['bccLensBlur', { irisScale: k([0, 0], [1, 30, 'easeIn']) }]],
+    [['bccLensBlur', { irisScale: k([0, 30], [1, 0, 'easeOut']) }]]],
+  ['flash-piscante', 'Flash branco piscante', 'Edit 4 · 0:12', 0.5, 0.2,
+    [['exposure', { exposure: k([0, 0], [1, 3]) }]],
+    [['exposure', { exposure: k([0, 3, 'hold'], [0.25, 0.3, 'hold'], [0.5, 2.5, 'hold'], [0.75, 0.2], [1, 0]) }]]],
+  ['explosao-luz', 'Explosão de luz', 'Edit 4 · 0:10', 0.6, 0.5,
+    [['deepGlow', { radius: 320, exposure: k([0, 0], [1, 6, 'easeIn']), threshold: 40 }]],
+    [['deepGlow', { radius: 320, exposure: k([0, 6], [1, 0, 'easeOut']), threshold: 40 }]]],
+  ['flash-cores', 'Flash colorido (vermelho/azul)', 'Edit 4 · 0:15', 0.5, 0.3,
+    [['fill', { color: RED, opacity: k([0, 0], [1, 70]) }]],
+    [['fill', { color: k([0, BLUE, 'hold'], [0.3, RED, 'hold'], [0.6, BLUE, 'hold'], [1, BLUE]), opacity: k([0, 75], [1, 0, 'easeOut']) }]]],
+  ['cacos-vidro', 'Cacos de vidro (shatter)', 'Edit 5 · 0:08', 0.6, 0.6,
+    [['shatter', { start: 0, render: 1, pattern: 1, repetitions: 18, strength: 9, radius: 1.2, gravity: 0.5, spin: 1, zPush: 1.6 }]],
+    [['blurMoCurves', { zDist: k([0, 0.75], [1, 1, 'expoOut']), shutter: 2 }]]],
+  ['smear-vermelho', 'Smear vermelho', 'Edit 5 · 0:09', 0.4, 0.5,
+    [['bccDirBlur', { amount: k([0, 0], [1, 260, 'easeIn']), angle: 90 }], ['tint', { black: [0.3, 0, 0.02, 1], white: [1, 0.3, 0.3, 1], amount: k([0, 0], [1, 80]) }]],
+    [['bccDirBlur', { amount: k([0, 260], [1, 0, 'easeOut']), angle: 90 }], ['tint', { black: [0.3, 0, 0.02, 1], white: [1, 0.3, 0.3, 1], amount: k([0, 80], [1, 0]) }]]],
+  ['queima-luz', 'Queima de luz (film burn)', 'Edit 5 · 0:09', 0.6, 0.5,
+    [['exposure', { exposure: k([0, 0], [1, -2.5]) }], ['lightLeak', { intensity: k([0, 0], [1, 2.2]), hue: 0.06, speed: 2, mode: 2 }]],
+    [['exposure', { exposure: k([0, -1.5], [1, 0]) }], ['lightLeak', { intensity: k([0, 2.2], [1, 0]), hue: 0.06, speed: 2, mode: 2 }]]],
+  ['moldura-branca', 'Flash branco seco', 'Edit 5 · 0:10', 0.3, 0.4,
+    [['exposure', { exposure: k([0, 0], [1, 5, 'easeIn']) }]],
+    [['exposure', { exposure: k([0, 5, 'hold'], [0.2, 5], [1, 0, 'easeOut']) }]]],
+  ['cartao-luz', 'Cartão + explosão de luz', 'Edit 5 · 0:10', 0.4, 0.3,
+    [['exposure', { exposure: k([0, 0, 'expoIn'], [1, 2.5]) }]],
+    [['outline', { size: k([0, 14, 'expoOut'], [0.5, 0]), color: [1, 1, 1, 1] }], ['starGlow', { threshold: 55, length: 160, amount: k([0, 4, 'expoOut'], [1, 0.3]), rays: 2 }], ['exposure', { exposure: k([0, 1.8, 'expoOut'], [1, 0]) }]],
+    null, { scale: ['abs', k([0, [72, 72], 'expoOut'], [0.45, [100, 100]])] }],
+  ['flash-azul', 'Flash azul', 'Edit 5 · 0:11', 0.4, 0.3,
+    [['tint', { black: [0, 0.02, 0.2, 1], white: [0.3, 0.55, 1, 1], amount: k([0, 0], [1, 100]) }]],
+    [['tint', { black: [0, 0.02, 0.2, 1], white: [0.3, 0.55, 1, 1], amount: k([0, 100], [1, 0, 'easeOut']) }]]],
+  ['tinta-vermelha', 'Tinta vermelha', 'Edit 6 · 0:07', 0.7, 0.4,
+    [['fill', { color: RED, opacity: k([0, 0], [1, 90, 'easeIn']) }]],
+    [['pkWipe', { mode: 14, pct: k([0, 100], [1, 0, 'easeOut']), soft: 4, freq: 6, border: 4, borderColor: [1, 0.1, 0.1, 1], invert: true }], ['fill', { color: RED, opacity: k([0, 50], [1, 0]) }]]],
+  ['matte-grunge', 'Máscara grunge (fumaça)', 'Edit 6 · 0:08', 0.9, 0.3,
+    [['exposure', { exposure: k([0, 0], [1, -2]) }]],
+    [['texturedWipe', { animation: 1, amount: k([0, 100], [1, 0, 'easeOut']), softness: 35, blur: 12, texture: 2, texInt: 70, fscale: 90 }]]],
+  // ---- Edit 7 (soft, branco desfocado) e Edit 8 (PSG, estouros e polígonos) — enviadas por último
+  ['flash-branco-suave', 'Flash branco desfocado', 'Edit 7 · 0:05', 0.5, 0.45,
+    [['exposure', { exposure: k([0, 0, 'easeIn'], [1, 2.6]) }], ['blur', { radius: k([0, 0, 'easeIn'], [1, 40]) }]],
+    [['exposure', { exposure: k([0, 2.6, 'expoOut'], [1, 0]) }], ['blur', { radius: k([0, 40, 'expoOut'], [1, 0]) }]]],
+  ['pb-depois-flash', 'Preto e branco + flash', 'Edit 7 · 0:06', 0.8, 0.75,
+    [['blackWhite', { amount: k([0, 0, 'hold'], [0.25, 100, 'hold'], [1, 100]) }], ['exposure', { exposure: k([0, 0, 'hold'], [0.8, 0, 'expoIn'], [1, 3]) }]],
+    [['exposure', { exposure: k([0, 3, 'expoOut'], [1, 0]) }], ['blur', { radius: k([0, 25, 'expoOut'], [1, 0]) }]]],
+  ['explosao-radial-pb', 'Explosão radial branca (P&B)', 'Edit 8 · 0:05', 0.5, 0.45,
+    [['blurMoCurves', { zDist: k([0, 1, 'expoIn'], [1, 0.7]), shutter: 3, samples: 24 }], ['lightRays', { intensity: k([0, 0, 'expoIn'], [1, 6]), length: 90, threshold: 35 }], ['exposure', { exposure: k([0, 0, 'expoIn'], [1, 3]) }]],
+    [['blurMoCurves', { zDist: k([0, 0.65, 'expoOut'], [1, 1]), shutter: 3, samples: 24 }], ['blackWhite', { amount: k([0, 100, 'hold'], [0.7, 100], [1, 0]) }], ['exposure', { exposure: k([0, 2.5, 'expoOut'], [1, 0]) }]]],
+  ['bola-de-luz', 'Bola de luz (estouro branco)', 'Edit 8 · 0:05', 0.7, 0.5,
+    [['lensFlare', { position: [0.5, 0.55], axis: [0.5, 0.5], brightness: k([0, 0, 'expoIn'], [1, 400]), size: k([0, 130, 'expoIn'], [1, 1600]), glow: 300, rays: 20, color: [1, 1, 1, 1] }], ['exposure', { exposure: k([0, 0, 'hold'], [0.7, 0, 'expoIn'], [1, 5]) }]],
+    [['exposure', { exposure: k([0, 5, 'easeOut'], [1, 0]) }], ['blackWhite', { amount: k([0, 100], [1, 0]) }]]],
+  ['poligonos', 'Polígonos (low poly P&B)', 'Edit 8 · 0:06', 0.2, 0.5,
+    [['lowPoly', { cell: 140, amount: k([0, 0, 'hold'], [0.4, 100, 'hold'], [1, 100]), gray: true, facet: 90 }]],
+    [['lowPoly', { cell: 160, amount: k([0, 100, 'hold'], [0.5, 0, 'hold'], [1, 0]), gray: true, facet: 90 }]]],
+  ['silhueta-estourada', 'Silhueta estourada (branco)', 'Edit 8 · 0:07', 0.55, 0.45,
+    [['blackWhite', { amount: k([0, 0, 'expoIn'], [1, 100]) }], ['brightnessContrast', { contrast: k([0, 0, 'expoIn'], [1, 100]) }], ['exposure', { exposure: k([0, 0, 'expoIn'], [1, 2.6]) }]],
+    [['blackWhite', { amount: k([0, 100, 'expoOut'], [1, 0]) }], ['brightnessContrast', { contrast: k([0, 100, 'expoOut'], [1, 0]) }], ['exposure', { exposure: k([0, 2.2, 'expoOut'], [1, 0]) }], ['blurMoCurves', { zDist: k([0, 0.75, 'expoOut'], [1, 1]), shutter: 2 }]]],
+  ['glitch-blocos', 'Glitch de blocos', 'Edit 8 · 0:09', 0.4, 0.5,
+    [['glitch', { amount: k([0, 0, 'hold'], [0.3, 70, 'hold'], [1, 90]), block: 70, shift: 20, rgb: 4, speed: 30 }]],
+    [['glitch', { amount: k([0, 90, 'hold'], [0.5, 40, 'hold'], [1, 0]), block: 70, shift: 20, rgb: 4, speed: 30 }]]],
+  ['flicker-espelho-pb', 'Flicker espelhado P&B', 'Edit 8 · 0:07', 0.5, 0.15,
+    [['blackWhite', { amount: k([0, 0, 'hold'], [0.5, 100, 'hold'], [1, 100]) }]],
+    [['blackWhite', { amount: k([0, 100, 'hold'], [0.2, 0, 'hold'], [0.4, 100, 'hold'], [0.6, 0, 'hold'], [0.8, 100, 'hold'], [1, 0]) }]],
+    null, { scale: ['abs', k([0, [-100, 100], 'hold'], [0.2, [100, 100], 'hold'], [0.4, [-100, 100], 'hold'], [0.6, [100, 100], 'hold'], [1, [100, 100]])] }],
+  // ---- Edit 9 (datamosh, giro inclinado, tinta preta) e Edit 10 (bola, barras de luz, flashes ciano/verde/rosa)
+  ['datamosh-cores', 'Datamosh colorido', 'Edit 9 · 0:09', 0.7, 0.35,
+    [['datamosh', { amount: k([0, 0, 'easeIn'], [1, 100]), block: 18, smear: 320, evolution: 4 }], ['hueSat', { saturation: k([0, 0], [1, 60]) }]],
+    [['datamosh', { amount: k([0, 100, 'hold'], [0.4, 70, 'easeOut'], [1, 0]), block: 18, smear: 320, evolution: 4 }]]],
+  ['giro-inclinado', 'Giro inclinado (bordas pretas)', 'Edit 9 · 0:12', 0.45, 0.45,
+    [['blurMoCurves', { rotate: k([0, 0, 'expoIn'], [1, -35]), zDist: k([0, 1, 'expoIn'], [1, 0.8]), shutter: 2.2, samples: 24, wrap: 1, wrapY: 1 }]],
+    [['blurMoCurves', { rotate: k([0, 18, 'expoOut'], [1, 0]), zDist: k([0, 0.75, 'expoOut'], [1, 1]), shutter: 2.2, samples: 24, wrap: 1, wrapY: 1 }], ['sGlow', { brightness: k([0, 4, 'expoOut'], [1, 0]), color: [0.6, 1, 0.3, 1], threshold: 0.4, width: 1 }]]],
+  ['torcao-luz', 'Torção com luz', 'Edit 9 · 0:11', 0.5, 0.45,
+    [['twirl', { angle: k([0, 0, 'expoIn'], [1, 90]), radius: 1600 }], ['exposure', { exposure: k([0, 0, 'expoIn'], [1, 2]) }]],
+    [['twirl', { angle: k([0, -70, 'expoOut'], [1, 0]), radius: 1600 }], ['exposure', { exposure: k([0, 1.6, 'expoOut'], [1, 0]) }]]],
+  ['tinta-preta', 'Tinta preta (manchas)', 'Edit 9 · 0:15', 0.5, 0.4,
+    [['pkWipe', { mode: 14, pct: k([0, 0, 'easeIn'], [1, 100]), soft: 6, freq: 5 }]],
+    [['pkWipe', { mode: 14, pct: k([0, 100, 'easeOut'], [1, 0]), soft: 6, freq: 5, invert: true }]]],
+  ['bola-esferica', 'Bola / lente esférica', 'Edit 10 · 0:06', 0.6, 0.45,
+    [['bulge', { radius: 900, strength: k([0, 0, 'expoIn'], [1, 0.9]) }], ['pkWipe', { mode: 3, pct: k([0, 0, 'hold'], [0.5, 0, 'expoIn'], [1, 40]), soft: 1, border: 4, borderColor: [0.05, 0.05, 0.05, 1], invert: true }]],
+    [['bulge', { radius: 900, strength: k([0, 0.7, 'expoOut'], [1, 0]) }], ['pkWipe', { mode: 3, pct: k([0, 40, 'expoOut'], [0.6, 0]), soft: 1, border: 4, borderColor: [0.05, 0.05, 0.05, 1], invert: true }]]],
+  ['barras-luz', 'Barras de luz amarelas', 'Edit 10 · 0:09', 0.5, 0.6,
+    [['lightBars', { shape: 1, color: [1, 0.92, 0.3, 1], intensity: k([0, 0, 'expoIn'], [1, 4]), count: 6, softness: 55 }], ['exposure', { exposure: k([0, 0, 'hold'], [0.7, 0, 'expoIn'], [1, 1.5]) }]],
+    [['lightBars', { shape: 1, color: [1, 0.92, 0.3, 1], intensity: k([0, 3.5, 'expoOut'], [1, 0]), count: 6, softness: 55 }]]],
+  ['flash-ciano-baixo', 'Flash ciano de baixo', 'Edit 10 · 0:10', 0.4, 0.45,
+    [['lightBars', { shape: 2, color: [0.2, 0.9, 1, 1], intensity: k([0, 0, 'expoIn'], [1, 4]), softness: 80 }]],
+    [['lightBars', { shape: 2, color: [0.2, 0.9, 1, 1], intensity: k([0, 4, 'expoOut'], [1, 0]), softness: 80 }], ['tint', { black: [0, 0.15, 0.25, 1], white: [0.6, 1, 1, 1], amount: k([0, 70, 'expoOut'], [1, 0]) }]]],
+  ['duotone-verde-rosa', 'Duotone verde → rosa', 'Edit 10 · 0:10', 0.6, 0.5,
+    [['tint', { black: [0.05, 0.3, 0.05, 1], white: [0.6, 1, 0.3, 1], amount: k([0, 0, 'hold'], [0.4, 100, 'hold'], [1, 100]) }]],
+    [['tint', { black: [0.35, 0.05, 0.3, 1], white: [1, 0.6, 0.95, 1], amount: k([0, 100, 'hold'], [0.5, 100, 'easeOut'], [1, 0]) }], ['bccDirBlur', { amount: k([0, 120, 'expoOut'], [1, 0]), angle: 90 }]]],
+  ['ciano-posterizado', 'Ciano posterizado (flash)', 'Edit 10 · 0:08', 0.5, 0.4,
+    [['bccDirBlur', { amount: k([0, 0, 'expoIn'], [1, 200]), angle: 0 }]],
+    [['tint', { black: [0, 0.2, 0.25, 1], white: [0.55, 1, 0.95, 1], amount: k([0, 100, 'hold'], [0.6, 100, 'easeOut'], [1, 0]) }], ['posterize', { levels: k([0, 5, 'hold'], [0.6, 64]) }], ['exposure', { exposure: k([0, 1.2, 'expoOut'], [1, 0]) }]]],
+  ['dissolve-blur', 'Dissolve com blur', 'Edit 10 · 0:02', 0.5, 0.5,
+    [['blur', { radius: k([0, 0, 'easeIn'], [1, 25]) }], ['exposure', { exposure: k([0, 0], [1, 0.8]) }]],
+    [['blur', { radius: k([0, 25, 'easeOut'], [1, 0]) }], ['exposure', { exposure: k([0, 0.8], [1, 0]) }]]],
+];
+
+const conv = (keys, d) => keys.map(([u, v, ease]) => ({ t: +(u * d).toFixed(4), v, ease: ease || 'easeInOut' }));
+const isKeys = (v) => Array.isArray(v) && v.length && Array.isArray(v[0]) && typeof v[0][0] === 'number' && v[0].length >= 2 && !(v.length === 4 && v.every((x) => typeof x === 'number'));
+const fxList = (list, d) => list.map(([type, params]) => ({ type, params: Object.fromEntries(Object.entries(params).map(([p, v]) => [p, isKeys(v) ? { keys: conv(v, d) } : v])) }));
+const trList = (tr, d) => Object.fromEntries(Object.entries(tr || {}).map(([p, [mode, keys]]) => [p, { mode, keys: conv(keys, d) }]));
+
+/** Transições das edits: { id, name, src, dur, make(d) → { a: preset da saída, b: preset da entrada } }. */
+export const EDIT_TRANSITIONS = LIST.map(([id, name, src, dur, ra, A, B, TA, TB]) => ({
+  id: `et:${id}`, slug: id, name, src, dur, cat: 'Das edits', kind: 'trans',
+  make: (d = dur) => {
+    const da = Math.max(0.05, d * ra), db = Math.max(0.05, d * (1 - ra));
+    return {
+      a: { name: `${name} (saída)`, anchor: 'end', duration: da, transform: trList(TA, da), effects: fxList(A, da) },
+      b: B.length || TB ? { name: `${name} (entrada)`, anchor: 'playhead', duration: db, transform: trList(TB, db), effects: fxList(B, db) } : null,
+    };
+  },
+}));
+
+/** Shakes vistos nas edits (impacto curto com motion blur, giro de câmera, tremor contínuo). */
+export const EDIT_SHAKES = [
+  { slug: 'shake-impacto', name: 'Shake impacto (edit)', duration: 0.45, anchorStart: true, effects: [{ type: 'shake', params: { mode: 2, impactAt: 0, decay: 0.4, frequency: 16, amount: 120, rotation: 5, zoom: 8, shutter: 1.6, samples: 16, complexity: 2 } }] },
+  { slug: 'shake-giro', name: 'Shake com giro de câmera', duration: 0.8, anchorStart: true, effects: [{ type: 'shake', params: { mode: 2, impactAt: 0, decay: 0.7, frequency: 8, amount: 60, rotation: 14, zoom: 10, shutter: 2, samples: 20, complexity: 2 } }] },
+  { slug: 'shake-continuo', name: 'Shake contínuo leve (edit)', duration: 2, effects: [{ type: 'shake', params: { frequency: 6, amount: 22, rotation: 1.2, zoom: 2, shutter: 1, complexity: 3 } }] },
+  { slug: 'shake-edit9', name: 'Shake curto com zoom (Edit 9)', duration: 0.5, anchorStart: true, effects: [{ type: 'shake', params: { mode: 2, impactAt: 0, decay: 0.45, frequency: 14, amount: 90, rotation: 3, zoom: 12, shutter: 1.8, samples: 16, complexity: 2 } }] },
+  { slug: 'shake-edit10', name: 'Shake vibrando (Edit 10)', duration: 0.6, anchorStart: true, effects: [{ type: 'shake', params: { mode: 2, impactAt: 0, decay: 0.6, frequency: 22, amount: 55, rotation: 2, zoom: 5, shutter: 1.2, samples: 12, complexity: 3 } }] },
+  { slug: 'shake-sapphire', name: 'S_Shake twitchy (edit)', duration: 1, effects: [{ type: 'shake', params: { sapphire: true, style: 2, frequency: 3, amount: 120, rotation: 4, zoom: 6, stillness: 0.6, twitchFreq: 4, shutter: 1.4, samples: 16 } }] },
+];
+
+// ---------------------------------------------------------------- .ffx para o After Effects
+const README = `MotionFrame — transições e shakes recriados das edits (After Effects)
+
+Cada transição tem 2 arquivos:
+  • "... - 1 SAIDA.ffx": aplique no clipe que SAI. Coloque o indicador de tempo (CTI) um pouco antes do corte
+    (a duração está no nome, ex.: 0.20s = 6 quadros a 30 fps) e dê dois cliques no preset.
+  • "... - 2 ENTRADA.ffx": aplique no clipe que ENTRA, com o CTI exatamente no corte.
+Os keyframes são colocados a partir do CTI (como todo preset do AE).
+
+Plugins usados (os mesmos das edits): Sapphire (S_BlurMoCurves, S_Glow, S_Shake), BCC (Directional Blur, Lens Blur),
+Video Copilot Twitch, Deep Glow e efeitos nativos (Exposure, Tint, Fill, Shatter).
+Alguns efeitos só existem no MotionFrame (máscaras de íris/cunha/tinta, light leak, wipe grunge, espelho): eles aparecem
+na lista "fora do .ffx" de cada transição — use o equivalente do AE indicado.
+Desfoque (focus pull): no BCC Lens Blur, anime o Iris Scale de 30 até 0 (saída: 0 → 30) — o molde não leva esse keyframe.
+Reverse: no AE é feito na camada (Time > Time-Reverse Layer ou Time Remap), não dá para ir num .ffx de efeito.
+`;
+const AE_HINT = { 'Transição – wipe': 'máscara animada (círculo/cunha) ou CC Radial ScaleWipe', 'Light Leaks': 'overlay de light leak ou Optical Flares', 'Textured Wipe': 'BCC Textured Wipe (o mesmo nome)', 'Espelhar': 'Escala X = -100 na camada (keyframes Hold)',
+  'Escala da camada': 'anime Scale da camada com os valores indicados', 'Low Poly': 'não existe nativo — Plexus/Polytrace, ou o próprio MotionFrame', 'Glitch digital': 'Glitchify, Universe Glitch ou VC Twitch (Slide)', 'Contorno': 'Layer Styles > Stroke (borda branca)', 'Starglow': 'Trapcode Starglow ou S_Glint' };
+/** Descreve o que o preset faz na transformação da camada (vai fora do .ffx de efeitos). */
+function transformNote(tr) {
+  const out = [];
+  for (const [prop, v] of Object.entries(tr || {})) {
+    const ks = v.keys || [];
+    if (prop === 'scale' && ks.some((kk) => Array.isArray(kk.v) && kk.v[0] < 0)) out.push('Espelhar (transform)');
+    else if (ks.length) out.push(`Escala da camada (${prop}: ${ks.map((kk) => (Array.isArray(kk.v) ? kk.v[0] : kk.v)).join(' → ')}%)`);
+  }
+  return out;
+}
+
+/** Gera os .ffx (zip) das transições/shakes. deps: { effectsToFFX, LAYER_FACTORIES, createProject, applyPreset }. */
+export async function buildFFXPack(items, deps, { dur = null, shakes = true } = {}) {
+  const { effectsToFFX, LAYER_FACTORIES, createProject, applyPreset } = deps;
+  const files = [{ name: 'LEIA-ME.txt', data: README }];
+  const notes = [];
+  const P = createProject(1080, 1920); P.fps = 30;
+  const toFFX = async (preset, label) => {
+    const L = LAYER_FACTORIES.solid(P); L.inPoint = 0; L.outPoint = (preset.duration || 1) + 0.001;
+    applyPreset(L, preset, 0);
+    const { bytes, report } = await effectsToFFX(L.effects, { fps: 30, name: label });
+    const fora = [...report.skipped, ...transformNote(preset.transform)];
+    return { bytes, fora };
+  };
+  let n = 0;
+  for (const it of items) {
+    n++;
+    const d = dur ?? it.dur;
+    const { a, b } = it.make(d);
+    const base = `${String(n).padStart(2, '0')} ${it.name.replace(/[\\/:*?"<>|]/g, '-')}`;
+    const fora = [];
+    for (const [part, tag] of [[a, '1 SAIDA'], [b, '2 ENTRADA']]) {
+      if (!part) continue;
+      const r = await toFFX(part, `${it.name} ${tag}`);
+      if (r.bytes) files.push({ name: `transicoes/${base} - ${tag} (${part.duration.toFixed(2)}s).ffx`, data: r.bytes });
+      fora.push(...r.fora);
+    }
+    if (fora.length) notes.push(`${base}: fora do .ffx → ${[...new Set(fora)].map((f) => { const t = Object.keys(AE_HINT).find((k) => f.includes(k)); return t ? `${f} (no AE: ${AE_HINT[t]})` : f; }).join('; ')}`);
+  }
+  if (shakes) for (const s of EDIT_SHAKES) {
+    const r = await toFFX(s, s.name);
+    if (r.bytes) files.push({ name: `shakes/${s.name.replace(/[\\/:*?"<>|]/g, '-')}.ffx`, data: r.bytes });
+  }
+  if (notes.length) files[0].data += `\nO que ficou fora de cada .ffx:\n${notes.map((x) => `  • ${x}`).join('\n')}\n`;
+  return files;
+}

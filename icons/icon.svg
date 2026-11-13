@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a0b3d"/><stop offset="0.55" stop-color="#0c0820"/><stop offset="1" stop-color="#05040c"/>
+    </linearGradient>
+    <radialGradient id="burst" cx="0.62" cy="0.36" r="0.6">
+      <stop offset="0" stop-color="#ff3d8b" stop-opacity="0.55"/><stop offset="0.45" stop-color="#7b2ff7" stop-opacity="0.25"/><stop offset="1" stop-color="#7b2ff7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="0.38" stop-color="#ffe3f0"/><stop offset="0.62" stop-color="#ff9a3c"/><stop offset="1" stop-color="#ff2d75"/>
+    </linearGradient>
+    <linearGradient id="ext" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5a1fd1"/><stop offset="1" stop-color="#22093f"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#00e5ff" stop-opacity="0"/><stop offset="0.35" stop-color="#00e5ff"/><stop offset="0.7" stop-color="#b14dff"/><stop offset="1" stop-color="#ff2d75"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#140a2e" stop-opacity="0"/><stop offset="0.4" stop-color="#1d0f45"/><stop offset="1" stop-color="#2a1260"/>
+    </linearGradient>
+    <linearGradient id="streak" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#00e5ff" stop-opacity="0"/><stop offset="1" stop-color="#00e5ff" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="streak2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff2d75" stop-opacity="0"/><stop offset="1" stop-color="#ff7ab0" stop-opacity="0.9"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="soft"><feGaussianBlur stdDeviation="10"/></filter>
+    <clipPath id="clip"><rect width="512" height="512" rx="112"/></clipPath>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <rect width="512" height="512" fill="url(#burst)"/>
+    <!-- feixes diagonais -->
+    <g opacity="0.22" transform="rotate(-18 256 256)">
+      <rect x="-60" y="120" width="640" height="10" fill="#ff2d75"/>
+      <rect x="-60" y="150" width="640" height="3" fill="#00e5ff"/>
+      <rect x="-60" y="430" width="640" height="6" fill="#7b2ff7"/>
+    </g>
+    <!-- linhas de velocidade -->
+    <g stroke-linecap="round">
+      <line x1="10" y1="300" x2="150" y2="300" stroke="url(#streak)" stroke-width="5"/>
+      <line x1="30" y1="322" x2="120" y2="322" stroke="url(#streak2)" stroke-width="3"/>
+      <line x1="0" y1="392" x2="110" y2="392" stroke="url(#streak)" stroke-width="3"/>
+      <line x1="300" y1="78" x2="470" y2="78" stroke="url(#streak2)" stroke-width="3" opacity="0.6"/>
+      <line x1="360" y1="96" x2="490" y2="96" stroke="url(#streak)" stroke-width="2" opacity="0.6"/>
+    </g>
+    <!-- carro esportivo (atrás das letras), com contorno neon -->
+    <g transform="translate(-6 40)">
+      <ellipse cx="270" cy="372" rx="210" ry="14" fill="#7b2ff7" opacity="0.55" filter="url(#soft)"/>
+      <path d="M46 352 L48 336 C50 324 62 318 86 315 L168 306 C204 284 240 270 280 270 C322 270 350 282 378 300 L424 310 C450 314 466 322 470 336 L470 348 C470 355 464 358 456 358 L46 358 Z" fill="url(#body)"/>
+      <path d="M46 352 L48 336 C50 324 62 318 86 315 L168 306 C204 284 240 270 280 270 C322 270 350 282 378 300 L424 310 C450 314 466 322 470 336 L470 348 C470 355 464 358 456 358" fill="none" stroke="url(#rim)" stroke-width="4" filter="url(#glow)"/>
+      <circle cx="140" cy="358" r="30" fill="#07050f" stroke="#00e5ff" stroke-width="4" filter="url(#glow)"/>
+      <circle cx="386" cy="358" r="30" fill="#07050f" stroke="#ff2d75" stroke-width="4" filter="url(#glow)"/>
+      <circle cx="140" cy="358" r="10" fill="#00e5ff" opacity="0.7"/>
+      <circle cx="386" cy="358" r="10" fill="#ff2d75" opacity="0.7"/>
+      <path d="M452 322 h18" stroke="#ffffff" stroke-width="5" stroke-linecap="round" filter="url(#glow)"/>
+    </g>
+    <!-- MF (letras próprias, itálicas, com extrusão 3D) -->
+    <g transform="translate(70 118) skewX(-12) translate(30 0) scale(0.98)">
+      <g transform="translate(19.2 22.8)"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" fill="url(#ext)"/><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" fill="url(#ext)"/></g><g transform="translate(17.6 20.9)"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" fill="url(#ext)"/><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" fill="url(#ext)"/></g><g transform="translate(16.0 19.0)"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" fill="url(#ext)"/><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" fill="url(#ext)"/></g><g transform="translate(14.4 17.1)"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" fill="url(#ext)"/><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" fill="url(#ext)"/></g><g transform="translate(12.8 15.2)"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" fill="url(#ext)"/><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" fill="url(#ext)"/></g><g transform="translate(11.2 13.3)"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" fill="url(#ext)"/><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" fill="url(#ext)"/></g><g transform="translate(9.6 11.4)"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" fill="url(#ext)"/><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" fill="url(#ext)"/></g><g transform="translate(8.0 9.5)"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" fill="url(#ext)"/><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" fill="url(#ext)"/></g><g transform="translate(6.4 7.6)"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" fill="url(#ext)"/><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" fill="url(#ext)"/></g><g transform="translate(4.8 5.7)"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" fill="url(#ext)"/><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" fill="url(#ext)"/></g><g transform="translate(3.2 3.8)"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" fill="url(#ext)"/><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" fill="url(#ext)"/></g><g transform="translate(1.6 1.9)"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" fill="url(#ext)"/><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" fill="url(#ext)"/></g>
+      <g filter="url(#glow)"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" fill="url(#face)"/><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" fill="url(#face)"/></g>
+      <g fill="none" stroke="#ffffff" stroke-opacity="0.85" stroke-width="2.5"><polygon points="0,170 0,0 50,0 100,74 150,0 200,0 200,170 156,170 156,76 113,138 87,138 44,76 44,170" /><polygon points="222,170 222,0 366,0 358,40 268,40 268,66 346,66 340,104 268,104 268,170" /></g>
+      <polygon points="0,0 50,0 54,8 2,8" fill="#ffffff" opacity="0.6"/><polygon points="150,0 200,0 198,8 146,8" fill="#ffffff" opacity="0.6"/>
+      <polygon points="222,0 366,0 364,8 222,8" fill="#ffffff" opacity="0.6"/>
+    </g>
+    <!-- faíscas -->
+    <g fill="#fff">
+      <circle cx="430" cy="140" r="3"/><circle cx="452" cy="170" r="2"/><circle cx="96" cy="120" r="2.5" fill="#00e5ff"/>
+      <path d="M440 210 l4 10 l10 4 l-10 4 l-4 10 l-4 -10 l-10 -4 l10 -4 z" fill="#ffd0e6"/>
+    </g>
+    <!-- assinatura -->
+    <text x="256" y="470" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="26" letter-spacing="9" fill="#ffffff" fill-opacity="0.75">MOTIONFRAME</text>
+  </g>
+  <rect width="510" height="510" x="1" y="1" rx="111" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/>
+</svg>
