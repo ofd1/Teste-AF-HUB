@@ -7,14 +7,18 @@ import { probeMp4 } from './proxy.js';
 const KEEP = 6; // quadros decodificados guardados (A/B do frame blending, câmera lenta reaproveita)
 
 export class SeqReader {
-  static async open(blob, { soft = false } = {}) {
+  static async open(blob, { soft = false, size = null } = {}) {
     if (typeof VideoDecoder === 'undefined') return null;
     const info = await probeMp4(blob).catch(() => null);
     if (!info?.video) return null;
     const v = info.video;
     const cfg = { codec: v.codec, description: v.description, ...(soft ? { hardwareAcceleration: 'prefer-software' } : {}) };
     try { if (!(await VideoDecoder.isConfigSupported(cfg)).supported) return null; } catch { return null; }
-    return new SeqReader(blob, v, cfg);
+    const r = new SeqReader(blob, v, cfg);
+    // size: [largura, altura] já na orientação final — quadros reduzidos na hora e liberados ao sair da lista
+    // (cache da prévia; a exportação não passa size e continua com os quadros inteiros)
+    r.size = size;
+    return r;
   }
 
   constructor(blob, v, cfg) {
@@ -57,15 +61,23 @@ export class SeqReader {
     const i = this.byTs.get(fr.timestamp);
     const w = fr.displayWidth, h = fr.displayHeight, r = this.rot;
     const c = document.createElement('canvas');
-    c.width = r === 90 || r === 270 ? h : w; c.height = r === 90 || r === 270 ? w : h;
+    const side = r === 90 || r === 270;
+    const ow = side ? h : w, oh = side ? w : h;
+    c.width = this.size ? this.size[0] : ow; c.height = this.size ? this.size[1] : oh;
     const g = c.getContext('2d');
-    g.translate(c.width / 2, c.height / 2); g.rotate((r * Math.PI) / 180); g.drawImage(fr, -w / 2, -h / 2, w, h);
+    const k = c.width / ow, kh = c.height / oh;
+    g.translate(c.width / 2, c.height / 2); g.rotate((r * Math.PI) / 180);
+    g.drawImage(fr, (-w / 2) * (side ? kh : k), (-h / 2) * (side ? k : kh), w * (side ? kh : k), h * (side ? k : kh));
     fr.close();
     if (i != null) {
       this.lastOut = Math.max(this.lastOut ?? -1, this.pts[i]);
       this.frames.set(i, c);
       // só esquece (não apaga o canvas: a exportação pode ainda estar usando esse quadro como A/B)
-      while (this.frames.size > KEEP) this.frames.delete(this.frames.keys().next().value);
+      while (this.frames.size > KEEP) {
+        const k0 = this.frames.keys().next().value, old = this.frames.get(k0);
+        this.frames.delete(k0);
+        if (this.size && old) { old.width = 0; old.height = 0; } // cache: devolve a memória na hora (iPhone)
+      }
     }
     this.waiters.splice(0).forEach((w2) => w2());
   }

@@ -487,13 +487,32 @@ async function buildCache(project, layer, { key: baseKey = cacheKey(layer) + '|f
   const aspect = vh / vw;
   const w = Math.max(160, Math.min(vw, IOS ? 540 : 720, Math.floor(Math.sqrt(CACHE_BUDGET / (n * 4 * aspect)))));
   const h = Math.round(w * aspect);
+  // Leitura sequencial (WebCodecs, no hardware): o arquivo é decodificado em ordem, como um player. Antes cada quadro
+  // era uma busca no <video> (decodifica desde o keyframe anterior + espera confirmação): em vídeo de celular dava
+  // 1 s ou mais por quadro e o "Preparando quadros" levava vários minutos. Sem suporte, volta para a busca.
+  let rd = null, misses = 0;
+  if (typeof VideoDecoder !== 'undefined') {
+    try {
+      const blob = await (await fetch(layer.props.src)).blob();
+      const { SeqReader } = await import('./seqreader.js');
+      rd = await SeqReader.open(blob, { size: [w, h] });
+    } catch { rd = null; }
+  }
+  const done = () => { releaseVideo(v); rd?.close(); };
   for (let i = 0; i < n; i++) {
     while (exportBusy && !entry.cancelled) await new Promise((r) => setTimeout(r, 250));
-    if (entry.cancelled) { releaseVideo(v); freeCache(entry); return; }
-    await seekExact(v, lo + (i + 0.5) / entry.fps, entry.fps); // quadro confirmado (meio do quadro): sem quadros repetidos/voltando no cache
+    if (entry.cancelled) { done(); freeCache(entry); return; }
+    const tt = lo + (i + 0.5) / entry.fps; // meio do quadro: sem quadros repetidos/voltando no cache
+    let src = null;
+    if (rd) {
+      src = await rd.frameAt(tt).catch(() => null);
+      if (!src && ++misses >= 3) { rd.close(); rd = null; } // decodificador falhou: segue pela busca
+    }
+    if (!src) { await seekExact(v, tt, entry.fps); src = v; }
+    if (entry.cancelled) { done(); freeCache(entry); return; }
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
-    c.getContext('2d').drawImage(v, 0, 0, w, h);
+    c.getContext('2d').drawImage(src, 0, 0, w, h);
     // assinatura pequena do quadro: detecta quadros repetidos (vídeos baixados do TikTok/IG costumam ter)
     const sig = frameSignature(c);
     entry.dup.push(i > 0 && entry.sigs.length && sigDiff(sig, entry.sigs[entry.sigs.length - 1]) < dupThr);
@@ -502,7 +521,7 @@ async function buildCache(project, layer, { key: baseKey = cacheKey(layer) + '|f
     entry.progress = (i + 1) / n;
     if (i % 6 === 0) cacheListener();
   }
-  releaseVideo(v);
+  done();
   if (entry.cancelled) return;
   entry.ready = true;
   cacheVer++;
