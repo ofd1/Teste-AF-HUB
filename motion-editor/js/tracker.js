@@ -47,10 +47,14 @@ export async function frameSource(src) {
     v, w: v.videoWidth || 1080, h: v.videoHeight || 1920, fast: !!rd,
     async draw(ctx, st, w, h) {
       if (rd) {
-        try { const c = await rd.frameAt(st); if (c) { ctx.drawImage(c, 0, 0, w, h); return; } } catch { /* cai na busca */ }
+        // vigia: se o decodificador de hardware não entregar o quadro em 2,5 s (driver/codec), larga e usa a busca normal
+        try {
+          const c = await Promise.race([rd.frameAt(st), new Promise((r) => setTimeout(() => r('timeout'), 2500))]);
+          if (c && c !== 'timeout') { ctx.drawImage(c, 0, 0, w, h); return; }
+        } catch { /* cai na busca */ }
         rd.close(); rd = null;
       }
-      await seek(v, st);
+      await Promise.race([seek(v, st), new Promise((r) => setTimeout(r, 4000))]);
       ctx.drawImage(v, 0, 0, w, h);
     },
     close() { rd?.close(); rd = null; },

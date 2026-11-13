@@ -161,8 +161,13 @@ export class TrackerPanel {
     if (!b) return;
     const a = b.dataset.a;
     if (a === 'close') return this.close();
-    if (a === 'stop') { this.cancel = true; return; }
-    if (this.busy) return;
+    if (a === 'stop') {
+      this.cancel = true;
+      // se a análise estiver presa esperando algo, libera o painel mesmo assim
+      setTimeout(() => { if (this.busy) { this.busy = false; window.__mfAnalyzing = false; this.render(); this.cb.redraw(); } }, 1500);
+      return;
+    }
+    if (this.busy) { toast('Analisando… toque em ■ para parar antes de usar outro botão.', 'info', 2500); return; }
     if (a === 'new-point') return this.newTrack('point');
     if (a === 'new-face') { ensureFaceModel().catch(() => {}); return this.newTrack('face'); }
     if (a === 'stab') { this.close(); return this.cb.stabilize(this.layer); }
@@ -253,6 +258,7 @@ export class TrackerPanel {
     const seed = this.near(t0);
     if (tr.kind === 'point' && !seed) { toast('Defina o Track Point primeiro (Mover Track Point).', 'warn'); return; }
     this.busy = true; this.cancel = false; this.render();
+    const run = this.run = {};
     let lastT = t0, lastUI = 0;
     window.__mfAnalyzing = true;
     const onFrame = (s) => {
@@ -273,6 +279,7 @@ export class TrackerPanel {
     } catch (e) {
       toast(`Tracker: ${e.message}`, 'error', 5000);
     } finally {
+      if (this.run !== run) return; // outra análise já começou depois do Stop forçado
       this.busy = false; window.__mfAnalyzing = false;
       if (tr.kind === 'face' && tr.attach) this.fitAttach();
       this.store.commit('change');

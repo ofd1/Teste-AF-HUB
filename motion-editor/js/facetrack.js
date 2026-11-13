@@ -70,8 +70,10 @@ function pick(dets, prev, hint) {
  */
 export async function analyzeFace({ layer, project, times, hintLocal, onFrame, isCancelled, detailed = true }) {
   let lm = null;
-  if (detailed) { try { lm = await ensureFaceLandmarker(); } catch { lm = null; } }
-  const det = lm ? null : await ensureFaceModel();
+  // modelo que não carrega (rede/WASM) não pode prender o painel: desiste em 25 s com erro claro
+  const limit = (pr) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error('o modelo de rosto não carregou (sem internet na 1ª vez?)')), 25000))]);
+  if (detailed) { try { lm = await limit(ensureFaceLandmarker()); } catch { lm = null; } }
+  const det = lm ? null : await limit(ensureFaceModel());
   setExporting(true);
   const fs = await frameSource(layer.props.src);
   try {
