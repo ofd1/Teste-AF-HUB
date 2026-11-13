@@ -12,6 +12,7 @@ import { WATERMARKS } from './watermarks.js';
 
 const WM_CAT = 'Marcas d’água';
 const MY_CAT = 'Meus efeitos (AE)';
+const OV_CAT = 'Overlays das edits';
 
 /** Preset importado (.ffx do AE, Frameify…) usado como transição: camada de ajuste por cima do corte, como no AE. */
 function adjOverCut(P, item, cut, d) {
@@ -66,6 +67,13 @@ function previewWM(item, opts) {
   const s = sampleImages();
   const A = LAYER_FACTORIES.image(P, s.a, PW, PH), B = LAYER_FACTORIES.image(P, s.b, PW, PH);
   for (const l of [A, B]) l.transform.position.value = [PW / 2, PH / 2];
+  if (item.overlay) {
+    P.duration = item.dur + 0.6; A.inPoint = 0; A.outPoint = P.duration;
+    const ls = item.build(P, opts, 0.3, item.dur, A);
+    for (const l of ls) { l.inPoint = 0.3; l.outPoint = 0.3 + item.dur; }
+    P.layers = [...ls, A];
+    return { P, cut: 0.3 + item.dur * 0.3 };
+  }
   if (item.full) {
     P.duration = 3; A.inPoint = 0; A.outPoint = 1.5; B.inPoint = 1.5; B.outPoint = 3;
     P.layers = [...buildWM(item, P, opts, 0, 3), A, B];
@@ -85,7 +93,7 @@ export class TransitionsPanel {
   constructor(root, store, hooks = {}) {
     this.root = root; this.store = store; this.hooks = hooks;
     this.cat = 'Das edits'; this.sel = null; this.dur = storage.get(DUR_KEY, null);
-    this.items = [...EDIT_TRANSITIONS, ...composerItems().filter((x) => x.kind === 'trans').map((x) => ({ ...x, cat: 'Básicas', src: '' })), ...WATERMARKS.map((x) => ({ ...x, cat: WM_CAT, wm: true }))];
+    this.items = [...EDIT_TRANSITIONS, ...composerItems().filter((x) => x.kind === 'trans').map((x) => ({ ...x, cat: 'Básicas', src: '' })), ...WATERMARKS.map((x) => ({ ...x, cat: x.overlay ? OV_CAT : WM_CAT, wm: true }))];
     this.thumbs = new Map();
     this.render();
   }
@@ -95,7 +103,7 @@ export class TransitionsPanel {
   render() {
     const mine = (this.hooks.userPresets?.() || []).map((p) => ({ id: `my:${p.id}`, name: p.name, cat: MY_CAT, src: '', adj: true, preset: p, dur: Math.min(1.5, Math.max(0.2, p.duration || presetDuration(p) || 0.5)) }));
     this.items = [...this.items.filter((x) => !x.adj), ...mine];
-    const cats = ['Das edits', 'Básicas', WM_CAT, ...(mine.length ? [MY_CAT] : [])];
+    const cats = ['Das edits', OV_CAT, 'Básicas', WM_CAT, ...(mine.length ? [MY_CAT] : [])];
     const list = this.items.filter((x) => x.cat === this.cat);
     const it = this.item;
     const d = this.dur ?? it?.dur ?? 0.5;
@@ -105,7 +113,7 @@ export class TransitionsPanel {
           <canvas class="tr-big" width="${PW}" height="${PH}"></canvas>
           <div class="tr-info">
             <b>${it ? escapeHtml(it.name) : 'Escolha uma transição'}</b>
-            <span class="muted small">${it ? (it.wm ? (it.full ? 'Fica por cima do vídeo inteiro, com os próprios clipes como textura. Edite aqui e toque em Aplicar de novo para atualizar.' : 'Entra depois do último clipe. Edite o @ e toque em Aplicar de novo para atualizar.') : it.adj ? 'Seu efeito importado (.ffx / preset) numa camada de ajuste por cima do corte — como no After Effects.' : it.src ? `Recriada da ${escapeHtml(it.src)}` : 'Transição básica') : 'Selecione o clipe que SAI (o que entra é o que começa logo depois dele) e toque numa transição.'}</span>
+            <span class="muted small">${it ? (it.wm ? (it.overlay ? `${it.needsLayer ? 'Selecione o clipe, ' : ''}coloque o playhead no momento e toque em Aplicar (${it.src}).` : it.full ? 'Fica por cima do vídeo inteiro, com os próprios clipes como textura. Edite aqui e toque em Aplicar de novo para atualizar.' : 'Entra depois do último clipe. Edite o @ e toque em Aplicar de novo para atualizar.') : it.adj ? 'Seu efeito importado (.ffx / preset) numa camada de ajuste por cima do corte — como no After Effects.' : it.src ? `Recriada da ${escapeHtml(it.src)}` : 'Transição básica') : 'Selecione o clipe que SAI (o que entra é o que começa logo depois dele) e toque numa transição.'}</span>
             ${it?.wm ? this.wmFields(it) : `<label class="tr-dur">Duração <input type="range" min="0.15" max="1.5" step="0.05" value="${d}" ${it ? '' : 'disabled'}><output>${d.toFixed(2)} s</output></label>`}
             ${it?.wm ? `<div class="tr-actions"><button class="primary" data-act="wm">${this.wmLayers(it).length ? '↻ Atualizar marca' : 'Aplicar'}</button>${this.wmLayers(it).length ? '<button data-act="wmdel" class="danger">Remover</button>' : ''}</div>` : `<div class="tr-actions">
               <button class="primary" data-act="apply" ${it ? '' : 'disabled'}>Aplicar no corte</button>
@@ -207,6 +215,21 @@ export class TransitionsPanel {
   removeWM(it) { const P = this.store.project; P.layers = P.layers.filter((l) => l.wmId !== it.id); }
   applyWM() {
     const it = this.item, st = this.store, P = st.project, o = this.wmOpts(it);
+    if (it.overlay) {
+      const src = st.layer();
+      if (it.needsLayer && (!src || !['video', 'image', 'group'].includes(src.type))) { toast('Selecione o clipe (vídeo) onde o overlay vai entrar e coloque o playhead no momento.', 'warn', 5000); return; }
+      const t0 = st.time, d = it.dur;
+      const ls = it.build(P, o, t0, d, src);
+      for (const l of ls) { l.inPoint = t0; l.outPoint = Math.min(P.duration, t0 + d); }
+      const i = src ? Math.max(0, st.layers.indexOf(src)) : 0;
+      st.layers.splice(i, 0, ...ls);
+      st.selectedLayerId = ls[0].id;
+      st.commit('structure');
+      toast(`“${it.name}” adicionado em ${t0.toFixed(2)} s ✓ (é uma camada normal: edite em Efeitos/Propriedades)`, 'ok', 4500);
+      this.hooks.onApplied?.();
+      this.render();
+      return;
+    }
     const had = this.wmLayers(it).length > 0;
     this.removeWM(it);
     const vis = P.layers.filter((l) => l.type !== 'audio' && !l.wmId);

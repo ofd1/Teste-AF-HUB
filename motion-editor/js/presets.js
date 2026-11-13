@@ -8,6 +8,8 @@
 // }
 
 import { anim, valueAt, sortKeys } from './anim.js';
+import { EDIT_SHAKES } from './edit-transitions.js';
+import { EDIT_EFFECT_PRESETS } from './edit-effects.js';
 import { EFFECT_MAP, getEffectDef } from './effects.js';
 import { matchEffect, findParam } from './import-map.js';
 import { uid } from './util.js';
@@ -110,6 +112,9 @@ export const BUILTIN_PRESETS = [
   { name: 'Pulsar', category: 'Entradas', transform: { scale: { mode: 'abs', keys: [k(0, [100, 100]), k(0.25, [115, 115]), k(0.5, [100, 100]), k(0.75, [115, 115]), k(1, [100, 100])] } } },
   { name: 'Fade Out', category: 'Saídas', anchor: 'end', transform: { opacity: { mode: 'abs', keys: [k(0, 100, 'easeIn'), k(0.5, 0)] } } },
   { name: 'Encolher', category: 'Saídas', anchor: 'end', transform: { scale: { mode: 'abs', keys: [k(0, [100, 100], 'easeIn'), k(0.4, [0, 0])] } } },
+  // shakes e efeitos das edits de referência (os mesmos da aba Transições / do pacote .ffx)
+  ...EDIT_SHAKES.map((x) => ({ name: x.name, category: 'Shakes das edits', anchorStart: x.anchorStart, duration: x.duration, effects: x.effects })),
+  ...EDIT_EFFECT_PRESETS,
 ].map((p, i) => ({ id: `builtin_${i}`, source: 'builtin', anchor: 'playhead', ...p, duration: p.duration ?? presetDuration(p) }));
 
 function keysOf(v) {

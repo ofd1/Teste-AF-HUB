@@ -6,6 +6,7 @@ import { LAYER_FACTORIES } from './state.js';
 import { createEffectInstance } from './presets.js';
 import { TEXT_UNITS } from './mograph.js';
 import { shiftAnim } from './composer.js';
+import { uid } from './util.js';
 
 const K = (pairs, t0) => ({ value: pairs[0][1], keys: pairs.map(([t, v, ease]) => ({ t: +(t0 + t).toFixed(4), v, ...(ease ? { ease } : {}) })) });
 const fxk = (pairs, t0) => ({ keys: pairs.map(([t, v, ease]) => ({ t, v, ...(ease ? { ease } : {}) })) });
@@ -19,6 +20,13 @@ const typeAnims = (d, fs, t0) => {
   const tw = TEXT_UNITS.find((u) => u[0] === 'Máquina de escrever');
   return tw ? tw[2](d, fs).map((a) => shiftAnim(a, t0)) : [];
 };
+
+/** Cópia da camada (mesma mídia, tempo e transformação) sem os efeitos — base dos overlays de silhueta/contorno. */
+function dupLayer(src, name) {
+  const d = structuredClone({ ...src, effects: [] });
+  d.id = uid('layer'); d.name = name; delete d.wmId; delete d.wmOpts; delete d.tracks;
+  return d;
+}
 
 export const MATERIAL_NAMES = ['Plástico', 'Cromo', 'Ouro', 'Metal escovado', 'Vidro fumê', 'Fosco', 'Neon'];
 
@@ -93,6 +101,56 @@ export const WATERMARKS = [
       tx.transform.opacity.value = +o.opacity || 70;
       tx.effects.push(fx('dropShadow', { opacity: 60, distance: 2, softness: 4 }, t0));
       return [tx];
+    },
+  },
+  // ---- overlays das edits (entram no playhead, por cima do clipe selecionado)
+  {
+    id: 'ov-silhueta-ciano', name: 'Silhueta neon ciano (Edit 10)', dur: 0.6, overlay: true, needsLayer: true, src: 'Edit 10 · 0:07',
+    fields: [['color', 'Cor', 1, ['Ciano', 'Verde', 'Rosa', 'Branco']]],
+    build(P, o, t0, d, srcL) {
+      const C = [[0.2, 1, 0.95, 1], [0.4, 1, 0.3, 1], [1, 0.3, 0.8, 1], [1, 1, 1, 1]][(+o.color || 1) - 1];
+      const l = dupLayer(srcL, 'Overlay · silhueta neon');
+      l.effects.push(fx('bgRemove', { background: 1, feather: 8 }, t0), fx('fill', { color: C, opacity: 100 }, t0), fx('glow', { threshold: 10, radius: 35, intensity: 1.8 }, t0));
+      l.transform.opacity = K([[0, 100, 'hold'], [d * 0.55, 70, 'hold'], [d * 0.8, 100], [d, 0]], t0);
+      return [l];
+    },
+  },
+  {
+    id: 'ov-contorno-neon', name: 'Contorno neon no jogador (Edit 9)', dur: 1, overlay: true, needsLayer: true, src: 'Edit 9 · 0:15',
+    fields: [['color', 'Cor', 1, ['Branco', 'Ciano', 'Amarelo', 'Rosa']]],
+    build(P, o, t0, d, srcL) {
+      const C = [[1, 1, 1, 1], [0.2, 1, 0.95, 1], [1, 0.9, 0.2, 1], [1, 0.3, 0.8, 1]][(+o.color || 1) - 1];
+      const l = dupLayer(srcL, 'Overlay · contorno neon');
+      l.effects.push(fx('bgRemove', { background: 1, feather: 4 }, t0), fx('glowEdges', { threshold: 0.1, width: 10, amount: 2.2, color: C, only: true }, t0));
+      l.transform.opacity = K([[0, 0], [0.08, 100], [d - 0.15, 100], [d, 0]], t0);
+      return [l];
+    },
+  },
+  {
+    id: 'ov-coracao', name: 'Coração neon (Edit 2)', dur: 1.2, overlay: true, src: 'Edit 2 · 0:11',
+    fields: [['size', 'Tamanho %', 100, [30, 250]]],
+    build(P, o, t0, d) {
+      const W = P.width;
+      const l = place(LAYER_FACTORIES.text(P), W / 2, P.height * 0.45); l.name = 'Overlay · coração neon';
+      Object.assign(l.props, { text: '♥', color: '#ff2a6d', fontSize: Math.round(W * 0.85 * ((+o.size || 100) / 100)), fontWeight: 400, align: 'center', fontFamily: '"Segoe UI Symbol", "DejaVu Sans", sans-serif' });
+      l.blend = 'screen';
+      l.effects.push(fx('glow', { threshold: 5, radius: 60, intensity: 2.2 }, t0));
+      l.transform.scale = K([[0, [85, 85], 'expoOut'], [0.25, [100, 100]], [d, [106, 106]]], t0);
+      l.transform.opacity = K([[0, 0], [0.06, 90, 'hold'], [0.5, 60, 'hold'], [0.56, 90], [d - 0.2, 90], [d, 0]], t0);
+      return [l];
+    },
+  },
+  {
+    id: 'ov-texto-vertical', name: 'Texto vertical (carimbo, Edit 10)', dur: 0.8, overlay: true, src: 'Edit 10 · 0:07',
+    fields: [['text', 'Texto', 'NEYMAR']],
+    build(P, o, t0, d) {
+      const W = P.width, H = P.height;
+      const l = place(LAYER_FACTORIES.text(P), W * 0.3, H / 2); l.name = 'Overlay · texto vertical';
+      Object.assign(l.props, { text: String(o.text || 'NEYMAR').toUpperCase().split('').join('\n'), color: '#d9d9d9', fontSize: Math.round(W / 8), fontWeight: 900, align: 'center', lineHeight: 0.95, fontFamily: 'Impact, "Arial Black", sans-serif' });
+      l.transform.position = K([[0, [W * 0.3, H * 0.62], 'expoOut'], [d, [W * 0.3, H * 0.45]]], t0);
+      l.transform.opacity = K([[0, 0], [0.05, 85], [d - 0.12, 85], [d, 0]], t0);
+      l.effects.push(fx('dirBlur', { angle: 0, length: [[0, 80, 'expoOut'], [0.3, 0]] }, t0));
+      return [l];
     },
   },
   {
