@@ -259,6 +259,7 @@ export class Inspector {
         <div class="fx-body">
           ${def.plugin ? `<div class="plugin-note">Recriação estilo <b>${escapeHtml(def.plugin)}</b></div>` : ''}
           ${def.description ? `<div class="desc">${escapeHtml(def.description)}</div>` : ''}
+          ${fx.type === 'element3d' ? '<button class="wide primary" data-fxact="scene">⚙ Scene Setup (importar modelo 3D / textura)</button>' : ''}
           ${generic ? '<div class="note">Efeito do AE sem equivalente: controles importados (editáveis e animáveis) sem alterar a imagem.</div>' : ''}
           ${def.params.filter((pd) => !pd.advanced && pd.kind !== 'hidden' && this.shown(pd, fx)).map((pd) => this.propRow(`fx:${fx.id}.${pd.key}`, pd)).join('')}
           ${def.params.some((pd) => pd.advanced) ? `<details class="adv"><summary>Avançado</summary>${def.params.filter((pd) => pd.advanced && pd.kind !== 'hidden' && this.shown(pd, fx)).map((pd) => this.propRow(`fx:${fx.id}.${pd.key}`, pd)).join('')}</details>` : ''}
@@ -427,6 +428,7 @@ export class Inspector {
         el.addEventListener(act === 'enable' ? 'change' : 'click', () => {
           const i = layer.effects.indexOf(fx);
           if (act === 'enable') fx.enabled = el.checked;
+          if (act === 'scene') { this.hooks.sceneSetup?.(layer, fx); return; }
           if (act === 'collapse') { if (this.collapsed.has(fx.id)) this.collapsed.delete(fx.id); else this.collapsed.add(fx.id); this.render(); return; }
           if (act === 'copy') { setFxClipboard([fx]); toast(`“${fx.label || getEffectDef(fx.type).label}” copiado. Selecione outra camada e toque em Colar.`, 'ok'); this.render(); return; }
           if (act === 'del') layer.effects.splice(i, 1);

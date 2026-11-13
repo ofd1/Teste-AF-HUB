@@ -8,6 +8,10 @@ import { EDIT_TRANSITIONS } from './edit-transitions.js';
 import { escapeHtml } from './util.js';
 import { toast, storage } from './ui.js';
 import { getImage } from './media.js';
+import { WATERMARKS } from './watermarks.js';
+
+const WM_CAT = 'Marcas d’água';
+const WM_KEY = (id) => `motionframe.wm.${id}`;
 
 const PW = 180, PH = 240; // prévia vertical (formato das edits)
 const DUR_KEY = 'motionframe.transDur';
@@ -31,7 +35,8 @@ function sampleImages() {
   return samples;
 }
 
-function previewProject(item, dur) {
+function previewProject(item, dur, opts) {
+  if (item.wm) return previewWM(item, opts);
   const P = createProject(PW, PH); P.duration = dur + 1.0; P.fps = 30; P.background = '#000';
   const s = sampleImages(), cut = 0.5 + dur * 0.4;
   const A = LAYER_FACTORIES.image(P, s.a, PW, PH), B = LAYER_FACTORIES.image(P, s.b, PW, PH);
@@ -44,11 +49,31 @@ function previewProject(item, dur) {
   return { P, cut };
 }
 
+function previewWM(item, opts) {
+  const P = createProject(PW, PH); P.fps = 30; P.background = '#000';
+  const s = sampleImages();
+  const A = LAYER_FACTORIES.image(P, s.a, PW, PH), B = LAYER_FACTORIES.image(P, s.b, PW, PH);
+  for (const l of [A, B]) l.transform.position.value = [PW / 2, PH / 2];
+  if (item.full) {
+    P.duration = 3; A.inPoint = 0; A.outPoint = 1.5; B.inPoint = 1.5; B.outPoint = 3;
+    P.layers = [...buildWM(item, P, opts, 0, 3), A, B];
+  } else {
+    P.duration = 0.8 + item.dur; A.inPoint = 0; A.outPoint = 0.8; B.inPoint = 0; B.outPoint = 0;
+    P.layers = [...buildWM(item, P, opts, 0.8, item.dur), A];
+  }
+  return { P, cut: item.full ? 0.7 : 0.8 + item.dur * 0.6 };
+}
+function buildWM(item, P, opts, t0, d) {
+  const ls = item.build(P, opts, t0, d);
+  for (const l of ls) { l.inPoint = t0; l.outPoint = t0 + d; l.wmId = item.id; }
+  return ls;
+}
+
 export class TransitionsPanel {
   constructor(root, store, hooks = {}) {
     this.root = root; this.store = store; this.hooks = hooks;
     this.cat = 'Das edits'; this.sel = null; this.dur = storage.get(DUR_KEY, null);
-    this.items = [...EDIT_TRANSITIONS, ...composerItems().filter((x) => x.kind === 'trans').map((x) => ({ ...x, cat: 'Básicas', src: '' }))];
+    this.items = [...EDIT_TRANSITIONS, ...composerItems().filter((x) => x.kind === 'trans').map((x) => ({ ...x, cat: 'Básicas', src: '' })), ...WATERMARKS.map((x) => ({ ...x, cat: WM_CAT, wm: true }))];
     this.thumbs = new Map();
     this.render();
   }
@@ -56,7 +81,7 @@ export class TransitionsPanel {
   get item() { return this.items.find((x) => x.id === this.sel) || null; }
 
   render() {
-    const cats = ['Das edits', 'Básicas'];
+    const cats = ['Das edits', 'Básicas', WM_CAT];
     const list = this.items.filter((x) => x.cat === this.cat);
     const it = this.item;
     const d = this.dur ?? it?.dur ?? 0.5;
@@ -66,13 +91,13 @@ export class TransitionsPanel {
           <canvas class="tr-big" width="${PW}" height="${PH}"></canvas>
           <div class="tr-info">
             <b>${it ? escapeHtml(it.name) : 'Escolha uma transição'}</b>
-            <span class="muted small">${it ? (it.src ? `Recriada da ${escapeHtml(it.src)}` : 'Transição básica') : 'Selecione o clipe que SAI (o que entra é o que começa logo depois dele) e toque numa transição.'}</span>
-            <label class="tr-dur">Duração <input type="range" min="0.15" max="1.5" step="0.05" value="${d}" ${it ? '' : 'disabled'}><output>${d.toFixed(2)} s</output></label>
-            <div class="tr-actions">
+            <span class="muted small">${it ? (it.wm ? (it.full ? 'Fica por cima do vídeo inteiro, com os próprios clipes como textura. Edite aqui e toque em Aplicar de novo para atualizar.' : 'Entra depois do último clipe. Edite o @ e toque em Aplicar de novo para atualizar.') : it.src ? `Recriada da ${escapeHtml(it.src)}` : 'Transição básica') : 'Selecione o clipe que SAI (o que entra é o que começa logo depois dele) e toque numa transição.'}</span>
+            ${it?.wm ? this.wmFields(it) : `<label class="tr-dur">Duração <input type="range" min="0.15" max="1.5" step="0.05" value="${d}" ${it ? '' : 'disabled'}><output>${d.toFixed(2)} s</output></label>`}
+            ${it?.wm ? `<div class="tr-actions"><button class="primary" data-act="wm">${this.wmLayers(it).length ? '↻ Atualizar marca' : 'Aplicar'}</button>${this.wmLayers(it).length ? '<button data-act="wmdel" class="danger">Remover</button>' : ''}</div>` : `<div class="tr-actions">
               <button class="primary" data-act="apply" ${it ? '' : 'disabled'}>Aplicar no corte</button>
               <button data-act="all" ${it ? '' : 'disabled'} title="Aplica em todos os cortes da timeline">Em todos os cortes</button>
               ${it?.cat === 'Das edits' ? '<button data-act="ffx">⤓ .ffx (AE)</button>' : ''}
-            </div>
+            </div>`}
           </div>
         </div>
         <div class="chips">${cats.map((c) => `<button class="chip ${c === this.cat ? 'on' : ''}" data-cat="${c}">${c}</button>`).join('')}
@@ -93,6 +118,12 @@ export class TransitionsPanel {
     r.querySelector('[data-act="apply"]')?.addEventListener('click', () => this.apply(false));
     r.querySelector('[data-act="all"]')?.addEventListener('click', () => this.apply(true));
     r.querySelector('[data-act="ffx"]')?.addEventListener('click', () => this.hooks.exportFFX?.([this.item], this.dur ?? this.item.dur));
+    r.querySelectorAll('[data-wmf]').forEach((el) => el.addEventListener('input', () => {
+      const o = this.wmOpts(this.item); o[el.dataset.wmf] = el.type === 'text' ? el.value : +el.value;
+      storage.set(WM_KEY(this.item.id), o); const out = el.nextElementSibling; if (out?.tagName === 'OUTPUT') out.textContent = el.value; this.anim = null;
+    }));
+    r.querySelector('[data-act="wm"]')?.addEventListener('click', () => this.applyWM());
+    r.querySelector('[data-act="wmdel"]')?.addEventListener('click', () => { this.removeWM(this.item); this.store.commit('structure'); toast('Marca removida.', 'ok'); this.render(); });
     r.querySelector('[data-act="ffxall"]')?.addEventListener('click', () => this.hooks.exportFFX?.(EDIT_TRANSITIONS, null));
   }
 
@@ -109,7 +140,7 @@ export class TransitionsPanel {
         let img = this.thumbs.get(it.id);
         if (!img) {
           try {
-            const { P, cut } = previewProject(it, it.dur);
+            const { P, cut } = previewProject(it, it.dur, it.wm ? this.wmOpts(it) : null);
             img = document.createElement('canvas'); img.width = PW; img.height = PH;
             renderFrame(img.getContext('2d'), P, cut + 0.02, 1, {});
             this.thumbs.set(it.id, img);
@@ -124,7 +155,7 @@ export class TransitionsPanel {
 
   /** Prévia grande em loop da transição escolhida. */
   loop() {
-    cancelAnimationFrame(this.raf);
+    cancelAnimationFrame(this.raf); clearTimeout(this.idleT);
     const c = this.root.querySelector('.tr-big'); if (!c) return;
     const g = c.getContext('2d');
     const it = this.item;
@@ -132,7 +163,9 @@ export class TransitionsPanel {
     const t0 = performance.now();
     const tick = () => {
       if (!this.root.isConnected || !c.isConnected) return;
-      if (!this.anim) this.anim = previewProject(it, this.dur ?? it.dur);
+      // painel fechado/escondido: não renderiza (a prévia 3D pesa) — só confere de vez em quando se voltou
+      if (c.offsetParent === null || document.hidden) { this.raf = 0; clearTimeout(this.idleT); this.idleT = setTimeout(tick, 400); return; }
+      if (!this.anim) this.anim = previewProject(it, this.dur ?? it.dur, it.wm ? this.wmOpts(it) : null);
       const { P } = this.anim;
       const t = ((performance.now() - t0) / 1000) % P.duration;
       try { renderFrame(g, P, t, 1, {}); } catch { /* prévia */ }
@@ -140,6 +173,42 @@ export class TransitionsPanel {
     };
     this.anim = null;
     tick();
+  }
+
+  // ---------------------------------------------------------------- marcas d'água
+  wmLayers(it) { return this.store.project.layers.filter((l) => l.wmId === it.id); }
+  wmOpts(it) {
+    const cur = this.wmLayers(it).find((l) => l.wmOpts)?.wmOpts;
+    const def = Object.fromEntries(it.fields.map(([k, , v]) => [k, v]));
+    return { ...def, ...(storage.get(WM_KEY(it.id), null) || cur || {}) };
+  }
+  wmFields(it) {
+    const o = this.wmOpts(it);
+    return `<div class="tr-wm">${it.fields.map(([k, label, , opt]) => {
+      if (Array.isArray(opt) && typeof opt[0] === 'string') return `<label>${escapeHtml(label)} <select data-wmf="${k}">${opt.map((n, i) => `<option value="${i + 1}" ${+o[k] === i + 1 ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('')}</select></label>`;
+      if (Array.isArray(opt)) return `<label>${escapeHtml(label)} <input type="range" data-wmf="${k}" min="${opt[0]}" max="${opt[1]}" value="${o[k]}"><output>${o[k]}</output></label>`;
+      return `<label>${escapeHtml(label)} <input type="text" data-wmf="${k}" value="${escapeHtml(String(o[k] ?? ''))}" maxlength="40"></label>`;
+    }).join('')}</div>`;
+  }
+  removeWM(it) { const P = this.store.project; P.layers = P.layers.filter((l) => l.wmId !== it.id); }
+  applyWM() {
+    const it = this.item, st = this.store, P = st.project, o = this.wmOpts(it);
+    const had = this.wmLayers(it).length > 0;
+    this.removeWM(it);
+    const vis = P.layers.filter((l) => l.type !== 'audio' && !l.wmId);
+    const end = vis.length ? Math.max(...vis.map((l) => l.outPoint)) : P.duration;
+    let t0 = 0, d = P.duration;
+    if (!it.full) { t0 = Math.min(end, P.duration); d = it.dur; P.duration = Math.max(P.duration, +(t0 + d).toFixed(3)); }
+    else d = Math.max(0.5, end);
+    const ls = buildWM(it, P, o, t0, d);
+    ls[0].wmOpts = { ...o };
+    // de cima para baixo: a lista já vem na ordem do topo
+    P.layers.unshift(...ls);
+    st.selectedLayerId = ls[0].id;
+    st.commit('structure');
+    toast(had ? `“${it.name}” atualizada ✓` : `“${it.name}” aplicada ✓ — para mudar, edite aqui e toque em Atualizar.`, 'ok', 4000);
+    this.hooks.onApplied?.();
+    this.render();
   }
 
   apply(all) {

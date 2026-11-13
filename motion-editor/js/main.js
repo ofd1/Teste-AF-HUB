@@ -8,10 +8,12 @@ import { setBgListener, ensureBgModel, bgStatus } from './bgremove.js';
 import { setGLLostListener, glLost } from './gl.js';
 import { createEffectInstance, setPluginLookup, upgradeLayerEffects, applyPreset } from './presets.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
-import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, cacheVersion, detectFps, mediaReady, framesDrawable } from './media.js';
+import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, cacheVersion, detectFps, mediaReady, framesDrawable, liveVideoAt } from './media.js';
 import { loadAudio, playAudio, stopAudio, detectBeats, pruneAudio } from './audio.js';
 import { valueAt, setValue, setKey, anim } from './anim.js';
 import { setThreeD } from './three-d.js';
+import { openSceneSetup } from './e3d-scene.js';
+import { setModelListener } from './model3d.js';
 import { Timeline } from './timeline.js';
 import { Inspector } from './inspector.js';
 import { Library } from './library.js';
@@ -77,6 +79,7 @@ function adaptQuality(ms) {
 }
 let quality = curQuality();
 setMediaListener(() => { dirty = true; });
+setModelListener(() => { dirty = true; });
 setBgListener(() => { dirty = true; frameCacheClear(); });
 
 // ---- Renderização estilo After Effects:
@@ -206,7 +209,8 @@ function loop(now) {
     const interacting = performance.now() - lastEdit < 380;
     const draftK = !store.playing && qualitySel.value === 'auto' && interacting && hqMs > DRAFT_MS ? Math.max(0.3, Math.min(0.8, Math.sqrt((DRAFT_MS * 0.65) / hqMs))) : 1;
     const key = `${fi}|${quality}|${store.playing ? 'p' : 'hq'}`;
-    const cached = (store.playing && frameCacheGet(`${fi}|${quality}|hq`)) || frameCacheGet(key);
+    const live = store.playing && liveVideoAt(viewProject(), fi / fps);
+    const cached = live ? null : (store.playing && frameCacheGet(`${fi}|${quality}|hq`)) || frameCacheGet(key);
     const tq = store.playing ? fi / fps : store.time;
     const hold = !cached && !framesDrawable(viewProject(), tq) && performance.now() - (holdSince ||= performance.now()) < 900;
     if (cached) {
@@ -493,6 +497,7 @@ new Inspector(document.getElementById('effectsPanel'), store, 'effects', {
     layer.effects.splice(layer.effects.indexOf(fx) + 1, 0, copy);
   },
   savePreset: () => library.saveLayer(),
+  sceneSetup: (layer, fx) => openSceneSetup(store, layer, fx, viewProject()),
 });
 new Inspector(document.getElementById('propsPanel'), store, 'props', {
   speed: (layer) => { ensureSpeedEffect(layer); openSheet('effects'); },
@@ -875,6 +880,7 @@ async function maybeProxy(f) {
 
 async function importMedia(files) {
   ensurePersistentStorage();
+  let seqT = null; // vários clipes de uma vez: um depois do outro (como no CapCut)
   for (let f of files) {
     const isVideo = f.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|mkv)$/i.test(f.name);
     if (isVideo && /\.(mp4|mov|m4v)$/i.test(f.name)) f = await maybeProxy(f);
@@ -929,12 +935,14 @@ async function importMedia(files) {
       l.props.volume = 100;
       loadAudio(src).then(() => { l.props.hasAudio = true; store.emit('change'); }).catch(() => { l.props.hasAudio = false; });
     }
-    const hasContent = store.project.layers.some((x) => x.type === 'video' || x.type === 'audio');
-    l.inPoint = hasContent ? store.time : 0;
-    if (isVideo && Number.isFinite(dims.d)) {
-      if (!hasContent) store.project.duration = Math.min(600, Math.max(1, Math.ceil(dims.d * 10) / 10));
-      l.outPoint = Math.min(store.project.duration, l.inPoint + dims.d);
-    } else l.outPoint = Math.min(store.project.duration, l.inPoint + 3);
+    const hasContent = store.project.layers.some((x) => x.type === 'video' || x.type === 'audio' || x.type === 'image');
+    const start = seqT ?? (hasContent ? store.time : 0);
+    l.inPoint = start;
+    const len = isVideo && Number.isFinite(dims.d) ? dims.d : 3;
+    if (!hasContent && seqT == null && isVideo) store.project.duration = Math.min(600, Math.max(1, Math.ceil(dims.d * 10) / 10));
+    if (seqT != null || hasContent) store.project.duration = Math.min(600, Math.max(store.project.duration, Math.ceil((start + len) * 10) / 10));
+    l.outPoint = Math.min(store.project.duration, start + len);
+    seqT = l.outPoint;
     store.addLayer(l);
   }
   if (!desktop.matches) closeSheet();
@@ -1142,17 +1150,13 @@ async function showMenu() {
 }
 
 function showHelp() {
-  modal('Como usar', `<ol class="help-steps">
-    <li><b>Importe o clipe:</b> toque em <b>🎞 Vídeo / Foto</b>. O vídeo já vem com o som (ajuste em <b>🔊 Som</b>).</li>
-    <li><b>Selecione a camada</b> tocando nela na timeline (embaixo) ou na prévia. A faixa acima dos botões diz o que está selecionado.</li>
-    <li><b>Presets</b> (★): CC, shakes, reverse, shatter… Ligue <b>⇔ Sincronizar com a duração da camada</b> para o preset ocupar o clipe inteiro.</li>
-    <li><b>Efeitos</b> (✦): mais de 75 efeitos do After Effects e de plugins. Em cada efeito, o ◆ cria keyframes. Use <b>⎘ Copiar</b> / <b>📋 Colar</b> para levar efeitos a outra camada e <b>★ Salvar preset</b> para guardar.</li>
-    <li><b>Velocidade</b> (⏱, estilo Twixtor) e <b>Time Remap</b> para câmera lenta, congelar e reverse.</li>
-    <li><b>Tirar fundo</b> (✂︎) recorta o jogador com IA, no próprio aparelho.</li>
-    <li><b>Agrupar</b> (⊞) junta camadas para aplicar efeitos/animações em todas de uma vez.</li>
-    <li><b>Timeline:</b> arraste a régua azul para mudar o tempo; arraste a timeline livremente para navegar; pinça para zoom.</li>
-    <li><b>Exportar:</b> no fim, toque em <b>Salvar / Compartilhar</b> → Salvar vídeo (Fotos), Arquivos, TikTok…</li>
-  </ol>`, [{ label: 'Entendi', value: null, primary: true }]);
+  const steps = [
+    ['🎞', 'Importe', 'Toque em <b>＋ Novo projeto</b> e escolha seus vídeos — eles entram em sequência na timeline, com som.'],
+    ['👆', 'Toque no clipe', 'Escolha <b>Presets</b> (CC, shake, reverse), <b>Transições</b> ou <b>Efeitos</b>. Tudo aparece na hora na prévia.'],
+    ['⤓', 'Exporte', 'Toque em <b>Exportar</b> → salvar nas Fotos ou mandar pro TikTok/Instagram.'],
+  ];
+  modal('Como usar', `<div class="help-cards">${steps.map(([i, t, d], n) => `<div class="help-card"><span class="hc-i">${i}</span><div><b>${n + 1}. ${t}</b><p>${d}</p></div></div>`).join('')}
+    <p class="muted small">Mais coisas (keyframes, Composer, Topaz, tracker…) ficam em <b>⋯ Mais</b>. Para o modo completo estilo After Effects: ⚙ Configurações → Interface.</p></div>`, [{ label: 'Bora editar', value: null, primary: true }]);
 }
 
 function addTransformKey() {
@@ -1681,6 +1685,21 @@ async function animateLogoFlow() {
   } catch (e) { toast(`Não deu para animar a logo: ${e.message}`, 'error', 6000); }
 }
 
+/** Início rápido (como o CapCut): escolhe os vídeos → projeto vertical 1080×1920 já com os clipes em sequência. */
+async function quickProjectFlow() {
+  const files = await pickFiles('video/*,image/*', true);
+  if (!files?.length) return;
+  const s = getSettings();
+  const pre = COMP_PRESETS.find((x) => x.id === s.compPreset) || COMP_PRESETS[0];
+  const p = createProject(pre.w, pre.h);
+  Object.assign(p, { id: uid('prj'), name: `Projeto ${listProjects().length + 1}`, fps: pre.fps, duration: 10, background: '#000000' });
+  saveProjectData(p, null);
+  await openProjectById(p.id);
+  await importMedia(files);
+  store.selectedLayerId = null; store.setTime(0); store.commit('structure');
+  toast('Pronto! Toque num clipe para pôr preset, transição ou efeito.', 'ok', 4000);
+}
+
 async function createProjectFlow() {
   const s = getSettings();
   const pre = COMP_PRESETS.find((x) => x.id === s.compPreset) || COMP_PRESETS[0];
@@ -1881,7 +1900,8 @@ async function goHome() {
 const home = new HomeScreen({
   open: (id) => openProjectById(id),
   afterDelete: () => cleanUnusedMedia(),
-  create: () => createProjectFlow(),
+  create: () => quickProjectFlow(),
+  createAdvanced: () => createProjectFlow(),
   importProject: () => importProjectFile(),
   logoAnim: () => animateLogoFlow(),
   demoLogo: async () => {

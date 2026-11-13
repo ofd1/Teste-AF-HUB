@@ -5,7 +5,7 @@ import { escapeHtml, uid } from './util.js';
 import { flatLayers } from './state.js';
 import { putMedia, getMedia, deleteMedia, listKeys } from './idb.js';
 
-export const APP_VERSION = 'v108';
+export const APP_VERSION = 'v109';
 const INDEX = 'motionframe.projects.v1';
 const KEY = (id) => `motionframe.project.${id}`;
 const SETTINGS = 'motionframe.settings.v1';
@@ -81,7 +81,7 @@ export function saveProjectData(p, thumb) {
     // projeto grande (ex.: .aep com muitos keyframes): vai para o IndexedDB, que tem muito mais espaço
     putMedia(`__prj_${p.id}`, JSON.stringify(data)).then((ok) => { if (!ok) toast('Pouco espaço no aparelho para salvar o projeto.', 'warn'); });
     // resumo no índice: guarda a lista de mídias usadas, senão a limpeza achava que ninguém usava esses vídeos e os apagava
-    const mediaIds = [...new Set(flatLayers(p.layers).map((l) => l.props?.mediaId).filter(Boolean))];
+    const mediaIds = [...new Set(flatLayers(p.layers).flatMap(layerMediaIds))];
     storage.set(KEY(p.id), { idb: true, id: p.id, name: p.name, width: p.width, height: p.height, fps: p.fps, duration: p.duration, layers: [], mediaIds });
   }
   const list = storage.get(INDEX, []);
@@ -110,12 +110,19 @@ export function deleteProject(id) {
 }
 
 /** Todas as mídias usadas por algum projeto (para não apagar arquivos de outros projetos). */
+/** Mídias guardadas no aparelho que a camada usa: o arquivo dela + modelos/texturas do Element 3D. */
+export function layerMediaIds(l) {
+  const out = l.props?.mediaId ? [l.props.mediaId] : [];
+  for (const fx of l.effects || []) for (const k of ['modelId', 'texId']) { const v = fx.params?.[k]?.value; if (typeof v === 'string' && v) out.push(v); }
+  return out;
+}
+
 export async function allMediaIds() {
   const ids = new Set();
   for (const e of storage.get(INDEX, [])) {
     const p = await loadProjectDataAsync(e.id);
     if (!p) { const stub = loadProjectData(e.id); if (stub?.idb && !stub.mediaIds) return null; for (const m of stub?.mediaIds || []) ids.add(m); continue; } // sem como saber: não limpa nada
-    for (const l of flatLayers(p.layers || [])) if (l.props?.mediaId) ids.add(l.props.mediaId);
+    for (const l of flatLayers(p.layers || [])) for (const m of layerMediaIds(l)) ids.add(m);
   }
   return ids;
 }
@@ -144,15 +151,18 @@ export class HomeScreen {
         <button class="icon" data-h="settings" aria-label="Configurações">⚙</button>
       </header>
       <div class="home-body">
-        <button class="home-new" data-h="create"><span class="plus">＋</span><span><b>Novo projeto</b><br><span class="muted small">Formato, FPS e duração como no After Effects</span></span></button>
+        <button class="home-new" data-h="create"><span class="plus">＋</span><span><b>Novo projeto</b><br><span class="muted small">Escolha seus vídeos e comece a editar</span></span></button>
         <div class="home-actions">
-          <button data-h="importProject"><span>📂</span>Importar projeto</button>
-          <button data-h="importAE"><span>Ae</span>Importar do After Effects</button>
+          <button data-h="createAdvanced"><span>⚙</span>Projeto personalizado</button>
+          <button data-h="importProject"><span>📂</span>Abrir projeto</button>
           <button data-h="presets"><span>★</span>Meus presets</button>
+        </div>
+        <details class="home-more"><summary>Mais opções</summary><div class="home-actions">
+          <button data-h="importAE"><span>Ae</span>Importar do After Effects</button>
           <button data-h="plugins"><span>⤒</span>Plugins (.aex)</button>
           <button data-h="logoAnim"><span>✦</span>Animar minha logo</button>
           <button data-h="demoLogo"><span>▶</span>Demo: logo animada</button>
-        </div>
+        </div></details>
         <div class="home-recover"></div>
         <h3 class="home-h">Projetos <span class="muted small">${list.length}</span></h3>
         ${list.length ? `<div class="home-grid">${list.map((p) => `

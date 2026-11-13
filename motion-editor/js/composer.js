@@ -172,7 +172,7 @@ export function applyComposerItem(item0, dur, store) {
   store.commit('structure');
   return next ? `Transição “${item.name}” entre “${layer.name}” e “${next.name}”.` : `Transição “${item.name}” no fim de “${layer.name}” (não achei clipe começando logo depois — a parte de entrada não foi aplicada).`;
 }
-function shiftAnim(an, t0) {
+export function shiftAnim(an, t0) {
   const sh = (p) => (p && p.keys ? { ...p, keys: p.keys.map((k) => ({ ...k, t: +(k.t + t0).toFixed(4) })) } : p);
   return { ...an, props: Object.fromEntries(Object.entries(an.props).map(([k, v]) => [k, sh(v)])), selectors: (an.selectors || []).map((s) => Object.fromEntries(Object.entries(s).map(([k, v]) => [k, sh(v)]))) };
 }

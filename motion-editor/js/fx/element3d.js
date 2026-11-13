@@ -3,6 +3,8 @@
 // materiais (plástico, cromo, ouro, metal escovado, vidro fumê, fosco, neon), luz direcional + ambiente + rim light,
 // reflexo de estúdio ou do próprio vídeo, anel de réplicas (Group/Replicator) e giro automático.
 import { frag, num, ang, sel, pos, col, rgb, rad, cuv } from './common.js';
+import { getModel, textureUrl } from '../model3d.js';
+import { getImage } from '../media.js';
 
 const E3D = frag(`
 uniform vec2 u_c; uniform float u_S, u_dc, u_kind, u_depth, u_bevel, u_A, u_mw, u_s1, u_s2, u_s3, u_count, u_ring;
@@ -10,6 +12,7 @@ uniform vec3 u_r0, u_r1, u_r2; uniform vec4 u_mr; uniform float u_marg;
 uniform sampler2D u_f1, u_f2, u_f3, u_mask, u_env;
 uniform vec3 u_col, u_ldir, u_lcol, u_rimc;
 uniform float u_metal, u_gloss, u_refl, u_envMode, u_emis, u_glass, u_lint, u_amb, u_rim, u_comp;
+uniform float u_texMode; uniform sampler2D u_dtex; uniform vec4 u_er; uniform float u_brad;
 
 float field2(vec2 xy) {
   vec2 q = abs(xy) - vec2(0.5 * u_mw, 0.5 * u_mw * u_A);
@@ -69,7 +72,11 @@ void main() {
   vec2 q = (v_uv - u_c) * u_size / u_S; q.y = -q.y;
   vec3 ro = vec3(0.0, 0.0, -u_dc);
   vec3 rd = normalize(vec3(q, u_dc));
-  float t = max(0.0, u_dc - 1.5 - u_ring - u_depth), tmax = u_dc + 2.5 + u_ring * 2.0 + u_depth;
+  // esfera que envolve o objeto: raio que não passa nela nem entra no laço (o objeto costuma ocupar pouco da tela)
+  float bb = dot(ro, rd), cc = dot(ro, ro) - u_brad * u_brad, disc = bb * bb - cc;
+  if (disc < 0.0) { gl_FragColor = u_comp > 0.5 ? vec4(0.0) : s; return; }
+  float sq = sqrt(disc);
+  float t = max(0.0, -bb - sq), tmax = -bb + sq;
   float best = 1e9, bt = -1.0, pixk = 1.0 / (u_S * u_dc);
   bool hit = false;
   for (int i = 0; i < 120; i++) {
@@ -94,6 +101,12 @@ void main() {
     vec2 tuv = u_mr.xy + u_mr.zw * vec2(po.x / u_mw + 0.5, 0.5 - po.y / (u_mw * u_A));
     vec4 m = unpre(texture2D(u_mask, tuv));
     base = mix(base, m.rgb, step(0.05, m.a));
+  } else if (u_texMode > 1.5) {
+    // mapa difuso projetado de frente (texto: a caixa do texto inteira; primitivas: o cubo unitário)
+    vec2 pu = u_kind < 0.5 ? vec2(po.x / u_mw + 0.5, 0.5 - po.y / (u_mw * u_A)) : vec2(po.x + 0.5, 0.5 - po.y);
+    pu = clamp(pu, 0.0, 1.0);
+    vec4 m = u_texMode > 2.5 ? unpre(texture2D(u_tex, u_er.xy + u_er.zw * pu)) : unpre(texture2D(u_dtex, pu));
+    base = mix(base, m.rgb, step(0.02, m.a));
   }
   vec3 v = -rd, L = normalize(u_ldir), H = normalize(L + v);
   float diff = max(dot(n, L), 0.0);
@@ -113,6 +126,67 @@ void main() {
   vec4 o = vec4(clamp(c, 0.0, 1.0) * oa, oa);
   gl_FragColor = u_comp > 0.5 ? o : o + s * (1.0 - o.a);
 }`);
+
+// Modelo importado (OBJ/GLB): malha de triângulos com profundidade, mesma câmera/luz/material do raymarch.
+const MESH_VERT = `
+precision highp float;
+attribute vec3 a_p; attribute vec3 a_n; attribute vec2 a_t;
+uniform vec3 u_r0, u_r1, u_r2; uniform vec2 u_c, u_size; uniform float u_S, u_dc, u_flipY;
+varying vec3 v_n; varying vec3 v_p; varying vec2 v_t;
+void main() {
+  vec3 q = vec3(a_p.x, a_p.y * u_flipY, a_p.z);
+  vec3 p = vec3(dot(vec3(u_r0.x, u_r1.x, u_r2.x), q), dot(vec3(u_r0.y, u_r1.y, u_r2.y), q), dot(vec3(u_r0.z, u_r1.z, u_r2.z), q));
+  vec3 nn = vec3(a_n.x, a_n.y * u_flipY, a_n.z);
+  v_n = vec3(dot(vec3(u_r0.x, u_r1.x, u_r2.x), nn), dot(vec3(u_r0.y, u_r1.y, u_r2.y), nn), dot(vec3(u_r0.z, u_r1.z, u_r2.z), nn));
+  v_p = p; v_t = a_t;
+  float w = max(0.02, (p.z + u_dc) / u_dc);
+  vec2 o = vec2(p.x, -p.y) * 2.0 * u_S / u_size;
+  float zn = clamp((p.z + u_dc) / (u_dc + 4.0), 0.0, 1.0);
+  gl_Position = vec4((u_c * 2.0 - 1.0) * w + o, (zn * 2.0 - 1.0) * w, w);
+}`;
+const MESH_FRAG = `
+precision highp float;
+varying vec3 v_n; varying vec3 v_p; varying vec2 v_t;
+uniform sampler2D u_dtex, u_env, u_tex; uniform vec4 u_er;
+uniform vec3 u_col, u_ldir, u_lcol, u_rimc;
+uniform float u_metal, u_gloss, u_refl, u_envMode, u_emis, u_glass, u_lint, u_amb, u_rim, u_dc, u_texMode;
+vec4 unpre(vec4 c) { return c.a > 0.0001 ? vec4(c.rgb / c.a, c.a) : vec4(0.0); }
+vec3 studio(vec3 r, float rough) {
+  float y = r.y;
+  vec3 c = mix(vec3(0.1), vec3(0.95), smoothstep(-0.5, 0.9, y));
+  c += vec3(0.75) * smoothstep(0.55 - rough * 0.3, 1.0, dot(r, normalize(vec3(0.15, 0.25, -1.0))));
+  float w = 0.03 + rough * 0.25;
+  c += vec3(3.0) * smoothstep(1.0 - w - 0.04, 1.0 - w * 0.3, dot(r, normalize(vec3(-0.65, 0.55, -0.55))));
+  c += vec3(2.2, 2.1, 2.0) * smoothstep(1.0 - w - 0.06, 1.0 - w * 0.3, dot(r, normalize(vec3(0.75, 0.25, -0.45))));
+  c += vec3(1.2) * exp(-abs(y + 0.05) * (40.0 - rough * 30.0)) * 0.8;
+  return c;
+}
+void main() {
+  vec3 rd = normalize(v_p - vec3(0.0, 0.0, -u_dc));
+  vec3 n = normalize(v_n);
+  if (dot(n, rd) > 0.0) n = -n; // faces sem orientação consistente: ilumina os dois lados
+  vec3 base = u_col;
+  if (u_texMode > 1.5) {
+    vec4 m = u_texMode > 2.5 ? unpre(texture2D(u_tex, u_er.xy + u_er.zw * fract(v_t))) : unpre(texture2D(u_dtex, fract(v_t)));
+    base = mix(base, m.rgb, step(0.02, m.a));
+  }
+  vec3 v = -rd, L = normalize(u_ldir), H = normalize(L + v);
+  float diff = max(dot(n, L), 0.0);
+  float spec = pow(max(dot(n, H), 0.0), mix(6.0, 420.0, u_gloss)) * mix(0.3, 3.0, u_gloss);
+  float fres = pow(1.0 - max(dot(n, v), 0.0), 3.0);
+  vec3 r = reflect(rd, n);
+  vec3 env = studio(r, 1.0 - u_gloss);
+  if (u_envMode > 0.5) env = mix(env, unpre(texture2D(u_env, vec2(0.5 + r.x * 0.45, 0.5 - r.y * 0.45))).rgb * 1.6, 0.85);
+  vec3 c = base * (u_amb + diff * u_lint * u_lcol) * (1.0 - u_metal);
+  c += env * mix(vec3(0.04 + fres * 0.6), base, u_metal) * u_refl;
+  c += spec * u_lint * u_lcol * mix(vec3(1.0), base, u_metal);
+  c += u_rimc * fres * u_rim;
+  c += base * u_emis * (0.6 + 0.8 * fres);
+  float oa = mix(1.0, mix(0.35, 1.0, fres), u_glass);
+  gl_FragColor = vec4(clamp(c, 0.0, 1.0) * oa, oa);
+}`;
+const OVER = frag(`uniform sampler2D u_obj; uniform float u_comp;
+void main() { vec4 s = texture2D(u_tex, v_uv); vec4 o = texture2D(u_obj, v_uv); gl_FragColor = u_comp > 0.5 ? o : o + s * (1.0 - o.a); }`);
 
 const FONTS = ['900 Fpx Impact, "Arial Black", sans-serif', '900 Fpx "Arial Black", "Helvetica Neue", sans-serif', 'bold Fpx Georgia, "Times New Roman", serif', 'bold Fpx "Courier New", monospace', 'italic 900 Fpx "Arial Black", "Helvetica Neue", sans-serif', '200 Fpx "Helvetica Neue", Arial, sans-serif'];
 // [metal, brilho×, reflexo×, emissivo, vidro, cor fixa?]
@@ -161,12 +235,40 @@ function rotRows(rx, ry, rz) {
   return [0, 1, 2].map((j) => [R[0][j], R[1][j], R[2][j]]);
 }
 
+function lookParams(p, env, src) {
+  const mat = MATERIALS[(p.material | 0) || 1] || MATERIALS[1];
+  const la = rad(p.lightAngle ?? 40), lh = rad(p.lightHeight ?? 35);
+  return {
+    u_col: mat.color ? mat.color : rgb(p.color || [0.85, 0.87, 0.9]),
+    u_metal: mat.metal, u_gloss: Math.min(1, ((p.gloss ?? 70) / 100) * mat.gloss), u_refl: ((p.reflect ?? 80) / 100) * mat.refl,
+    u_envMode: (p.envMode | 0) === 2 ? 1 : 0, u_env: (p.envMode | 0) === 2 ? env.gl.blur(src, 6 * env.scale) : src,
+    u_emis: mat.emis || 0, u_glass: mat.glass || 0,
+    u_ldir: [Math.cos(lh) * Math.sin(la), Math.sin(lh), -Math.cos(lh) * Math.cos(la)], u_lcol: rgb(p.lightColor || [1, 1, 1]),
+    u_lint: p.lightInt ?? 1.2, u_amb: (p.ambient ?? 22) / 100, u_rimc: rgb(p.rimColor || [0.35, 0.6, 1]), u_rim: (p.rim ?? 40) / 100,
+  };
+}
+
+function renderModel(src, p, env, model, tm, dtex) {
+  const { gl } = env;
+  const t = env.t;
+  const R = rotRows(rad((p.rotX ?? 0) + (p.spinX || 0) * t), rad((p.rotY ?? 0) + (p.spinY || 0) * t), rad(p.rotZ ?? 0));
+  const obj = gl.mesh(`e3dm:${p.modelId}`, () => ({ data: model.geom, attribs: [['a_p', 3], ['a_n', 3], ['a_t', 2]] }), MESH_VERT, MESH_FRAG, {
+    ...lookParams(p, env, src),
+    u_r0: R[0], u_r1: R[1], u_r2: R[2], u_c: cuv(env, p.position || [0.5, 0.5]), u_size: [src.w, src.h],
+    u_S: Math.max(4, (p.objSize ?? 500) * env.scale), u_dc: p.persp ?? 4, u_flipY: 1,
+    u_texMode: tm, u_dtex: dtex, u_tex: src, u_er: env.rect,
+  }, src.w, src.h, { depth: true });
+  return gl.pass(OVER, { u_tex: src, u_obj: obj, u_comp: (p.composite | 0) === 2 ? 1 : 0 });
+}
+
 export default [
   {
     type: 'element3d', label: 'Element 3D', category: '3D', plugin: 'Element 3D (Video Copilot)',
     description: 'Objetos 3D de verdade: texto extrudado, logo/PNG da camada, cubo, esfera, toro, cilindro e cápsula, com materiais (cromo, ouro, vidro…), luz, reflexo e anel de réplicas.',
     params: [
-      sel('object', 'Objeto', ['Texto 3D', 'Cubo', 'Esfera', 'Toro', 'Cilindro', 'Cápsula', 'Camada extrudada (logo / PNG)'], 1),
+      sel('object', 'Objeto', ['Texto 3D', 'Cubo', 'Esfera', 'Toro', 'Cilindro', 'Cápsula', 'Camada extrudada (logo / PNG)', 'Modelo 3D importado (OBJ / GLB)'], 1),
+      { key: 'modelId', label: 'Modelo', kind: 'hidden', default: '' }, { key: 'texId', label: 'Textura', kind: 'hidden', default: '' },
+      sel('texMode', 'Textura (mapa difuso)', ['Só a cor do material', 'Textura importada (imagem)', 'Clipe / vídeo da camada'], 1),
       { key: 'text', label: 'Texto', kind: 'text', default: 'MOTION' },
       sel('font', 'Fonte', ['Impact', 'Arial Black', 'Georgia', 'Courier', 'Itálico pesado', 'Fina'], 1),
       num('extrude', 'Extrusão', 0.3, 0, 3, 0.01), num('bevel', 'Chanfro (bevel)', 0.025, 0, 0.25, 0.005),
@@ -185,7 +287,15 @@ export default [
     ],
     render: (src, p, env) => {
       const { gl } = env;
-      const kind = (p.object | 0) || 1;
+      let kind = (p.object | 0) || 1;
+      const tm = (p.texMode | 0) || 1;
+      let dtex = src;
+      if (tm === 2) { const u = textureUrl(p.texId); const im = u && getImage(u); if (im?.complete && im.naturalWidth) dtex = gl.upload(im); }
+      if (kind === 8) {
+        const model = getModel(p.modelId);
+        if (model) return renderModel(src, p, env, model, tm === 2 && dtex === src ? 1 : tm, dtex);
+        kind = 2; // ainda carregando / sem modelo: mostra um cubo no lugar
+      }
       const k = [0, 0, 1, 2, 3, 4, 5, 6][kind];
       let maskT = src, mw = 1, A = (env.rect[3] * src.h) / (env.rect[2] * src.w), mr = env.rect;
       if (k === 0) {
@@ -216,6 +326,8 @@ export default [
         u_ldir: [Math.cos(lh) * Math.sin(la), Math.sin(lh), -Math.cos(lh) * Math.cos(la)], u_lcol: rgb(p.lightColor || [1, 1, 1]),
         u_lint: p.lightInt ?? 1.2, u_amb: (p.ambient ?? 22) / 100, u_rimc: rgb(p.rimColor || [0.35, 0.6, 1]), u_rim: (p.rim ?? 40) / 100,
         u_comp: (p.composite | 0) === 2 || k === 6 ? 1 : 0,
+        u_brad: (k === 0 || k === 6 ? 0.5 * Math.hypot(mw, mw * A, Math.max(0.002, p.extrude ?? 0.3)) + 0.05 : 0.95) + ((p.count ?? 1) > 1 ? (p.ring ?? 1.4) : 0),
+        u_texMode: tm === 2 && dtex === src ? 1 : tm, u_dtex: dtex, u_er: env.rect,
       });
     },
   },

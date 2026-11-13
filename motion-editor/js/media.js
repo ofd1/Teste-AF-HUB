@@ -259,8 +259,18 @@ export function prepare(project, t, { exact = false, playing = false } = {}) {
         if (!v.paused) v.pause();
         if (Math.abs(v.currentTime - fr.a) > 0.04) seek(v, fr.a);
       } else {
-        if (Math.abs(v.playbackRate - rate) > 0.01) v.playbackRate = rate;
-        if (Math.abs(v.currentTime - fr.a) > 0.25 * Math.max(1, rate)) v.currentTime = fr.a;
+        // sincronia suave (como um player): pequena diferença → ajusta a velocidade do vídeo uns % até alcançar o
+        // relógio; só pula (busca) se estiver muito longe. Antes qualquer atraso > 0,25 s virava um salto — o clipe
+        // "voltava quadros" e travava quando um efeito pesado atrasava o decodificador.
+        const drift = v.currentTime - fr.a; // > 0: vídeo adiantado
+        if (v.paused || Math.abs(drift) > 1.0 * Math.max(1, rate)) {
+          if (Math.abs(drift) > 0.08) v.currentTime = fr.a;
+          v.playbackRate = rate;
+        } else {
+          const corr = Math.abs(drift) < 0.03 ? 0 : Math.max(-0.15, Math.min(0.15, drift * 0.9));
+          const want = Math.max(0.0625, rate * (1 - corr));
+          if (Math.abs(v.playbackRate - want) > 0.005) v.playbackRate = want;
+        }
         if (v.paused) v.play().catch(() => {});
       }
       e.frame = { a: fr.a, b: null, f: 0 };
@@ -275,6 +285,12 @@ function snapshot(v, c) {
   if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
   c.getContext('2d').drawImage(v, 0, 0, w, h);
   return c;
+}
+
+/** Há vídeo tocando "ao vivo" (sem cache de quadros) no tempo t? Durante o play a prévia não mistura quadros do
+ *  cache com o vídeo ao vivo (o ao vivo fica alguns ms atrás e a mistura parecia o clipe voltando quadros). */
+export function liveVideoAt(project, t) {
+  return activeVideos(project, t).some(({ l }) => !cacheReady(l));
 }
 
 export function pauseAll() {
