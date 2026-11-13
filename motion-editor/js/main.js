@@ -185,6 +185,7 @@ function drawOverlay() {
 }
 
 let lastFrame = performance.now();
+let shownKey = ''; // quadro que está na tela agora (tempo|qualidade|modo)
 const playClock = { t0: 0, wall0: 0, last: 0 };
 function loop(now) {
   lastFrame = now;
@@ -213,10 +214,16 @@ function loop(now) {
     const live = store.playing && liveVideoAt(viewProject(), fi / fps);
     const cached = live ? null : (store.playing && frameCacheGet(`${fi}|${quality}|hq`)) || frameCacheGet(key);
     const tq = store.playing ? fi / fps : store.time;
-    const hold = !cached && !framesDrawable(viewProject(), tq) && performance.now() - (holdSince ||= performance.now()) < 900;
-    if (cached) {
+    // tocando: a tela atualiza a 60–120 Hz, mas o projeto tem 24–60 quadros/s — o mesmo quadro era renderizado de
+    // novo a cada atualização da tela (2 a 4 vezes). Agora só renderiza quando o quadro muda (ou algo foi editado).
+    const same = store.playing && !dirty && key === shownKey;
+    const hold = !same && !cached && !framesDrawable(viewProject(), tq) && performance.now() - (holdSince ||= performance.now()) < 900;
+    if (same) {
+      // nada a fazer: o quadro na tela já é este
+    } else if (cached) {
       holdSince = 0;
       ctx.drawImage(cached, 0, 0, view.width, view.height);
+      shownKey = key;
     } else if (hold) {
       // vídeo ainda buscando/decodificando: segura o último quadro bom (como o AE) — nunca pisca preto
       requestAnimationFrame(() => { dirty = true; });
@@ -231,6 +238,7 @@ function loop(now) {
       const ms = performance.now() - r0;
       if (ok && glLosses === lost0 && !glLost()) {
         ctx.drawImage(backBuf, 0, 0, view.width, view.height);
+        shownKey = draftK < 1 ? '' : key;
         if (draftK < 1) { clearTimeout(hqTimer); hqTimer = setTimeout(() => { dirty = true; }, 400); }
         else {
           if (!store.playing) hqMs = hqMs ? hqMs * 0.5 + ms * 0.5 : ms;
@@ -284,7 +292,9 @@ stageEmpty.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('cli
 store.on((kind) => {
   if (kind === 'structure') stageEmpty.hidden = !!store.project.layers.length || !!store.scope?.length;
   if (kind === 'structure') for (const l of flatLayers(store.project.layers)) if (l.type === 'text') ensureFont(l.props.fontFamily);
-  dirty = true;
+  // tocando, o próprio loop avança o tempo a cada atualização da tela: quem decide se precisa de quadro novo é o
+  // número do quadro (shownKey), senão o mesmo quadro era renderizado 2–4× (tela de 60–120 Hz, projeto de 30 fps)
+  if (!(kind === 'time' && store.playing)) dirty = true;
   if (kind !== 'time' && kind !== 'selection' && kind !== 'keys') frameCacheClear();
   if (kind !== 'selection' && !store.playing) lastEdit = performance.now();
   if (kind === 'structure' || kind === 'change') scheduleCaches();
