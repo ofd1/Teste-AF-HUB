@@ -68,14 +68,14 @@ function pick(dets, prev, hint) {
  * hintLocal = ponto no conteúdo da camada para escolher o rosto (ou o último rosto rastreado).
  * Devolve amostras cruas no espaço da camada: [{ t, lx, ly, lsize, angle, ok }].
  */
-export async function analyzeFace({ layer, project, times, hintLocal, onFrame, isCancelled, detailed = true }) {
+export async function analyzeFace({ layer, project, times, hintLocal, onFrame, isCancelled, detailed = true, onMode }) {
   let lm = null;
   // modelo que não carrega (rede/WASM) não pode prender o painel: desiste em 25 s com erro claro
   const limit = (pr) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error('o modelo de rosto não carregou (sem internet na 1ª vez?)')), 25000))]);
   if (detailed) { try { lm = await limit(ensureFaceLandmarker()); } catch { lm = null; } }
   const det = lm ? null : await limit(ensureFaceModel());
   setExporting(true);
-  const fs = await frameSource(layer.props.src);
+  const fs = await frameSource(layer.props.src, { onMode });
   try {
     const vw = fs.w, vh = fs.h;
     const aw = Math.min(AW, vw), ah = Math.round((aw * vh) / vw);

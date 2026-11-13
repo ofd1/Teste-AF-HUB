@@ -35,7 +35,8 @@ export class TrackerPanel {
     this.track = layer.tracks.find((t) => t.kind === kind) || null;
     this.render();
     if (!this.track) await this.newTrack(kind);
-    if (kind === 'face') ensureFaceModel().catch(() => {});
+    // carrega o modelo já ao abrir (o 1º uso não trava o ▶▶)
+    if (kind === 'face') { ensureFaceLandmarker().catch(() => {}); ensureFaceModel().catch(() => {}); }
   }
   close() { this.cancel = true; this.el.hidden = true; releaseAnalysisVideo(); this.cb.redraw(); }
 
@@ -137,11 +138,13 @@ export class TrackerPanel {
     const st = this.el.querySelector('.trk-status');
     if (!st) return;
     const s = this.track?.samples || [];
+    if (!s.length && this.busy) { st.textContent = this.track?.kind === 'face' ? 'Carregando o modelo de rosto e abrindo o vídeo…' : 'Abrindo o vídeo…'; return; }
     if (!s.length) { st.textContent = this.track?.kind === 'face' ? 'Clique em ▶▶ para analisar o rosto a partir do playhead.' : 'Defina o Track Point e clique em ▶▶.'; return; }
     const ts = s.map((x) => x.t), a = Math.min(...ts), b = Math.max(...ts);
     const cur = this.near(this.store.time);
     const conf = cur && Math.abs(cur.t - this.store.time) < 0.6 / this.fps ? ` · confiança ${Math.round((cur.conf ?? 1) * 100)}%${cur.ok === false ? ' (rosto perdido)' : ''}` : '';
-    st.textContent = `${this.busy ? 'Analisando… ' : ''}${s.length} quadros (${a.toFixed(2)}s – ${b.toFixed(2)}s)${conf}`;
+    const RM = { hw: 'GPU', sw: 'software', player: 'player de vídeo' };
+    st.textContent = `${this.busy ? `Analisando${this.readMode ? ` (leitura: ${RM[this.readMode]})` : ' — abrindo o vídeo…'} ` : ''}${s.length} quadros (${a.toFixed(2)}s – ${b.toFixed(2)}s)${conf}`;
   }
 
   async onChange(e) {
@@ -257,7 +260,7 @@ export class TrackerPanel {
     if (times.length < 2 && tr.kind === 'point') return;
     const seed = this.near(t0);
     if (tr.kind === 'point' && !seed) { toast('Defina o Track Point primeiro (Mover Track Point).', 'warn'); return; }
-    this.busy = true; this.cancel = false; this.render();
+    this.busy = true; this.cancel = false; this.readMode = null; this.render();
     const run = this.run = {};
     let lastT = t0, lastUI = 0;
     window.__mfAnalyzing = true;
@@ -271,11 +274,11 @@ export class TrackerPanel {
     };
     try {
       if (tr.kind === 'point') {
-        await analyzePoint({ layer: l, project: this.store.project, times, start: seed, featureK: tr.feature ?? 1, searchK: tr.search ?? 1, onFrame, isCancelled: () => this.cancel });
+        await analyzePoint({ layer: l, project: this.store.project, times, start: seed, featureK: tr.feature ?? 1, searchK: tr.search ?? 1, onFrame, isCancelled: () => this.cancel, onMode: (m) => { this.readMode = m; this.updateStatus(); } });
       } else {
         let hint = seed && Math.abs(seed.t - t0) < 2 / fps && seed.ok !== false ? seed : null;
         if (!hint && tr.attach) hint = { lx: tr.attach.lx, ly: tr.attach.ly };
-        await analyzeFace({ layer: l, project: this.store.project, times, hintLocal: hint, onFrame, isCancelled: () => this.cancel, detailed: tr.detailed !== false });
+        await analyzeFace({ layer: l, project: this.store.project, times, hintLocal: hint, onFrame, isCancelled: () => this.cancel, detailed: tr.detailed !== false, onMode: (m) => { this.readMode = m; this.updateStatus(); } });
       }
       this.cb.setTime(lastT);
     } catch (e) {

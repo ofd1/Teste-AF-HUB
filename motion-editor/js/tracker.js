@@ -12,6 +12,7 @@ export function loadVideo(src) {
     const v = document.createElement('video');
     v.muted = true; v.playsInline = true; v.preload = 'auto'; v.crossOrigin = 'anonymous';
     v.onloadeddata = () => res(v);
+    setTimeout(() => { if (v.readyState >= 1) res(v); }, 5000);
     v.onerror = () => rej(new Error('não foi possível abrir o vídeo'));
     v.src = src;
   });
@@ -35,36 +36,67 @@ export function seek(v, t) {
  * Fonte de quadros para análise: lê o vídeo em ordem com o decodificador de hardware (WebCodecs, como a exportação)
  * — bem mais rápido e leve que "pular" o <video> a cada quadro. Sem suporte, cai na busca normal.
  */
-export async function frameSource(src) {
-  const v = await analysisVideo(src);
-  let rd = null, blob = null, SR = null, triedSoft = false;
-  try {
-    blob = await (await fetch(src)).blob();
-    SR = (await import('./seqreader.js')).SeqReader;
-    rd = await SR.open(blob);
-  } catch { rd = null; }
-  return {
-    v, w: v.videoWidth || 1080, h: v.videoHeight || 1920, fast: !!rd,
-    async draw(ctx, st, w, h) {
-      if (rd) {
-        // vigia: se o decodificador de hardware não entregar o quadro em 2,5 s (driver/codec), larga e usa a busca normal
-        try {
-          const c = await Promise.race([rd.frameAt(st), new Promise((r) => setTimeout(() => r('timeout'), 2500))]);
-          if (c && c !== 'timeout') { ctx.drawImage(c, 0, 0, w, h); return; }
-        } catch { /* cai na busca */ }
-        rd.close(); rd = null;
-        // decodificador de hardware travou (comum em alguns drivers no Windows): tenta o decodificador por software
-        if (!triedSoft && SR && blob) {
-          triedSoft = true;
-          try { rd = await SR.open(blob, { soft: true }); } catch { rd = null; }
-          if (rd) return this.draw(ctx, st, w, h);
-        }
-      }
-      await Promise.race([seek(v, st), new Promise((r) => setTimeout(r, 4000))]);
-      ctx.drawImage(v, 0, 0, w, h);
-    },
-    close() { rd?.close(); rd = null; },
+export async function frameSource(src, { onMode } = {}) {
+  const T = (pr, ms, v = 'timeout') => Promise.race([pr, new Promise((r) => setTimeout(() => r(v), ms))]);
+  const v = await T(analysisVideo(src), 8000, null);
+  if (!v) throw new Error('não consegui abrir o vídeo para analisar');
+  // no documento (escondido): alguns navegadores/drivers só decodificam e avisam quadros de vídeos que estão na página
+  if (!v.isConnected) { v.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1'; document.body.appendChild(v); }
+  let blob = null, SR = null;
+  try { blob = await T(fetch(src).then((r) => r.blob()), 6000, null); SR = (await import('./seqreader.js')).SeqReader; } catch { SR = null; }
+  const fps = 30;
+  // modo "player": toca o vídeo e para no quadro certo (requestVideoFrameCallback) — funciona em qualquer PC onde a prévia toca
+  const playTo = (st) => new Promise((res) => {
+    const done = () => { try { v.pause(); } catch { /* ok */ } clearTimeout(to); res(true); };
+    const to = setTimeout(() => res(false), 3000);
+    if (!('requestVideoFrameCallback' in v) || st < v.currentTime - 0.5 / fps || st > v.currentTime + 2) {
+      seek(v, st).then(done);
+      return;
+    }
+    if (Math.abs(v.currentTime - st) < 0.5 / fps) { done(); return; }
+    const step = (_now, meta) => { if (meta.mediaTime >= st - 0.6 / fps) done(); else v.requestVideoFrameCallback(step); };
+    v.requestVideoFrameCallback(step);
+    v.play().catch(() => seek(v, st).then(done));
+  });
+  const modes = {
+    hw: async () => (SR && blob ? T(SR.open(blob), 5000, null) : null),
+    sw: async () => (SR && blob ? T(SR.open(blob, { soft: true }), 5000, null) : null),
   };
+  let mode = null, rd = null;
+  const api = {
+    v, w: v.videoWidth || 1080, h: v.videoHeight || 1920, get mode() { return mode; },
+    async draw(ctx, st, w, h) {
+      // 1º quadro: testa os leitores na ordem (hardware → software → player) e fica com o que responder
+      while (true) {
+        if (!mode) {
+          for (const m of ['hw', 'sw']) {
+            if (rd) { rd.close(); rd = null; }
+            rd = await modes[m]().catch(() => null);
+            if (rd && rd !== 'timeout') {
+              const c = await T(rd.frameAt(st), 3000).catch(() => null);
+              if (c && c !== 'timeout') { mode = m; onMode?.(m); ctx.drawImage(c, 0, 0, w, h); return; }
+              rd.close?.();
+            }
+            rd = null;
+          }
+          mode = 'player'; onMode?.(mode);
+        }
+        if (mode === 'player') {
+          await playTo(st);
+          ctx.drawImage(v, 0, 0, w, h);
+          return;
+        }
+        const c = await T(rd.frameAt(st), 2500).catch(() => null);
+        if (c && c !== 'timeout') { ctx.drawImage(c, 0, 0, w, h); return; }
+        // travou no meio: passa para o próximo método
+        rd.close(); rd = null;
+        if (mode === 'hw') { rd = await modes.sw().catch(() => null); if (rd && rd !== 'timeout') { mode = 'sw'; onMode?.(mode); continue; } rd = null; }
+        mode = 'player'; onMode?.(mode);
+      }
+    },
+    close() { rd?.close?.(); rd = null; try { v.pause(); } catch { /* ok */ } },
+  };
+  return api;
 }
 /** Devolve o controle ao navegador (a tela não congela durante a análise). */
 export const yieldUI = () => new Promise((r) => setTimeout(r, 0));
@@ -189,7 +221,7 @@ export async function analysisVideo(src) {
 }
 export function releaseAnalysisVideo() {
   if (!cachedVid) return;
-  cachedVid.v.removeAttribute('src'); cachedVid.v.load();
+  cachedVid.v.removeAttribute('src'); cachedVid.v.load(); cachedVid.v.remove();
   cachedVid = null;
 }
 
@@ -198,9 +230,9 @@ export function releaseAnalysisVideo() {
  * espaço do conteúdo da camada (px, centro = 0). Devolve [{ t, lx, ly, conf }] e chama onFrame a cada quadro.
  * featureK = tamanho da região do modelo (1 = padrão), searchK = tamanho da busca.
  */
-export async function analyzePoint({ layer, project, times, start, featureK = 1, searchK = 1, onFrame, isCancelled }) {
+export async function analyzePoint({ layer, project, times, start, featureK = 1, searchK = 1, onFrame, isCancelled, onMode }) {
   setExporting(true);
-  const fs = await frameSource(layer.props.src);
+  const fs = await frameSource(layer.props.src, { onMode });
   try {
     const vw = fs.w, vh = fs.h;
     const aw = Math.min(AW, vw), ah = Math.round((aw * vh) / vw);
