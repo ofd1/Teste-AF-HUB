@@ -404,21 +404,26 @@ export class GLEngine {
   copy(src, w, h, alpha = 1) { return this.pass(COPY, { u_tex: src, u_alpha: alpha }, w, h); }
 
   /** Desfoque gaussiano separável (sigma em px). dims: 1 ambos, 2 horizontal, 3 vertical. */
-  blur(src, sigma, dims = 1) {
+  blur(src, sigma, dims = 1, low = false, pyr = null) {
     if (sigma < 0.3) return src;
     // reduz em etapas de 2× (filtro passa-baixa correto), desfoca na escala reduzida e amplia em etapas
     let f = 1;
     while (sigma / f > 8 && f < 16) f *= 2;
-    const chain = [src];
+    // pyr: vários desfoques da MESMA textura reaproveitam as reduções já feitas (resultado idêntico)
+    const chain = pyr || [src];
+    if (chain[0] !== src) { chain.length = 0; chain.push(src); }
     let t = src;
-    for (let k = 2; k <= f; k *= 2) {
-      t = this.copy(t, Math.max(1, Math.round(src.w / k)), Math.max(1, Math.round(src.h / k)));
-      chain.push(t);
+    for (let k = 2, i = 1; k <= f; k *= 2, i++) {
+      if (!chain[i]) chain[i] = this.copy(t, Math.max(1, Math.round(src.w / k)), Math.max(1, Math.round(src.h / k)));
+      t = chain[i];
     }
+    const top = Math.log2(f) | 0;
     const s = sigma / f;
     if (dims !== 3) t = this.pass(BLUR, { u_tex: t, u_dir: [1, 0], u_sigma: s });
     if (dims !== 2) t = this.pass(BLUR, { u_tex: t, u_dir: [0, 1], u_sigma: s });
-    for (let i = chain.length - 2; i >= 0; i--) {
+    // low: devolve na metade da resolução (sem a última ampliação 2×). Quem lê a textura por coordenada normalizada
+    // (v_uv) com filtro bilinear recebe o mesmo valor da ampliação bilinear — e a passada mais cara (tela cheia) some.
+    for (let i = top - 1; i >= (low ? 1 : 0); i--) {
       t = this.copy(t, chain[i].w, chain[i].h);
       if (i > 0) {
         // suaviza as etapas intermediárias (a última ampliação 2× bilinear já fica suave)

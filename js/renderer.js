@@ -771,6 +771,7 @@ export function renderLayer(ctx, layer, t, scale, extra, fps = 30) {
     drawTimeSlices(ctx, layer, t, scale, extra, evalParams(ts, layerTime(layer, t)), m, fps);
   } else if (m.opacity > 0.001 || mb) {
     const img = renderLayerImage(layer, t, scale, extra);
+    extra?.beforeDraw?.();
     const mp = mb ? evalParams(mb, layerTime(layer, t)) : null;
     if (mp && mp.amount > 0) {
       const n = Math.max(2, Math.round(mp.samples));
@@ -931,6 +932,11 @@ function drawListItem(ctx, layers, i, t, scale, fps, onAdjust) {
   }
 }
 
+/** Camada de ajuste sem efeitos que desenham a camada várias vezes (eco, motion blur, fatias/tempo): pode ler a tela direto. */
+function simpleAdjust(l) {
+  return !l.threeD && !l.effects.some((fx) => fx.enabled && (['echo', 'motionBlur', 'timeSlice', 'sTimeSlice', 'bccTemporalBlur', 'wideTime'].includes(fx.type) || EFFECT_MAP[fx.type]?.channelTime));
+}
+
 export function renderFrame(ctx, proj, t, scale = 1, opts = {}) {
   project = proj;
   exprContext.fps = proj.fps || 30; exprContext.W = proj.width; exprContext.H = proj.height;
@@ -944,18 +950,30 @@ export function renderFrame(ctx, proj, t, scale = 1, opts = {}) {
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   indexLayers(proj.layers);
   drawLayerList(ctx, proj.layers, t, scale, proj.fps, (l) => {
-    {
-      if (!snapshotCanvas) snapshotCanvas = makeCanvas(ctx.canvas.width, ctx.canvas.height);
-      snapshotCanvas.width = ctx.canvas.width;
-      snapshotCanvas.height = ctx.canvas.height;
-      snapshotCanvas.getContext('2d').drawImage(ctx.canvas, 0, 0);
-      const op = layerTransform(l, t).opacity;
+    const op = layerTransform(l, t).opacity;
+    const blank = () => {
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      if (op < 1) { ctx.globalAlpha = 1 - op; ctx.drawImage(snapshotCanvas, 0, 0); ctx.globalAlpha = 1; }
-      renderLayer(ctx, l, t, scale, { snapshot: snapshotCanvas }, proj.fps);
+      ctx.restore();
+    };
+    if (op >= 1 && simpleAdjust(l)) {
+      // caminho rápido: a camada de ajuste lê a composição direto da tela (sem a cópia de tela cheia para o
+      // snapshot) e a tela só é limpa depois que a imagem com os efeitos ficou pronta
+      renderLayer(ctx, l, t, scale, { snapshot: ctx.canvas, beforeDraw: blank }, proj.fps);
+      return;
     }
+    const W = ctx.canvas.width, H = ctx.canvas.height;
+    if (!snapshotCanvas) snapshotCanvas = makeCanvas(W, H);
+    // só redimensiona quando muda (atribuir width/height recria o buffer da tela a cada quadro)
+    if (snapshotCanvas.width !== W || snapshotCanvas.height !== H) { snapshotCanvas.width = W; snapshotCanvas.height = H; }
+    const sx = snapshotCanvas.getContext('2d');
+    sx.clearRect(0, 0, W, H);
+    sx.drawImage(ctx.canvas, 0, 0);
+    blank();
+    if (op < 1) { ctx.globalAlpha = 1 - op; ctx.drawImage(snapshotCanvas, 0, 0); ctx.globalAlpha = 1; }
+    renderLayer(ctx, l, t, scale, { snapshot: snapshotCanvas }, proj.fps);
   });
   ctx.restore();
   trimCanvases();
