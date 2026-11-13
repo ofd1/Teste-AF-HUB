@@ -94,7 +94,7 @@ export class TrackerPanel {
       <label class="trk-row"><span>Aplicar como:</span><select data-f="applyAs"><option value="camera" ${tr?.applyAs !== 'follow' ? 'selected' : ''}>🎥 Câmera segue o ponto</option><option value="follow" ${tr?.applyAs === 'follow' ? 'selected' : ''}>Outra camada segue (Edit Target)</option></select></label>
       <div class="trk-row"><span>Motion Target:</span><b class="trk-target">${esc(targetName)}</b></div>
       <div class="trk-row trk-two"><button data-a="target">Edit Target…</button><button data-a="options">Options…</button></div>
-      <div class="trk-row trk-two"><button data-a="setpoint">Mover Track Point</button><span class="muted small">${isFace ? 'toque no ponto do rosto a seguir' : 'toque no preview'}</span></div>
+      <div class="trk-row trk-two"><button data-a="setpoint">Mover Track Point</button><span class="muted small">${isFace ? 'ou arraste o ponto amarelo no rosto' : 'ou arraste a caixa na prévia (cantos = tamanho)'}</span></div>
       <div class="trk-row trk-analyze"><span>Analyze:</span>
         <button data-a="an" data-d="-all" title="Analisar para trás até o início">◀◀</button>
         <button data-a="an" data-d="-1" title="Um quadro para trás">◀</button>
@@ -261,11 +261,13 @@ export class TrackerPanel {
     const run = this.run = {};
     let lastT = t0, lastUI = 0;
     window.__mfAnalyzing = true;
-    const onFrame = (s) => {
+    const onFrame = (s, _f, frame) => {
       this.upsert(s); lastT = s.t;
-      // a prévia acompanha só ~4×/s (antes re-renderizava todos os efeitos a cada 2 quadros e travava)
+      // como o painel Layer do AE: mostra o próprio quadro analisado com as caixas andando, ao vivo (não re-renderiza
+      // a composição com todos os efeitos — isso é que deixava lento)
+      if (frame) this.cb.frame?.(frame, l, s.t);
       const now = performance.now();
-      if (now - lastUI > 250 || times.length < 4) { lastUI = now; this.cb.setTime(s.t); this.cb.redraw(); this.updateStatus(); }
+      if (now - lastUI > 120 || times.length < 4) { lastUI = now; if (frame) this.store.emit('time'); else this.cb.setTime(s.t); this.updateStatus(); }
     };
     try {
       if (tr.kind === 'point') {
@@ -341,6 +343,60 @@ export class TrackerPanel {
   }
 
   /** Desenha o rastro no preview (como no AE): caminho com pontos por quadro e a caixa no quadro atual. */
+  /** Geometria da caixa atual em px da composição: centro, Feature (R) e Search (S) — iguais às do drawOverlay. */
+  boxAt(t) {
+    const l = this.layer, tr = this.track, cur = this.near(t);
+    if (!cur) return null;
+    const [x, y] = localToComp(l, t, cur.lx, cur.ly);
+    const m = Math.abs(localToComp(l, t, cur.lx + 1, cur.ly)[0] - x) || 1;
+    const vw = l.props.width || this.store.project.width;
+    const R = (vw / 28) * (tr.feature ?? 1) * m, S = R + (vw / 12) * (tr.search ?? 1) * m;
+    return { x, y, m, R, S, cur, vw };
+  }
+  /** Toque na prévia com o tracker aberto: o que foi pego? (mover caixa, cantos das regiões, ponto do rosto) */
+  hit(x, y, k) {
+    if (this.el.hidden || !this.layer || !this.track || this.busy) return null;
+    const t = this.snap(this.store.time), tr = this.track, l = this.layer;
+    if (t < l.inPoint - 1e-6 || t > l.outPoint) return null;
+    const tol = 14 / k; // ~14 px de tela
+    if (tr.kind === 'face') {
+      // ponto a seguir: arrasta para qualquer lugar do rosto (vira parte + deslocamento, como o Attach Point)
+      const b = this.boxAt(t);
+      if (!b) return null;
+      const half = (b.cur.lsize || 100) * b.m * 0.7;
+      if (Math.abs(x - b.x) < half && Math.abs(y - b.y) < half * 1.3) return { mode: 'attach', t };
+      return null;
+    }
+    const b = this.boxAt(t);
+    if (!b) return { mode: 'move', t, dx: 0, dy: 0 }; // sem ponto ainda: o toque cria o Track Point
+    const near = (cx, cy) => Math.abs(x - cx) < tol && Math.abs(y - cy) < tol;
+    for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      if (near(b.x + sx * b.R, b.y + sy * b.R)) return { mode: 'feature', t, b };
+      if (near(b.x + sx * b.S, b.y + sy * b.S)) return { mode: 'search', t, b };
+    }
+    if (Math.abs(x - b.x) < b.S && Math.abs(y - b.y) < b.S) return { mode: 'move', t, dx: x - b.x, dy: y - b.y };
+    return null;
+  }
+  drag(h, x, y) {
+    const tr = this.track, l = this.layer;
+    if (h.mode === 'move') {
+      // como no AE: mover a caixa num quadro define o ponto rastreado nesse quadro
+      this.upsert({ t: h.t, ...compToLocal(l, h.t, x - h.dx, y - h.dy), conf: 1 });
+    } else if (h.mode === 'feature') {
+      const half = Math.max(Math.abs(x - h.b.x), Math.abs(y - h.b.y));
+      tr.feature = Math.max(0.3, Math.min(4, half / ((h.b.vw / 28) * h.b.m)));
+    } else if (h.mode === 'search') {
+      const R = (h.b.vw / 28) * (tr.feature ?? 1) * h.b.m;
+      const half = Math.max(Math.abs(x - h.b.x), Math.abs(y - h.b.y));
+      tr.search = Math.max(0.3, Math.min(6, (half - R) / ((h.b.vw / 12) * h.b.m)));
+    } else if (h.mode === 'attach') {
+      tr.attach = { t: h.t, ...compToLocal(l, h.t, x, y) };
+      this.fitAttach();
+    }
+    this.updateStatus();
+  }
+  endDrag() { this.store.commit('change'); this.render(); }
+
   drawOverlay(octx, k, dpr) {
     if (this.el.hidden || !this.layer || !this.track) return;
     const l = this.layer, tr = this.track, t = this.store.time;
@@ -385,6 +441,8 @@ export class TrackerPanel {
         octx.strokeRect(-R, -R, R * 2, R * 2); // Feature Region
         octx.setLineDash([4 * dpr, 3 * dpr]); octx.strokeRect(-S, -S, S * 2, S * 2); octx.setLineDash([]); // Search Region
         octx.beginPath(); octx.moveTo(-4 * dpr, 0); octx.lineTo(4 * dpr, 0); octx.moveTo(0, -4 * dpr); octx.lineTo(0, 4 * dpr); octx.stroke(); // Attach Point
+        // alças nos cantos (arraste para mudar o tamanho das regiões, como no AE)
+        if (!this.busy) { octx.fillStyle = octx.strokeStyle; const hs = 3 * dpr; for (const r of [R, S]) for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) octx.fillRect(sx * r - hs, sy * r - hs, hs * 2, hs * 2); }
       }
     }
     octx.restore();

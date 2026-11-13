@@ -127,7 +127,7 @@ export async function analyzeFace({ layer, project, times, hintLocal, onFrame, i
       const P = prev || { cx: aw / 2, cy: ah / 2, size: aw / 4, angle: 0 };
       Object.assign(smp, { lx: (P.cx / aw) * w - w / 2, ly: (P.cy / ah) * h - h / 2, lsize: (P.size / aw) * w, angle: P.angle });
       out.push(smp);
-      onFrame?.(smp, (i + 1) / times.length);
+      onFrame?.(smp, (i + 1) / times.length, c);
       await yieldUI();
     }
     return out;

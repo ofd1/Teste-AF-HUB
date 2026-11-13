@@ -67,6 +67,35 @@ export const WATERMARKS = [
     },
   },
   {
+    id: 'wm-texto-brilho', name: 'Outro · texto com brilho (Edit 7)', dur: 3.2, src: 'final da Edit 7',
+    fields: [['text', 'Texto', 'YOU <3']],
+    build(P, o, t0, d) {
+      const W = P.width, cx = W / 2, cy = P.height / 2;
+      const bg = place(LAYER_FACTORIES.solid(P), cx, cy); bg.name = 'Outro · fundo'; bg.props.fill = '#000000';
+      bg.transform.opacity = K([[0, 0, 'easeOut'], [0.25, 100]], t0);
+      const tx = place(LAYER_FACTORIES.text(P), cx, cy); tx.name = 'Outro · texto'; Object.assign(tx.props, { text: o.text || 'YOU <3', color: '#ffffff', fontSize: Math.round(W / 11), fontWeight: 800, align: 'center', fontFamily: '"Arial Black", Impact, sans-serif' });
+      tx.transform.rotation.value = -6;
+      tx.transform.opacity = K([[0.15, 0, 'easeOut'], [0.5, 100], [d - 1.4, 100, 'easeIn'], [d, 0]], t0);
+      tx.transform.scale = K([[0.15, [92, 92], 'expoOut'], [0.7, [100, 100]], [d, [104, 104]]], t0);
+      tx.effects.push(fx('glow', { threshold: 20, radius: 40, intensity: 1.6 }, t0));
+      tx.effects.push(fx('blur', { radius: [[0.15, 16, 'expoOut'], [0.6, 0], [d - 1.2, 0, 'easeIn'], [d, 14]] }, t0));
+      return [tx, bg];
+    },
+  },
+  {
+    id: 'wm-assinatura', name: 'Marca d’água pequena (assinatura no meio)', dur: 0, full: true, src: 'todas as edits',
+    fields: [['text', '@ / assinatura', '@seuperfil'], ['size', 'Tamanho %', 100, [40, 250]], ['opacity', 'Opacidade %', 70, [10, 100]]],
+    build(P, o, t0, d) {
+      const W = P.width;
+      const tx = place(LAYER_FACTORIES.text(P), W / 2, P.height * 0.6); tx.name = `Assinatura · ${o.text || ''}`;
+      Object.assign(tx.props, { text: o.text || '@seuperfil', color: '#ffffff', fontSize: Math.round((W / 26) * ((+o.size || 100) / 100)), fontWeight: 800, align: 'center', fontFamily: '"Arial Black", Impact, sans-serif' });
+      tx.transform.rotation.value = -4;
+      tx.transform.opacity.value = +o.opacity || 70;
+      tx.effects.push(fx('dropShadow', { opacity: 60, distance: 2, softness: 4 }, t0));
+      return [tx];
+    },
+  },
+  {
     id: 'wm-full3d', name: 'Marca d’água 3D “FULL” (textura dos clipes)', dur: 0, full: true, src: 'edits (marca no meio)',
     fields: [['text', 'Texto', 'FULL'], ['fill', 'Preenchimento', 1, ['Clipes (textura)', 'Branco liso (edit 2)']], ['material', 'Material', 1, MATERIAL_NAMES], ['size', 'Tamanho %', 85, [30, 140]], ['opacity', 'Opacidade %', 100, [10, 100]]],
     build(P, o, t0, d) {

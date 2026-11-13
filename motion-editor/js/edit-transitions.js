@@ -103,6 +103,32 @@ const LIST = [
   ['matte-grunge', 'Máscara grunge (fumaça)', 'Edit 6 · 0:08', 0.9, 0.3,
     [['exposure', { exposure: k([0, 0], [1, -2]) }]],
     [['texturedWipe', { animation: 1, amount: k([0, 100], [1, 0, 'easeOut']), softness: 35, blur: 12, texture: 2, texInt: 70, fscale: 90 }]]],
+  // ---- Edit 7 (soft, branco desfocado) e Edit 8 (PSG, estouros e polígonos) — enviadas por último
+  ['flash-branco-suave', 'Flash branco desfocado', 'Edit 7 · 0:05', 0.5, 0.45,
+    [['exposure', { exposure: k([0, 0, 'easeIn'], [1, 2.6]) }], ['blur', { radius: k([0, 0, 'easeIn'], [1, 40]) }]],
+    [['exposure', { exposure: k([0, 2.6, 'expoOut'], [1, 0]) }], ['blur', { radius: k([0, 40, 'expoOut'], [1, 0]) }]]],
+  ['pb-depois-flash', 'Preto e branco + flash', 'Edit 7 · 0:06', 0.8, 0.75,
+    [['blackWhite', { amount: k([0, 0, 'hold'], [0.25, 100, 'hold'], [1, 100]) }], ['exposure', { exposure: k([0, 0, 'hold'], [0.8, 0, 'expoIn'], [1, 3]) }]],
+    [['exposure', { exposure: k([0, 3, 'expoOut'], [1, 0]) }], ['blur', { radius: k([0, 25, 'expoOut'], [1, 0]) }]]],
+  ['explosao-radial-pb', 'Explosão radial branca (P&B)', 'Edit 8 · 0:05', 0.5, 0.45,
+    [['blurMoCurves', { zDist: k([0, 1, 'expoIn'], [1, 0.7]), shutter: 3, samples: 24 }], ['lightRays', { intensity: k([0, 0, 'expoIn'], [1, 6]), length: 90, threshold: 35 }], ['exposure', { exposure: k([0, 0, 'expoIn'], [1, 3]) }]],
+    [['blurMoCurves', { zDist: k([0, 0.65, 'expoOut'], [1, 1]), shutter: 3, samples: 24 }], ['blackWhite', { amount: k([0, 100, 'hold'], [0.7, 100], [1, 0]) }], ['exposure', { exposure: k([0, 2.5, 'expoOut'], [1, 0]) }]]],
+  ['bola-de-luz', 'Bola de luz (estouro branco)', 'Edit 8 · 0:05', 0.7, 0.5,
+    [['lensFlare', { position: [0.5, 0.55], axis: [0.5, 0.5], brightness: k([0, 0, 'expoIn'], [1, 400]), size: k([0, 130, 'expoIn'], [1, 1600]), glow: 300, rays: 20, color: [1, 1, 1, 1] }], ['exposure', { exposure: k([0, 0, 'hold'], [0.7, 0, 'expoIn'], [1, 5]) }]],
+    [['exposure', { exposure: k([0, 5, 'easeOut'], [1, 0]) }], ['blackWhite', { amount: k([0, 100], [1, 0]) }]]],
+  ['poligonos', 'Polígonos (low poly P&B)', 'Edit 8 · 0:06', 0.2, 0.5,
+    [['lowPoly', { cell: 140, amount: k([0, 0, 'hold'], [0.4, 100, 'hold'], [1, 100]), gray: true, facet: 90 }]],
+    [['lowPoly', { cell: 160, amount: k([0, 100, 'hold'], [0.5, 0, 'hold'], [1, 0]), gray: true, facet: 90 }]]],
+  ['silhueta-estourada', 'Silhueta estourada (branco)', 'Edit 8 · 0:07', 0.55, 0.45,
+    [['blackWhite', { amount: k([0, 0, 'expoIn'], [1, 100]) }], ['brightnessContrast', { contrast: k([0, 0, 'expoIn'], [1, 100]) }], ['exposure', { exposure: k([0, 0, 'expoIn'], [1, 2.6]) }]],
+    [['blackWhite', { amount: k([0, 100, 'expoOut'], [1, 0]) }], ['brightnessContrast', { contrast: k([0, 100, 'expoOut'], [1, 0]) }], ['exposure', { exposure: k([0, 2.2, 'expoOut'], [1, 0]) }], ['blurMoCurves', { zDist: k([0, 0.75, 'expoOut'], [1, 1]), shutter: 2 }]]],
+  ['glitch-blocos', 'Glitch de blocos', 'Edit 8 · 0:09', 0.4, 0.5,
+    [['glitch', { amount: k([0, 0, 'hold'], [0.3, 70, 'hold'], [1, 90]), block: 70, shift: 20, rgb: 4, speed: 30 }]],
+    [['glitch', { amount: k([0, 90, 'hold'], [0.5, 40, 'hold'], [1, 0]), block: 70, shift: 20, rgb: 4, speed: 30 }]]],
+  ['flicker-espelho-pb', 'Flicker espelhado P&B', 'Edit 8 · 0:07', 0.5, 0.15,
+    [['blackWhite', { amount: k([0, 0, 'hold'], [0.5, 100, 'hold'], [1, 100]) }]],
+    [['blackWhite', { amount: k([0, 100, 'hold'], [0.2, 0, 'hold'], [0.4, 100, 'hold'], [0.6, 0, 'hold'], [0.8, 100, 'hold'], [1, 0]) }]],
+    null, { scale: ['abs', k([0, [-100, 100], 'hold'], [0.2, [100, 100], 'hold'], [0.4, [-100, 100], 'hold'], [0.6, [100, 100], 'hold'], [1, [100, 100]])] }],
 ];
 
 const conv = (keys, d) => keys.map(([u, v, ease]) => ({ t: +(u * d).toFixed(4), v, ease: ease || 'easeInOut' }));
@@ -146,7 +172,18 @@ na lista "fora do .ffx" de cada transição — use o equivalente do AE indicado
 Desfoque (focus pull): no BCC Lens Blur, anime o Iris Scale de 30 até 0 (saída: 0 → 30) — o molde não leva esse keyframe.
 Reverse: no AE é feito na camada (Time > Time-Reverse Layer ou Time Remap), não dá para ir num .ffx de efeito.
 `;
-const AE_HINT = { 'Transição – wipe': 'máscara animada (círculo/cunha) ou CC Radial ScaleWipe', 'Light Leaks': 'overlay de light leak ou Optical Flares', 'Textured Wipe': 'BCC Textured Wipe (o mesmo nome)', 'Espelhar': 'Escala X = -100 na camada' };
+const AE_HINT = { 'Transição – wipe': 'máscara animada (círculo/cunha) ou CC Radial ScaleWipe', 'Light Leaks': 'overlay de light leak ou Optical Flares', 'Textured Wipe': 'BCC Textured Wipe (o mesmo nome)', 'Espelhar': 'Escala X = -100 na camada (keyframes Hold)',
+  'Escala da camada': 'anime Scale da camada com os valores indicados', 'Low Poly': 'não existe nativo — Plexus/Polytrace, ou o próprio MotionFrame', 'Glitch digital': 'Glitchify, Universe Glitch ou VC Twitch (Slide)', 'Contorno': 'Layer Styles > Stroke (borda branca)', 'Starglow': 'Trapcode Starglow ou S_Glint' };
+/** Descreve o que o preset faz na transformação da camada (vai fora do .ffx de efeitos). */
+function transformNote(tr) {
+  const out = [];
+  for (const [prop, v] of Object.entries(tr || {})) {
+    const ks = v.keys || [];
+    if (prop === 'scale' && ks.some((kk) => Array.isArray(kk.v) && kk.v[0] < 0)) out.push('Espelhar (transform)');
+    else if (ks.length) out.push(`Escala da camada (${prop}: ${ks.map((kk) => (Array.isArray(kk.v) ? kk.v[0] : kk.v)).join(' → ')}%)`);
+  }
+  return out;
+}
 
 /** Gera os .ffx (zip) das transições/shakes. deps: { effectsToFFX, LAYER_FACTORIES, createProject, applyPreset }. */
 export async function buildFFXPack(items, deps, { dur = null, shakes = true } = {}) {
@@ -158,7 +195,7 @@ export async function buildFFXPack(items, deps, { dur = null, shakes = true } = 
     const L = LAYER_FACTORIES.solid(P); L.inPoint = 0; L.outPoint = (preset.duration || 1) + 0.001;
     applyPreset(L, preset, 0);
     const { bytes, report } = await effectsToFFX(L.effects, { fps: 30, name: label });
-    const fora = [...report.skipped, ...(Object.keys(preset.transform || {}).length ? ['Espelhar (transform)'] : [])];
+    const fora = [...report.skipped, ...transformNote(preset.transform)];
     return { bytes, fora };
   };
   let n = 0;

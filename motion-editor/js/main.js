@@ -197,7 +197,7 @@ function loop(now) {
     store.time = t; playClock.last = t;
     store.emit('time');
   }
-  if ((dirty || store.playing) && !store.exporting) {
+  if ((dirty || store.playing) && !store.exporting && !window.__mfAnalyzing) {
     // janela do cache de quadros (Time Slice/Echo em clipe longo) acompanha o cursor
     if (now - lastEnsure > 1000) { lastEnsure = now; ensureCaches(store.project, store.time); }
     prepare(store.project, store.time, { playing: store.playing });
@@ -309,11 +309,15 @@ function setPlaying(p) {
 const pointers = new Map();
 let gesture = null;
 let trackPick = null; // callback quando o tracker espera o toque no ponto
+let trackDrag = null; // arrastando a caixa do tracker na prévia
 overlay.addEventListener('pointerdown', (e) => {
   overlay.setPointerCapture(e.pointerId);
   const r = overlay.getBoundingClientRect();
   const toComp = (ev) => [((ev.clientX - r.left) / r.width) * store.project.width, ((ev.clientY - r.top) / r.height) * store.project.height];
   if (trackPick) { const cb = trackPick; trackPick = null; cb(toComp(e)); return; }
+  // tracker aberto: arrastar a caixa do Track Point / cantos das regiões (como no AE)
+  const th = trackerPanel.hit(...toComp(e), overlay.width / store.project.width);
+  if (th) { trackDrag = { ...th, toComp, id: e.pointerId }; return; }
   pointers.set(e.pointerId, toComp(e));
   if (pointers.size === 1) {
     const [x, y] = toComp(e);
@@ -328,6 +332,7 @@ overlay.addEventListener('pointerdown', (e) => {
   }
 });
 overlay.addEventListener('pointermove', (e) => {
+  if (trackDrag && e.pointerId === trackDrag.id) { trackerPanel.drag(trackDrag, ...trackDrag.toComp(e)); drawOverlay(); return; }
   if (!gesture || !pointers.has(e.pointerId)) return;
   pointers.set(e.pointerId, gesture.toComp(e));
   const { layer } = gesture;
@@ -355,7 +360,7 @@ const endPointer = (e) => {
     dirty = true;
   }
 };
-overlay.addEventListener('pointerup', endPointer);
+overlay.addEventListener('pointerup', (e) => { if (trackDrag && e.pointerId === trackDrag.id) { trackDrag = null; trackerPanel.endDrag(); dirty = true; return; } endPointer(e); });
 overlay.addEventListener('pointercancel', endPointer);
 
 // ------------------------------------------------------------------ sheet (painel inferior / lateral)
@@ -626,6 +631,19 @@ const trackerPanel = new TrackerPanel(store, {
   pick: () => { if (!desktop.matches) closeSheet(); return new Promise((res) => { trackPick = res; });
 { const tc = trackerPanel.close.bind(trackerPanel); trackerPanel.close = () => { tc(); if (dock.open.includes('tracker')) closeDockPane('tracker'); }; } },
   redraw: () => { dirty = true; },
+  // análise do tracker: desenha o quadro analisado direto na prévia, no lugar da camada (rápido, como o Layer panel do AE)
+  frame: (c, layer, t) => {
+    const k = view.width / store.project.width;
+    const pts = layerCorners(layer, t, store.project);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, view.width, view.height);
+    const [p0, p1, , p3] = pts;
+    ctx.setTransform(((p1[0] - p0[0]) * k) / c.width, ((p1[1] - p0[1]) * k) / c.width, ((p3[0] - p0[0]) * k) / c.height, ((p3[1] - p0[1]) * k) / c.height, p0[0] * k, p0[1] * k);
+    ctx.drawImage(c, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    store.time = t;
+    drawOverlay();
+  },
   pause: () => setPlaying(false),
   setTime: (t) => store.setTime(t),
   stabilize: (layer) => { store.selectedLayerId = layer.id; store.emit('selection'); openSheet('topaz'); toast('Stabilize Motion: ajuste em “Estabilização” no painel Topaz.', 'info', 4000); },

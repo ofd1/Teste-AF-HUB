@@ -37,11 +37,11 @@ export function seek(v, t) {
  */
 export async function frameSource(src) {
   const v = await analysisVideo(src);
-  let rd = null;
+  let rd = null, blob = null, SR = null, triedSoft = false;
   try {
-    const blob = await (await fetch(src)).blob();
-    const { SeqReader } = await import('./seqreader.js');
-    rd = await SeqReader.open(blob);
+    blob = await (await fetch(src)).blob();
+    SR = (await import('./seqreader.js')).SeqReader;
+    rd = await SR.open(blob);
   } catch { rd = null; }
   return {
     v, w: v.videoWidth || 1080, h: v.videoHeight || 1920, fast: !!rd,
@@ -53,6 +53,12 @@ export async function frameSource(src) {
           if (c && c !== 'timeout') { ctx.drawImage(c, 0, 0, w, h); return; }
         } catch { /* cai na busca */ }
         rd.close(); rd = null;
+        // decodificador de hardware travou (comum em alguns drivers no Windows): tenta o decodificador por software
+        if (!triedSoft && SR && blob) {
+          triedSoft = true;
+          try { rd = await SR.open(blob, { soft: true }); } catch { rd = null; }
+          if (rd) return this.draw(ctx, st, w, h);
+        }
       }
       await Promise.race([seek(v, st), new Promise((r) => setTimeout(r, 4000))]);
       ctx.drawImage(v, 0, 0, w, h);
@@ -209,7 +215,7 @@ export async function analyzePoint({ layer, project, times, start, featureK = 1,
     const tpl = patch(g, aw, ah, x, y, R), ref = tpl.slice();
     const out = [];
     let vx = 0, vy = 0; // velocidade: a busca começa onde o ponto deve estar (movimento rápido não perde o ponto)
-    const emit = (t, conf) => { const s = { t, lx: (x / aw) * w - w / 2, ly: (y / ah) * h - h / 2, conf }; out.push(s); onFrame?.(s, out.length / times.length); };
+    const emit = (t, conf) => { const s = { t, lx: (x / aw) * w - w / 2, ly: (y / ah) * h - h / 2, conf }; out.push(s); onFrame?.(s, out.length / times.length, c); };
     emit(times[0], 1);
     for (let i = 1; i < times.length; i++) {
       if (isCancelled?.()) break;
@@ -236,7 +242,7 @@ export async function analyzePoint({ layer, project, times, start, featureK = 1,
       for (let k = 0; k < tpl.length; k++) tpl[k] = tpl[k] * 0.8 + now[k] * 0.12 + ref[k] * 0.08;
       // confiança como no AE: 100% = idêntico ao modelo
       emit(times[i], Math.max(0, 1 - best / (tpl.length * 60)));
-      if (i % 3 === 0) await yieldUI();
+      await yieldUI();
     }
     return out;
   } finally { fs.close(); setExporting(false); }

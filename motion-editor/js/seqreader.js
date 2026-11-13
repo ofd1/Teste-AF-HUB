@@ -7,12 +7,12 @@ import { probeMp4 } from './proxy.js';
 const KEEP = 6; // quadros decodificados guardados (A/B do frame blending, câmera lenta reaproveita)
 
 export class SeqReader {
-  static async open(blob) {
+  static async open(blob, { soft = false } = {}) {
     if (typeof VideoDecoder === 'undefined') return null;
     const info = await probeMp4(blob).catch(() => null);
     if (!info?.video) return null;
     const v = info.video;
-    const cfg = { codec: v.codec, description: v.description };
+    const cfg = { codec: v.codec, description: v.description, ...(soft ? { hardwareAcceleration: 'prefer-software' } : {}) };
     try { if (!(await VideoDecoder.isConfigSupported(cfg)).supported) return null; } catch { return null; }
     return new SeqReader(blob, v, cfg);
   }
