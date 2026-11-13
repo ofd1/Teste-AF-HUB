@@ -2,7 +2,7 @@
 // Current Track, Position/Rotation/Scale, Edit Target, Analyze ◀◀ ◀ ▶ ▶▶, Reset e Apply.
 // Os rastros ficam guardados na camada (layer.tracks) e aparecem no preview (caixa + caminho), como no AE.
 import { analyzePoint, applyPointTrack, localToComp, compToLocal, releaseAnalysisVideo } from './tracker.js';
-import { analyzeFace, faceSamplesToTrack, applyFaceFollow, applyFaceCamera, ensureFaceModel } from './facetrack.js';
+import { analyzeFace, faceSamplesToTrack, applyFaceFollow, applyFaceCamera, ensureFaceModel, ensureFaceLandmarker, FACE_FEATURES, faceTrackPointNulls } from './facetrack.js';
 import { LAYER_FACTORIES, flatLayers } from './state.js';
 import { modal, toast } from './ui.js';
 import { uid } from './util.js';
@@ -83,7 +83,9 @@ export class TrackerPanel {
       </div>
       <label class="trk-row"><span>Motion Source:</span><select data-f="src">${srcs.map((s) => `<option value="${s.id}" ${s === l ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
       <label class="trk-row"><span>Current Track:</span><select data-f="track">${tracks.map((t) => `<option value="${t.id}" ${t === tr ? 'selected' : ''}>${esc(t.name)}</option>`).join('') || '<option>—</option>'}</select></label>
-      <div class="trk-row"><span>Track Type:</span><b>${isFace ? 'Face Tracking (Outline)' : 'Transform'}</b></div>
+      ${isFace ? `<label class="trk-row"><span>Track Type:</span><select data-f="detailed"><option value="1" ${tr.detailed !== false ? 'selected' : ''}>Face Tracking (Detailed Features)</option><option value="0" ${tr.detailed === false ? 'selected' : ''}>Face Tracking (Outline Only)</option></select></label>
+      <label class="trk-row"><span>Seguir:</span><select data-f="part" ${tr.detailed === false ? 'disabled' : ''}>${FACE_FEATURES.map(([k, n]) => `<option value="${k}" ${(tr.part || 'centro') === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      <div class="trk-row trk-two"><label>Desloc. X % <input type="number" data-f="offX" step="5" value="${tr.offX || 0}" style="width:64px"></label><label>Y % <input type="number" data-f="offY" step="5" value="${tr.offY || 0}" style="width:64px"></label></div>` : '<div class="trk-row"><span>Track Type:</span><b>Transform</b></div>'}
       <div class="trk-checks">
         <label><input type="checkbox" data-f="position" ${tr?.position ? 'checked' : ''}> Position</label>
         <label title="${isFace ? '' : 'Rotação e escala precisam de face tracking'}"><input type="checkbox" data-f="rotation" ${tr?.rotation ? 'checked' : ''} ${isFace ? '' : 'disabled'}> Rotation</label>
@@ -91,7 +93,7 @@ export class TrackerPanel {
       </div>
       <div class="trk-row"><span>Motion Target:</span><b class="trk-target">${esc(targetName)}</b></div>
       <div class="trk-row trk-two"><button data-a="target">Edit Target…</button><button data-a="options">Options…</button></div>
-      ${isFace ? '' : '<div class="trk-row trk-two"><button data-a="setpoint">Mover Track Point</button><span class="muted small">toque no preview</span></div>'}
+      <div class="trk-row trk-two"><button data-a="setpoint">Mover Track Point</button><span class="muted small">${isFace ? 'toque no ponto do rosto a seguir' : 'toque no preview'}</span></div>
       <div class="trk-row trk-analyze"><span>Analyze:</span>
         <button data-a="an" data-d="-all" title="Analisar para trás até o início">◀◀</button>
         <button data-a="an" data-d="-1" title="Um quadro para trás">◀</button>
@@ -100,8 +102,24 @@ export class TrackerPanel {
         <button data-a="stop" title="Parar" ${this.busy ? '' : 'disabled'}>■</button>
       </div>
       <div class="trk-row trk-two"><button data-a="reset">Reset</button><button data-a="apply" class="primary">Apply</button></div>
+      ${isFace && tr.detailed !== false ? '<div class="trk-row"><button data-a="points" title="Cria um Null por ponto do rosto (como os Face Track Points do AE)">Face Track Points → Nulls</button></div>' : ''}
       <div class="trk-status muted small"></div>`;
     this.updateStatus();
+  }
+
+  /** Ponto tocado → parte do rosto mais perto + deslocamento (em % do rosto, no sentido da cabeça). */
+  fitAttach() {
+    const tr = this.track, at = tr?.attach;
+    if (!at) return;
+    const smp = tr.samples.filter((x) => x.ok !== false && x.pts).sort((a, b) => Math.abs(a.t - at.t) - Math.abs(b.t - at.t))[0];
+    if (!smp) return;
+    const cands = [['centro', [smp.lx, smp.ly]], ...Object.entries(smp.pts)];
+    const [part, q] = cands.sort((a, b) => Math.hypot(a[1][0] - at.lx, a[1][1] - at.ly) - Math.hypot(b[1][0] - at.lx, b[1][1] - at.ly))[0];
+    const a = ((smp.angle || 0) * Math.PI) / 180, dx = at.lx - q[0], dy = at.ly - q[1];
+    const size = smp.lsize || 100;
+    tr.part = part;
+    tr.offX = Math.round(((dx * Math.cos(a) + dy * Math.sin(a)) / size) * 1000) / 10;
+    tr.offY = Math.round(((-dx * Math.sin(a) + dy * Math.cos(a)) / size) * 1000) / 10;
   }
 
   targetName() {
@@ -131,6 +149,9 @@ export class TrackerPanel {
     if (f === 'src') { const l = this.sources().find((x) => x.id === e.target.value); if (l) { this.layer = l; l.tracks = l.tracks || []; this.track = l.tracks[0] || null; this.render(); this.cb.redraw(); } return; }
     if (f === 'track') { this.track = this.layer.tracks.find((t) => t.id === e.target.value) || this.track; this.render(); this.cb.redraw(); return; }
     if (this.track && ['position', 'rotation', 'scale'].includes(f)) { this.track[f] = e.target.checked; this.store.commit('change'); }
+    if (this.track && f === 'detailed') { this.track.detailed = e.target.value === '1'; if (this.track.detailed) ensureFaceLandmarker().catch(() => {}); this.store.commit('change'); this.render(); this.cb.redraw(); }
+    if (this.track && f === 'part') { this.track.part = e.target.value; this.store.commit('change'); this.cb.redraw(); }
+    if (this.track && (f === 'offX' || f === 'offY')) { this.track[f] = +e.target.value || 0; this.store.commit('change'); this.cb.redraw(); }
   }
 
   async onClick(e) {
@@ -146,6 +167,19 @@ export class TrackerPanel {
     if (!this.track) return;
     if (a === 'target') return this.editTarget();
     if (a === 'options') return this.options();
+    if (a === 'setpoint' && this.track.kind === 'face') {
+      // Face Track com ponto escolhido (como o Track Point): o toque vira "parte do rosto mais perto + deslocamento"
+      const p = await this.cb.pick();
+      if (!p) return;
+      const t = this.snap(this.store.time);
+      const loc = compToLocal(this.layer, t, p[0], p[1]);
+      this.track.attach = { t, lx: loc.lx, ly: loc.ly };
+      if (this.track.detailed === false) this.track.detailed = true;
+      this.fitAttach();
+      this.store.commit('change'); this.render(); this.cb.redraw();
+      toast(this.track.samples.some((x) => x.pts) ? 'Ponto definido: o tracker segue esse lugar do rosto.' : 'Ponto marcado. Agora analise (▶▶): o tracker segue o rosto tocado, nesse lugar.', 'ok', 4000);
+      return;
+    }
     if (a === 'setpoint') {
       const p = await this.cb.pick();
       if (!p) return;
@@ -162,6 +196,14 @@ export class TrackerPanel {
     }
     if (a === 'an') return this.analyze(b.dataset.d);
     if (a === 'apply') return this.apply();
+    if (a === 'points') {
+      try {
+        const nulls = faceTrackPointNulls(this.layer, this.track.samples, this.store.project, LAYER_FACTORIES, Math.max(0.05, 1 - (this.track.smooth ?? 45) / 100));
+        for (const n of nulls.reverse()) this.store.layers.unshift(n);
+        this.store.commit('structure');
+        toast(`${nulls.length} Nulls criados (um por ponto do rosto). Parenteie camadas a eles para seguir olhos, boca, queixo…`, 'ok', 5000);
+      } catch (err) { toast(`Tracker: ${err.message}`, 'warn', 5000); }
+    }
   }
 
   async editTarget() {
@@ -219,14 +261,16 @@ export class TrackerPanel {
       if (tr.kind === 'point') {
         await analyzePoint({ layer: l, project: this.store.project, times, start: seed, featureK: tr.feature ?? 1, searchK: tr.search ?? 1, onFrame, isCancelled: () => this.cancel });
       } else {
-        const hint = seed && Math.abs(seed.t - t0) < 2 / fps && seed.ok !== false ? seed : null;
-        await analyzeFace({ layer: l, project: this.store.project, times, hintLocal: hint, onFrame, isCancelled: () => this.cancel });
+        let hint = seed && Math.abs(seed.t - t0) < 2 / fps && seed.ok !== false ? seed : null;
+        if (!hint && tr.attach) hint = { lx: tr.attach.lx, ly: tr.attach.ly };
+        await analyzeFace({ layer: l, project: this.store.project, times, hintLocal: hint, onFrame, isCancelled: () => this.cancel, detailed: tr.detailed !== false });
       }
       this.cb.setTime(lastT);
     } catch (e) {
       toast(`Tracker: ${e.message}`, 'error', 5000);
     } finally {
       this.busy = false;
+      if (tr.kind === 'face' && tr.attach) this.fitAttach();
       this.store.commit('change');
       this.render(); this.cb.redraw();
     }
@@ -252,8 +296,8 @@ export class TrackerPanel {
         const target = this.resolveTarget();
         if (!target) { await this.editTarget(); if (!this.track.target) return; return this.apply(); }
         if (tr.kind === 'face') {
-          const track = faceSamplesToTrack(l, tr.samples, Math.max(0.05, 1 - (tr.smooth ?? 45) / 100));
-          if (target._new) target.transform.position.value = [track[0].x, track[0].y - track[0].size * 0.9];
+          const track = faceSamplesToTrack(l, tr.samples, Math.max(0.05, 1 - (tr.smooth ?? 45) / 100), { part: tr.part || 'centro', offset: [tr.offX || 0, tr.offY || 0] });
+          if (target._new) target.transform.position.value = (tr.part && tr.part !== 'centro') || tr.offX || tr.offY ? [track[0].x, track[0].y] : [track[0].x, track[0].y - track[0].size * 0.9];
           n = applyFaceFollow(target, track, { position: tr.position, scale: tr.scale, rotation: tr.rotation });
         } else {
           if (target._new) { const s0 = tr.samples.slice().sort((a, b) => a.t - b.t)[0]; target.transform.position.value = localToComp(l, s0.t, s0.lx, s0.ly); }
@@ -309,6 +353,18 @@ export class TrackerPanel {
         octx.rotate(((cur.angle || 0) * Math.PI) / 180);
         octx.strokeRect(-half, -half * 1.2, half * 2, half * 2.4);
         octx.beginPath(); octx.moveTo(-half * 0.45, -half * 0.25); octx.lineTo(half * 0.45, -half * 0.25); octx.stroke(); // linha dos olhos
+        if (cur.pts && exact) {
+          // pontos do Detailed Features (o escolhido em destaque, com o deslocamento)
+          octx.setTransform(1, 0, 0, 1, 0, 0);
+          for (const [key, q] of Object.entries(cur.pts)) {
+            const [px, py] = localToComp(l, t, q[0], q[1]);
+            const selp = key === (tr.part || 'centro');
+            octx.fillStyle = selp ? '#ffd600' : 'rgba(80,220,255,0.9)';
+            const r = (selp ? 4 : 2.2) * dpr; octx.fillRect(px * k - r, py * k - r, r * 2, r * 2);
+          }
+          const tk = faceSamplesToTrack(l, [cur, { ...cur, t: cur.t + 1e-3 }], 1, { part: tr.part || 'centro', offset: [tr.offX || 0, tr.offY || 0] })[0];
+          if (tk) { octx.strokeStyle = '#ffd600'; octx.beginPath(); octx.arc(tk.x * k, tk.y * k, 7 * dpr, 0, Math.PI * 2); octx.moveTo(tk.x * k - 11 * dpr, tk.y * k); octx.lineTo(tk.x * k + 11 * dpr, tk.y * k); octx.moveTo(tk.x * k, tk.y * k - 11 * dpr); octx.lineTo(tk.x * k, tk.y * k + 11 * dpr); octx.stroke(); }
+        }
       } else {
         const vw = this.layer.props.width || this.store.project.width;
         const R = (vw / 28) * (tr.feature ?? 1) * m * k, S = R + (vw / 12) * (tr.search ?? 1) * m * k;

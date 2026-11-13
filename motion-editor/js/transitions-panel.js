@@ -1,0 +1,175 @@
+// Aba "Transições" (no estilo do CapCut): grade com prévia animada, duração, aplicar no corte e exportar .ffx.
+// Traz as transições recriadas das edits de referência + as básicas do Composer.
+import { createProject, LAYER_FACTORIES } from './state.js';
+import { applyPreset } from './presets.js';
+import { renderFrame } from './renderer.js';
+import { composerItems } from './composer.js';
+import { EDIT_TRANSITIONS } from './edit-transitions.js';
+import { escapeHtml } from './util.js';
+import { toast, storage } from './ui.js';
+import { getImage } from './media.js';
+
+const PW = 180, PH = 240; // prévia vertical (formato das edits)
+const DUR_KEY = 'motionframe.transDur';
+
+let samples = null;
+function sampleImages() {
+  if (samples) return samples;
+  const mk = (c1, c2, label, stripe) => {
+    const c = document.createElement('canvas'); c.width = 360; c.height = 480;
+    const g = c.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 360, 480); gr.addColorStop(0, c1); gr.addColorStop(1, c2); g.fillStyle = gr; g.fillRect(0, 0, 360, 480);
+    g.globalAlpha = 0.18; g.fillStyle = '#fff';
+    for (let i = -480; i < 480; i += 46) { g.save(); g.translate(i, 0); g.rotate(stripe); g.fillRect(0, -50, 16, 700); g.restore(); }
+    g.globalAlpha = 1;
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.arc(180, 250, 110, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#fff'; g.font = '800 150px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(label, 180, 250);
+    g.fillStyle = 'rgba(255,255,255,0.85)'; for (let i = 0; i < 26; i++) { g.beginPath(); g.arc((i * 97) % 360, 30 + ((i * 53) % 420), 3 + (i % 4), 0, Math.PI * 2); g.fill(); }
+    return c.toDataURL('image/jpeg', 0.85);
+  };
+  samples = { a: mk('#1f6fe8', '#0b1d47', 'A', 0.4), b: mk('#ff8a2b', '#7a1030', 'B', -0.4) };
+  return samples;
+}
+
+function previewProject(item, dur) {
+  const P = createProject(PW, PH); P.duration = dur + 1.0; P.fps = 30; P.background = '#000';
+  const s = sampleImages(), cut = 0.5 + dur * 0.4;
+  const A = LAYER_FACTORIES.image(P, s.a, PW, PH), B = LAYER_FACTORIES.image(P, s.b, PW, PH);
+  for (const l of [A, B]) l.transform.position.value = [PW / 2, PH / 2];
+  A.inPoint = 0; A.outPoint = cut; B.inPoint = cut; B.outPoint = P.duration;
+  const { a, b } = item.make(dur);
+  applyPreset(A, a, cut);
+  if (b) applyPreset(B, b, cut);
+  P.layers = [A, B];
+  return { P, cut };
+}
+
+export class TransitionsPanel {
+  constructor(root, store, hooks = {}) {
+    this.root = root; this.store = store; this.hooks = hooks;
+    this.cat = 'Das edits'; this.sel = null; this.dur = storage.get(DUR_KEY, null);
+    this.items = [...EDIT_TRANSITIONS, ...composerItems().filter((x) => x.kind === 'trans').map((x) => ({ ...x, cat: 'Básicas', src: '' }))];
+    this.thumbs = new Map();
+    this.render();
+  }
+
+  get item() { return this.items.find((x) => x.id === this.sel) || null; }
+
+  render() {
+    const cats = ['Das edits', 'Básicas'];
+    const list = this.items.filter((x) => x.cat === this.cat);
+    const it = this.item;
+    const d = this.dur ?? it?.dur ?? 0.5;
+    this.root.innerHTML = `
+      <div class="tr-panel">
+        <div class="tr-top">
+          <canvas class="tr-big" width="${PW}" height="${PH}"></canvas>
+          <div class="tr-info">
+            <b>${it ? escapeHtml(it.name) : 'Escolha uma transição'}</b>
+            <span class="muted small">${it ? (it.src ? `Recriada da ${escapeHtml(it.src)}` : 'Transição básica') : 'Selecione o clipe que SAI (o que entra é o que começa logo depois dele) e toque numa transição.'}</span>
+            <label class="tr-dur">Duração <input type="range" min="0.15" max="1.5" step="0.05" value="${d}" ${it ? '' : 'disabled'}><output>${d.toFixed(2)} s</output></label>
+            <div class="tr-actions">
+              <button class="primary" data-act="apply" ${it ? '' : 'disabled'}>Aplicar no corte</button>
+              <button data-act="all" ${it ? '' : 'disabled'} title="Aplica em todos os cortes da timeline">Em todos os cortes</button>
+              ${it?.cat === 'Das edits' ? '<button data-act="ffx">⤓ .ffx (AE)</button>' : ''}
+            </div>
+          </div>
+        </div>
+        <div class="chips">${cats.map((c) => `<button class="chip ${c === this.cat ? 'on' : ''}" data-cat="${c}">${c}</button>`).join('')}
+          <button class="chip" data-act="ffxall" title="Baixa os .ffx de todas as transições das edits">⤓ Todos os .ffx</button></div>
+        <div class="tr-grid">${list.map((x) => `<button class="tr-tile ${x.id === this.sel ? 'on' : ''}" data-id="${x.id}"><canvas width="90" height="120"></canvas><span>${escapeHtml(x.name)}</span></button>`).join('')}</div>
+      </div>`;
+    this.bind();
+    this.drawThumbs();
+    this.loop();
+  }
+
+  bind() {
+    const r = this.root;
+    r.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => { this.cat = b.dataset.cat; this.render(); }));
+    r.querySelectorAll('.tr-tile').forEach((b) => b.addEventListener('click', () => { this.sel = b.dataset.id; this.dur = null; this.render(); }));
+    const rg = r.querySelector('.tr-dur input');
+    rg?.addEventListener('input', () => { this.dur = +rg.value; storage.set(DUR_KEY, this.dur); rg.nextElementSibling.textContent = `${this.dur.toFixed(2)} s`; this.anim = null; });
+    r.querySelector('[data-act="apply"]')?.addEventListener('click', () => this.apply(false));
+    r.querySelector('[data-act="all"]')?.addEventListener('click', () => this.apply(true));
+    r.querySelector('[data-act="ffx"]')?.addEventListener('click', () => this.hooks.exportFFX?.([this.item], this.dur ?? this.item.dur));
+    r.querySelector('[data-act="ffxall"]')?.addEventListener('click', () => this.hooks.exportFFX?.(EDIT_TRANSITIONS, null));
+  }
+
+  async drawThumbs() {
+    // as imagens de exemplo precisam estar carregadas antes de desenhar (senão a miniatura sai preta e fica no cache)
+    const s = sampleImages();
+    await Promise.all([s.a, s.b].map((src) => { const im = getImage(src); return im.complete && im.naturalWidth ? null : new Promise((r) => { im.addEventListener('load', r, { once: true }); setTimeout(r, 1500); }); }));
+    const tiles = [...this.root.querySelectorAll('.tr-tile')];
+    let i = 0;
+    const step = () => {
+      // poucas por quadro: a aba abre na hora mesmo com dezenas de transições
+      for (let n = 0; n < 3 && i < tiles.length; n++, i++) {
+        const b = tiles[i], it = this.items.find((x) => x.id === b.dataset.id), c = b.querySelector('canvas');
+        let img = this.thumbs.get(it.id);
+        if (!img) {
+          try {
+            const { P, cut } = previewProject(it, it.dur);
+            img = document.createElement('canvas'); img.width = PW; img.height = PH;
+            renderFrame(img.getContext('2d'), P, cut + 0.02, 1, {});
+            this.thumbs.set(it.id, img);
+          } catch { continue; }
+        }
+        c.getContext('2d').drawImage(img, 0, 0, 90, 120);
+      }
+      if (i < tiles.length) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  /** Prévia grande em loop da transição escolhida. */
+  loop() {
+    cancelAnimationFrame(this.raf);
+    const c = this.root.querySelector('.tr-big'); if (!c) return;
+    const g = c.getContext('2d');
+    const it = this.item;
+    if (!it) { g.fillStyle = '#111'; g.fillRect(0, 0, PW, PH); g.fillStyle = '#777'; g.font = '13px system-ui'; g.textAlign = 'center'; g.fillText('prévia', PW / 2, PH / 2); return; }
+    const t0 = performance.now();
+    const tick = () => {
+      if (!this.root.isConnected || !c.isConnected) return;
+      if (!this.anim) this.anim = previewProject(it, this.dur ?? it.dur);
+      const { P } = this.anim;
+      const t = ((performance.now() - t0) / 1000) % P.duration;
+      try { renderFrame(g, P, t, 1, {}); } catch { /* prévia */ }
+      this.raf = requestAnimationFrame(tick);
+    };
+    this.anim = null;
+    tick();
+  }
+
+  apply(all) {
+    const it = this.item; if (!it) return;
+    const d = this.dur ?? it.dur;
+    const st = this.store;
+    const vis = st.layers.filter((l) => l.type !== 'audio' && l.type !== 'adjustment');
+    const pairs = [];
+    if (all) {
+      for (const a of vis) { const b = vis.find((x) => x !== a && Math.abs(x.inPoint - a.outPoint) < 0.15); if (b) pairs.push([a, b]); }
+    } else {
+      let a = st.layer();
+      if (!a) {
+        // sem seleção: corte mais perto do cursor
+        let best = null;
+        for (const x of vis) { const b = vis.find((y) => y !== x && Math.abs(y.inPoint - x.outPoint) < 0.15); if (b && (!best || Math.abs(x.outPoint - st.time) < Math.abs(best[0].outPoint - st.time))) best = [x, b]; }
+        if (best) pairs.push(best);
+      } else {
+        const b = vis.find((x) => x !== a && Math.abs(x.inPoint - a.outPoint) < 0.15);
+        pairs.push([a, b || null]);
+      }
+    }
+    if (!pairs.length) { toast('Não achei um corte: selecione o clipe que sai (o próximo clipe tem que começar no fim dele).', 'warn', 5000); return; }
+    for (const [a, b] of pairs) {
+      const { a: pa, b: pb } = it.make(d);
+      applyPreset(a, pa, a.outPoint);
+      if (pb && b) applyPreset(b, pb, b.inPoint);
+    }
+    st.commit('structure');
+    toast(pairs.length > 1 ? `“${it.name}” aplicada em ${pairs.length} cortes ✓` : pairs[0][1] ? `“${it.name}” entre “${pairs[0][0].name}” e “${pairs[0][1].name}” ✓` : `“${it.name}”: só a saída foi aplicada (nenhum clipe começa logo depois de “${pairs[0][0].name}”).`, 'ok', 4000);
+    this.hooks.onApplied?.();
+  }
+}

@@ -6,7 +6,7 @@ import { ffxToPreset } from './presets.js';
 import { TopazPanel } from './topaz-panel.js';
 import { setBgListener, ensureBgModel, bgStatus } from './bgremove.js';
 import { setGLLostListener, glLost } from './gl.js';
-import { createEffectInstance, setPluginLookup, upgradeLayerEffects } from './presets.js';
+import { createEffectInstance, setPluginLookup, upgradeLayerEffects, applyPreset } from './presets.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
 import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, cacheVersion, detectFps, mediaReady, framesDrawable } from './media.js';
 import { loadAudio, playAudio, stopAudio, detectBeats, pruneAudio } from './audio.js';
@@ -34,6 +34,8 @@ import { TrackerPanel } from './tracker-panel.js';
 import { calibrateFromImage, CALIB_LABEL } from './calibrate.js';
 import { parseAEP, aepToProject, mainComps } from './aep.js';
 import { xmlToProject } from './xml-import.js';
+import { TransitionsPanel } from './transitions-panel.js';
+import { checkForUpdate, showUpdateBanner } from './updater.js';
 import { loadCustomEffects, ensureRecipesFromProject, importRecipe, customRecipes } from './custom-fx.js';
 applyUIMode(); loadCustomEffects(); // tema/aparência já na tela inicial · efeitos criados pelo usuário (Efeitos › Meus efeitos) antes de abrir qualquer projeto
 import { ico, iconize } from './icons.js';
@@ -354,7 +356,7 @@ overlay.addEventListener('pointercancel', endPointer);
 // ------------------------------------------------------------------ sheet (painel inferior / lateral)
 const sheet = document.getElementById('sheet');
 const sheetTitle = document.getElementById('sheetTitle');
-const TITLES = { composer: 'Composer · animações prontas', effects: 'Efeitos da camada', browser: 'Adicionar efeito', props: 'Propriedades', presets: 'Presets', keys: 'Keyframes e gráfico', topaz: 'Topaz', add: 'Adicionar camada', tracker: 'Tracker' };
+const TITLES = { trans: 'Transições', composer: 'Composer · animações prontas', effects: 'Efeitos da camada', browser: 'Adicionar efeito', props: 'Propriedades', presets: 'Presets', keys: 'Keyframes e gráfico', topaz: 'Topaz', add: 'Adicionar camada', tracker: 'Tracker' };
 const desktop = window.matchMedia('(min-width: 1100px)');
 const appEl = document.querySelector('.app');
 let sheetPane = null;
@@ -363,8 +365,8 @@ let sheetBackTo = null;
 // ---- PC: painéis encaixados no canto (como os do After Effects). Vários abertos ao mesmo tempo, empilhados;
 // cada um pode ser minimizado (só o título) ou fechado, e reaberto pela barra de painéis no topo da coluna.
 const DOCK_KEY = 'motionframe.dock';
-const DOCK_PANES = ['props', 'effects', 'presets', 'composer', 'keys', 'topaz', 'tracker', 'browser', 'add'];
-const DOCK_BAR = [['props', '☰', 'Propriedades'], ['effects', '✦', 'Efeitos'], ['presets', '★', 'Presets'], ['composer', '❖', 'Composer'], ['keys', '📈', 'Keyframes'], ['topaz', '✨', 'Topaz'], ['tracker', '⌖', 'Tracker']];
+const DOCK_PANES = ['props', 'effects', 'presets', 'trans', 'composer', 'keys', 'topaz', 'tracker', 'browser', 'add'];
+const DOCK_BAR = [['props', '☰', 'Propriedades'], ['effects', '✦', 'Efeitos'], ['presets', '★', 'Presets'], ['trans', 'transition', 'Transições'], ['composer', '❖', 'Composer'], ['keys', '📈', 'Keyframes'], ['topaz', '✨', 'Topaz'], ['tracker', '⌖', 'Tracker']];
 const dock = (() => { const d = storage.get(DOCK_KEY, null); return d && Array.isArray(d.open) ? { open: d.open.filter((x) => DOCK_PANES.includes(x)), min: d.min || [] } : { open: ['effects', 'props', 'presets'], min: ['presets'] }; })();
 const saveDock = () => storage.set(DOCK_KEY, { open: dock.open.filter((x) => x !== 'browser' && x !== 'add' && x !== 'tracker'), min: dock.min });
 function renderDock() {
@@ -538,6 +540,17 @@ keyTools = new KeyTools(document.getElementById('keyTools'), store);
 new TopazPanel(document.getElementById('topazPanel'), store);
 const composer = new ComposerPanel(document.getElementById('composerPanel'), store, { onApplied: () => { if (!desktop.matches) closeSheet(); } });
 window.addEventListener('open-composer', () => openSheet('composer'));
+const transPanel = new TransitionsPanel(document.getElementById('transPanel'), store, {
+  onApplied: () => { if (!desktop.matches) closeSheet(); },
+  exportFFX: async (items, dur) => {
+    toast('Gerando os .ffx…', 'info', 2000);
+    const [{ effectsToFFX }, { makeZip }, { buildFFXPack }] = await Promise.all([import('./ffx-export.js'), import('./zip-write.js'), import('./edit-transitions.js')]);
+    const files = await buildFFXPack(items, { effectsToFFX, LAYER_FACTORIES, createProject, applyPreset }, { dur, shakes: items.length > 1 });
+    const name = items.length > 1 ? 'MotionFrame-transicoes-edits.zip' : `${items[0].name.replace(/[^\w-]+/g, '_')}-ffx.zip`;
+    await saveFile(name, new Blob([makeZip(files)], { type: 'application/zip' }));
+  },
+});
+void transPanel;
 // ---- alça entre prévia e timeline (o tamanho fica salvo)
 {
   const grip = document.querySelector('.tl-grip'), app = document.querySelector('.app'), KEY = 'motionframe.tlH';
@@ -595,6 +608,9 @@ window.addEventListener('custom-fx', async (e) => {
     fxBrowser.cat = 'Meus efeitos'; fxBrowser.render();
   }
 });
+// versão nova publicada: avisa (agora e a cada 30 min)
+setTimeout(() => checkForUpdate({ onNew: showUpdateBanner }), 4000);
+setInterval(() => checkForUpdate({ onNew: showUpdateBanner }), 30 * 60 * 1000);
 window.addEventListener('app-updated', () => toast('Versão nova do MotionFrame instalada. Volte para a tela inicial (⌂) para usar.', 'ok', 8000));
 if (dock.open.includes('composer')) setTimeout(() => composer.startPreview(), 300);
 
@@ -724,7 +740,7 @@ function simpleItems(layer, t, many) {
       ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
       ['deselect', '✕', 'Fechar'], ['sep'],
       ...(t === 'group' ? [['open-group', '📂', 'Abrir grupo', true]] : []),
-      ['presets', '★', 'Presets', true], ['effects', '✦', 'Efeitos', true],
+      ['presets', '★', 'Presets', true], ['transitions', 'transition', 'Transições', true], ['effects', '✦', 'Efeitos', true],
       ...(t === 'video' || t === 'group' ? [['speed', '⏱', 'Velocidade', true]] : []),
       ['props', '☰', 'Editar'], ['keys', '📈', 'Animar'],
       ...(t === 'video' || t === 'audio' ? [['sound', '🔊', 'Volume']] : []),
@@ -744,7 +760,7 @@ function simpleItems(layer, t, many) {
   }
   const main = [
     ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
-    ['add-media', '🎞', 'Vídeo / Foto', true], ['add-audio', '♪', 'Música'], ['add-text', 'T', 'Texto'], ['presets', '★', 'Presets'], ['add', '＋', 'Mais camadas'],
+    ['add-media', '🎞', 'Vídeo / Foto', true], ['add-audio', '♪', 'Música'], ['add-text', 'T', 'Texto'], ['transitions', 'transition', 'Transições'], ['presets', '★', 'Presets'], ['add', '＋', 'Mais camadas'],
     ...(layerClipboard.length ? [['paste-layer', '📋', 'Colar camada']] : []),
     ['more', '⋯', 'Mais'],
   ];
@@ -769,7 +785,7 @@ function renderToolbar() {
       ...(store.scope?.length ? [['close-group', '◀', 'Sair do grupo', true]] : []),
       ['deselect', '✕', 'Fechar'], ['sep'],
       ...(t === 'group' ? [['open-group', '📂', 'Abrir grupo', true]] : []),
-      ['effects', '✦', 'Efeitos', true], ['presets', '★', 'Presets'], ['composer', '❖', 'Composer'],
+      ['effects', '✦', 'Efeitos', true], ['presets', '★', 'Presets'], ['transitions', 'transition', 'Transições'], ['composer', '❖', 'Composer'],
       ...(t === 'video' || t === 'group' ? [['speed', '⏱', 'Velocidade', true], ...(t === 'video' ? [['topaz', '✨', 'Topaz', true]] : []), ['freeze', '❄', 'Congelar quadro'], ['time-reverse', '⇆', 'Inverter (reverse)'], ['time-remap', '⏱', 'Time Remap']] : []),
       ...(t === 'video' || t === 'audio' ? [['sound', '🔊', 'Som']] : []),
       ...(t === 'video' || t === 'image' ? [['bg-remove', '✂︎', 'Tirar fundo']] : []),
@@ -1319,6 +1335,7 @@ const commands = {
   effects: () => openSheet('effects'),
   presets: () => openSheet('presets'),
   composer: () => openSheet('composer'),
+  transitions: () => openSheet('trans'),
   'logo-anim': () => animateLogoFlow(),
   'font-id': async () => { const { fontIdDialog } = await import('./fontid-ui.js'); await fontIdDialog(store, { toast }); renderToolbar(); },
   props: () => openSheet('props'),

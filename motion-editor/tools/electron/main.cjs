@@ -18,6 +18,11 @@ app.setAppUserModelId('app.motionframe.desktop');
 
 const PORT = 47830; // porta fixa = projetos, mídias e acesso ficam guardados entre aberturas
 const ROOT = app.isPackaged ? path.join(process.resourcesPath, 'www') : path.join(__dirname, 'www');
+// atualização automática: arquivos novos do editor ficam em <dados do usuário>/www-live e têm prioridade sobre os do .exe
+const LIVE = path.join(app.getPath('userData'), 'www-live');
+const REMOTE = process.env.MF_UPDATE_URL || 'https://ofd1.github.io/Teste-AF-HUB/';
+const vnum = (v) => parseInt(String(v || '').replace(/\D/g, ''), 10) || 0;
+const readVer = (dir) => { try { return (fs.readFileSync(path.join(dir, 'js', 'projects.js'), 'utf8').match(/APP_VERSION = '(v\d+)'/) || [])[1] || null; } catch { return null; } };
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
   '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
   '.gif': 'image/gif', '.wasm': 'application/wasm', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ttf': 'font/ttf',
@@ -28,8 +33,11 @@ function serve() {
     const srv = http.createServer((req, res) => {
       let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
       if (p.endsWith('/')) p += 'index.html';
-      const file = path.normalize(path.join(ROOT, p));
-      if (!file.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
+      // versão baixada (se for mais nova que a do .exe) primeiro; o que não veio na atualização (vendor/) sai do .exe
+      const useLive = liveOk && fs.existsSync(path.join(LIVE, p));
+      const base = useLive ? LIVE : ROOT;
+      const file = path.normalize(path.join(base, p));
+      if (!file.startsWith(base)) { res.writeHead(403); res.end(); return; }
       fs.stat(file, (err, st) => {
         if (err || !st.isFile()) { res.writeHead(404); res.end(); return; }
         res.writeHead(200, {
@@ -42,6 +50,41 @@ function serve() {
     srv.on('error', reject);
     srv.listen(PORT, '127.0.0.1', () => resolve(srv));
   });
+}
+
+let liveOk = vnum(readVer(LIVE)) > vnum(readVer(ROOT));
+
+// .zip mínimo (store/deflate) → pasta
+function unzipTo(buf, dir) {
+  const zlib = require('zlib');
+  let e = buf.length - 22; while (e >= 0 && buf.readUInt32LE(e) !== 0x06054b50) e--;
+  if (e < 0) throw new Error('zip inválido');
+  const n = buf.readUInt16LE(e + 10); let p = buf.readUInt32LE(e + 16);
+  for (let i = 0; i < n; i++) {
+    const method = buf.readUInt16LE(p + 10), csize = buf.readUInt32LE(p + 20), nlen = buf.readUInt16LE(p + 28), xlen = buf.readUInt16LE(p + 30), clen = buf.readUInt16LE(p + 32), lho = buf.readUInt32LE(p + 42);
+    const name = buf.slice(p + 46, p + 46 + nlen).toString('utf8'); p += 46 + nlen + xlen + clen;
+    if (name.endsWith('/') || name.includes('..')) continue;
+    const start = lho + 30 + buf.readUInt16LE(lho + 26) + buf.readUInt16LE(lho + 28);
+    const raw = buf.slice(start, start + csize);
+    const out = path.join(dir, name); fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, method === 8 ? zlib.inflateRawSync(raw) : raw);
+  }
+}
+async function checkUpdate() {
+  try {
+    const info = await (await fetch(`${REMOTE}version.json?t=${Date.now()}`, { cache: 'no-store' })).json();
+    const cur = liveOk ? readVer(LIVE) : readVer(ROOT);
+    if (vnum(info.version) <= vnum(cur)) return;
+    const buf = Buffer.from(await (await fetch(REMOTE + info.update + `?v=${info.version}`)).arrayBuffer());
+    const tmp = LIVE + '-next';
+    fs.rmSync(tmp, { recursive: true, force: true }); fs.mkdirSync(tmp, { recursive: true });
+    unzipTo(buf, tmp);
+    if (vnum(readVer(tmp)) !== vnum(info.version)) throw new Error('pacote incompleto');
+    fs.rmSync(LIVE, { recursive: true, force: true }); fs.renameSync(tmp, LIVE); liveOk = true;
+    if (!win || win.isDestroyed()) return;
+    const { response } = await dialog.showMessageBox(win, { type: 'info', buttons: ['Atualizar agora', 'Depois'], defaultId: 0, title: 'MotionFrame', message: `MotionFrame ${info.version} baixado.`, detail: 'O editor recarrega com a versão nova (seu projeto já está salvo).' });
+    if (response === 0) win.webContents.reloadIgnoringCache();
+  } catch (e) { console.warn('atualização:', e.message); }
 }
 
 let win = null, crashes = [];
@@ -80,6 +123,8 @@ else {
     session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(true)); // câmera/microfone/arquivos do próprio editor
     try { await serve(); } catch (e) { dialog.showErrorBox('MotionFrame', `Não consegui iniciar o editor (porta ${PORT} ocupada?).\n${e.message}`); app.quit(); return; }
     createWindow();
+    setTimeout(checkUpdate, 5000);
+    setInterval(checkUpdate, 60 * 60 * 1000);
   });
   app.on('window-all-closed', () => app.quit());
 }

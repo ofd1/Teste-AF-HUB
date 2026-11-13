@@ -25,6 +25,30 @@ export function ensureFaceModel() {
   return detPromise;
 }
 
+// Face Tracking (Detailed Features) como no After Effects: pontos do rosto pelo MediaPipe Face Landmarker (478 pontos).
+// [chave, nome, índices dos landmarks (média)]
+export const FACE_FEATURES = [
+  ['centro', 'Rosto (centro)', null], ['testa', 'Testa', [10]], ['entreOlhos', 'Entre os olhos', [168]],
+  ['olhoD', 'Olho direito', [33, 133]], ['olhoE', 'Olho esquerdo', [362, 263]], ['pupilaD', 'Pupila direita', [468]], ['pupilaE', 'Pupila esquerda', [473]],
+  ['sobrD', 'Sobrancelha direita', [70, 105, 107]], ['sobrE', 'Sobrancelha esquerda', [300, 334, 336]],
+  ['nariz', 'Ponta do nariz', [1]], ['boca', 'Boca', [13, 14]], ['bocaD', 'Canto da boca direito', [61]], ['bocaE', 'Canto da boca esquerdo', [291]],
+  ['queixo', 'Queixo', [152]], ['orelhaD', 'Orelha direita', [234]], ['orelhaE', 'Orelha esquerda', [454]],
+];
+let lmPromise = null;
+/** Carrega o Face Landmarker (pontos detalhados). Se não der, o tracker usa o detector simples (Outline). */
+export function ensureFaceLandmarker() {
+  if (!lmPromise) {
+    lmPromise = (async () => {
+      const { FilesetResolver, FaceLandmarker } = await import(`${BASE}vision_bundle.mjs`);
+      const fileset = await FilesetResolver.forVisionTasks(`${BASE}wasm`);
+      const opts = (delegate) => ({ baseOptions: { modelAssetPath: `${BASE}models/face_landmarker.task`, delegate }, runningMode: 'IMAGE', numFaces: 4, minFaceDetectionConfidence: 0.4, minFacePresenceConfidence: 0.4 });
+      try { return await FaceLandmarker.createFromOptions(fileset, opts('GPU')); } catch { return FaceLandmarker.createFromOptions(fileset, opts('CPU')); }
+    })();
+    lmPromise.catch(() => { lmPromise = null; });
+  }
+  return lmPromise;
+}
+
 const AW = 512; // largura de análise
 
 /** Escolhe o rosto: o maior no primeiro quadro (ou o mais perto do toque); depois o mais perto do anterior. */
@@ -44,8 +68,10 @@ function pick(dets, prev, hint) {
  * hintLocal = ponto no conteúdo da camada para escolher o rosto (ou o último rosto rastreado).
  * Devolve amostras cruas no espaço da camada: [{ t, lx, ly, lsize, angle, ok }].
  */
-export async function analyzeFace({ layer, project, times, hintLocal, onFrame, isCancelled }) {
-  const det = await ensureFaceModel();
+export async function analyzeFace({ layer, project, times, hintLocal, onFrame, isCancelled, detailed = true }) {
+  let lm = null;
+  if (detailed) { try { lm = await ensureFaceLandmarker(); } catch { lm = null; } }
+  const det = lm ? null : await ensureFaceModel();
   setExporting(true);
   try {
     const v = await analysisVideo(layer.props.src);
@@ -64,9 +90,30 @@ export async function analyzeFace({ layer, project, times, hintLocal, onFrame, i
       const t = times[i];
       await seek(v, sourceTime(layer, t) + 0.3 / fps);
       ctx.drawImage(v, 0, 0, aw, ah);
+      let smp;
+      if (lm) {
+        // Detailed Features: escolhe o rosto mais perto do anterior (ou do toque / o maior) e guarda os pontos nomeados
+        const faces = (lm.detect(c).faceLandmarks || []).map((pts) => {
+          let x0 = 1, x1 = 0, y0 = 1, y1 = 0; for (const q of pts) { if (q.x < x0) x0 = q.x; if (q.x > x1) x1 = q.x; if (q.y < y0) y0 = q.y; if (q.y > y1) y1 = q.y; }
+          return { pts, cx: ((x0 + x1) / 2) * aw, cy: ((y0 + y1) / 2) * ah, size: (x1 - x0) * aw };
+        });
+        const sc = (f) => (prev ? Math.hypot(f.cx - prev.cx, f.cy - prev.cy) : hint ? Math.hypot(f.cx - hint[0], f.cy - hint[1]) : -f.size);
+        const f = faces.sort((a, b) => sc(a) - sc(b))[0];
+        if (f) {
+          const L = (i) => f.pts[i] || f.pts[0];
+          const angle = (Math.atan2((L(263).y - L(33).y) * ah, (L(263).x - L(33).x) * aw) * 180) / Math.PI;
+          prev = { cx: f.cx, cy: f.cy, size: f.size, angle };
+          const pts = {};
+          for (const [key, , idx] of FACE_FEATURES) {
+            if (!idx) continue;
+            const x = idx.reduce((s2, i) => s2 + L(i).x, 0) / idx.length, y = idx.reduce((s2, i) => s2 + L(i).y, 0) / idx.length;
+            pts[key] = [+(x * w - w / 2).toFixed(2), +(y * h - h / 2).toFixed(2)];
+          }
+          smp = { t, ok: true, conf: 1, pts };
+        } else smp = { t, ok: false, conf: 0 };
+      } else {
       const res = det.detect(c);
       const d = pick(res.detections || [], prev, hint);
-      let smp;
       if (d) {
         const b = d.boundingBox, k = d.keypoints || [];
         let angle = prev ? prev.angle : 0;
@@ -75,6 +122,7 @@ export async function analyzeFace({ layer, project, times, hintLocal, onFrame, i
         prev = { cx: b.originX + b.width / 2, cy: b.originY + b.height / 2, size: b.width, angle };
         smp = { t, ok: true, conf: d.categories?.[0]?.score ?? 1 };
       } else smp = { t, ok: false, conf: 0 };
+      }
       const P = prev || { cx: aw / 2, cy: ah / 2, size: aw / 4, angle: 0 };
       Object.assign(smp, { lx: (P.cx / aw) * w - w / 2, ly: (P.cy / ah) * h - h / 2, lsize: (P.size / aw) * w, angle: P.angle });
       out.push(smp);
@@ -85,8 +133,15 @@ export async function analyzeFace({ layer, project, times, hintLocal, onFrame, i
 }
 
 /** Amostras cruas (espaço da camada) → rastro suavizado em coordenadas da composição (formato de trackFace). */
-export function faceSamplesToTrack(layer, samples, smoothAmt = 0.45) {
-  const raw = samples.slice().sort((a, b) => a.t - b.t).map((r) => ({ ...r, cx: r.lx, cy: r.ly, size: r.lsize }));
+export function faceSamplesToTrack(layer, samples, smoothAmt = 0.45, { part = 'centro', offset = [0, 0] } = {}) {
+  // ponto seguido (Attach Point): parte escolhida do rosto (Detailed Features) + deslocamento em % do tamanho do rosto,
+  // girando junto com a cabeça — como mover o ponto de anexação no AE
+  const at = (r) => {
+    const q = part !== 'centro' && r.pts?.[part] ? r.pts[part] : [r.lx, r.ly];
+    const a = ((r.angle || 0) * Math.PI) / 180, ox = (offset[0] / 100) * r.lsize, oy = (offset[1] / 100) * r.lsize;
+    return [q[0] + ox * Math.cos(a) - oy * Math.sin(a), q[1] + ox * Math.sin(a) + oy * Math.cos(a)];
+  };
+  const raw = samples.slice().sort((a, b) => a.t - b.t).map((r) => { const [cx, cy] = at(r); return { ...r, cx, cy, size: r.lsize }; });
   if (!raw.some((r) => r.ok)) throw new Error('nenhum rosto encontrado nesse trecho');
   const first = raw.find((r) => r.ok);
   for (const r of raw) { if (r.ok) break; Object.assign(r, { cx: first.cx, cy: first.cy, size: first.size, angle: first.angle }); }
@@ -164,4 +219,21 @@ export function applyFaceCamera(layer, track, project, { faceFrac = 0.4, center 
   }));
   if (level) setKeys(tr.rotation, t0, t1, track.map((p) => [p.t, Math.round((r0 - (p.angle - r0)) * 100) / 100]));
   return track.length;
+}
+
+/** Face Track Points (Detailed Features): um Null por ponto do rosto, com keyframes de posição — como no AE. */
+export function faceTrackPointNulls(layer, samples, project, LAYER_FACTORIES, smoothAmt = 0.55, keys = null) {
+  const ok = samples.filter((r) => r.pts);
+  if (!ok.length) throw new Error('rode a análise em "Detailed Features" primeiro');
+  const out = [];
+  for (const [key, label] of FACE_FEATURES) {
+    if (key === 'centro' || (keys && !keys.includes(key))) continue;
+    const track = faceSamplesToTrack(layer, samples, smoothAmt, { part: key });
+    const n = LAYER_FACTORIES.null(project);
+    n.name = `${label} · ${layer.name}`; n.inPoint = layer.inPoint; n.outPoint = layer.outPoint;
+    n.transform.position.value = [track[0].x, track[0].y];
+    n.transform.position.keys = track.map((p) => ({ t: p.t, v: [Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10], ease: 'linear' }));
+    out.push(n);
+  }
+  return out;
 }
