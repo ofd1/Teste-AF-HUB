@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "futebol",
+  "version": "${version}",
+  "name": "Futebol",
+  "description": "Campo de futebol completo com Pillagers x Vindicators, goleiros Villager e bola de Cubo de Enxofre com madeira. Jogadores com posições, estatísticas e IA tática.",
+  "authors": ["Futebol Mod"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": { "main": ["com.futebol.FutebolMod"] },
+  "depends": {
+    "fabricloader": ">=0.20.0",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
