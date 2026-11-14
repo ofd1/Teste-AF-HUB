@@ -1,7 +1,7 @@
 // Exportação: MP4 quadro a quadro (WebCodecs + mp4-muxer, com áudio) e fallback em tempo real (MediaRecorder).
 import { renderFrame, resetRenderCaches } from './renderer.js';
 import { getGL, glLost } from './gl.js';
-import { prepare, pauseAll, setExporting } from './media.js';
+import { prepare, pauseAll, setExporting, srcBlob, getImage } from './media.js';
 import { renderMix, stopAudio } from './audio.js';
 import { modal, toast } from './ui.js';
 import { saveFile, keepAwake } from './platform.js';
@@ -10,6 +10,65 @@ import { flatLayers } from './state.js';
 
 const withTimeout = (pr, ms, msg) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
 const even = (n) => Math.max(2, Math.round(n / 2) * 2);
+
+// ---- Renderização da exportação num Worker (fora da tela principal): a interface não trava e o .exe não mostra
+// "não está respondendo". Camadas/efeitos que dependem da página (texto com fontes, Remover fundo, Element 3D,
+// Tracery) continuam na tela principal; se o Worker falhar em qualquer quadro, a exportação segue sem ele.
+const WK_LAYERS = new Set(['video', 'image', 'shape', 'solid', 'rect', 'ellipse', 'adjustment', 'group', 'audio', 'null', 'camera']);
+const WK_BAD_FX = new Set(['bgRemove', 'element3d', 'tracery']);
+function workerEligible(project) {
+  if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined' || typeof VideoDecoder === 'undefined' || !('transferToImageBitmap' in OffscreenCanvas.prototype)) return false;
+  for (const l of flatLayers(project.layers)) {
+    if (!WK_LAYERS.has(l.type)) return false;
+    if ((l.effects || []).some((f) => f.enabled !== false && WK_BAD_FX.has(f.type))) return false;
+  }
+  return true;
+}
+function startRenderWorker(project, width, height, scale) {
+  if (!workerEligible(project)) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let w, ready = false;
+    try { w = new Worker(new URL('./render-worker.js', import.meta.url), { type: 'module' }); } catch { resolve(null); return; }
+    const waits = new Map();
+    const failAll = (msg) => { for (const x of waits.values()) x.rej(new Error(msg)); waits.clear(); };
+    const api = {
+      req(i, t) {
+        return new Promise((res, rej) => {
+          const to = setTimeout(() => { waits.delete(i); rej(new Error('quadro demorou demais no Worker')); }, 90000);
+          waits.set(i, { res: (b) => { clearTimeout(to); res(b); }, rej: (e) => { clearTimeout(to); rej(e); } });
+          w.postMessage({ type: 'frame', i, t });
+        });
+      },
+      end() { try { w.postMessage({ type: 'end' }); } catch { /* ok */ } setTimeout(() => w.terminate(), 3000); },
+      kill() { failAll('Worker encerrado'); try { w.terminate(); } catch { /* ok */ } },
+    };
+    w.onmessage = ({ data: m }) => {
+      if (m.type === 'ready') { ready = true; resolve(api); }
+      else if (m.type === 'frame') { const x = waits.get(m.i); waits.delete(m.i); x ? x.res(m.bm) : m.bm?.close?.(); }
+      else if (m.type === 'error') {
+        if (!ready) { try { w.terminate(); } catch { /* ok */ } resolve(null); return; }
+        const x = waits.get(m.i); waits.delete(m.i); x?.rej(new Error(m.message));
+      }
+    };
+    w.onerror = (e) => { e.preventDefault?.(); if (!ready) resolve(null); failAll(e.message || 'erro no Worker'); try { w.terminate(); } catch { /* ok */ } };
+    setTimeout(() => { if (!ready) { try { w.terminate(); } catch { /* ok */ } resolve(null); } }, 20000);
+    (async () => {
+      const media = { images: {}, blobs: {} }, transfer = [];
+      for (const l of flatLayers(project.layers)) {
+        const src = l.props?.src;
+        if (!src) continue;
+        if (l.type === 'video' && !media.blobs[src]) media.blobs[src] = await srcBlob(src);
+        if (l.type === 'image' && !media.images[src]) {
+          const img = getImage(src);
+          try { await img.decode?.(); } catch { /* usa o que tiver */ }
+          const bm = await createImageBitmap(img);
+          media.images[src] = bm; transfer.push(bm);
+        }
+      }
+      w.postMessage({ type: 'init', project, width, height, scale, media }, transfer);
+    })().catch(() => { try { w.terminate(); } catch { /* ok */ } resolve(null); });
+  });
+}
 /** Bitrate alto pela resolução e fps (~0,35 bit por pixel: 1080×1920 a 30 fps ≈ 22 Mbps, 4K ≈ 87 Mbps). */
 export const autoBitrate = (p, scale = 1, fps = p.fps) => Math.round(Math.max(20, Math.min(150, (p.width * scale) * (p.height * scale) * fps * 0.35 / 1e6)));
 
@@ -156,25 +215,43 @@ export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {})
     const t0 = performance.now();
     // nunca fica parado num quadro: se o aparelho não entregar o quadro do vídeo em 8 s, segue com o último bom
     const prep = (t) => Promise.race([prepare(project, t, { exact: true }), new Promise((r) => setTimeout(r, 8000))]);
-    let nextPrep = prep(0);
+    // renderiza num Worker quando o projeto permite (a tela principal só codifica: nada trava)
+    ui.set(0, 'Preparando…');
+    let wr = await startRenderWorker(project, width, height, width / project.width);
+    let wNext = wr ? wr.req(0, 0) : null;
+    let nextPrep = wr ? null : prep(0);
     for (let i = 0; i < total; i++) {
       if (ui.cancelled || failure) break;
       const t = i / fps;
-      await nextPrep;
-      renderFrame(ctx, project, t, width / project.width, { final: true });
-      // se a GPU caiu no meio do quadro, recria o contexto e refaz o quadro (antes saía preto até o fim)
-      for (let retry = 0; retry < 3 && glLost(); retry++) {
-        await new Promise((r) => setTimeout(r, 250));
-        getGL();
-        renderFrame(ctx, project, t, width / project.width, { final: true });
+      let viaWorker = false;
+      if (wr) {
+        try {
+          const bm = await wNext;
+          wNext = i + 1 < total ? wr.req(i + 1, (i + 1) / fps) : null; // o Worker já começa o próximo enquanto este codifica
+          ctx.drawImage(bm, 0, 0, width, height); bm.close();
+          viaWorker = true;
+        } catch (e) {
+          console.warn('Worker de renderização falhou; seguindo na tela principal', e);
+          wNext?.catch(() => {}); wr.kill(); wr = null; wNext = null;
+        }
       }
-      // espera a GPU terminar o quadro antes de entregar ao codificador: com efeitos pesados o codificador ficava
-      // esperando a placa, a fila enchia e o app achava que o codificador tinha travado (exportação falhava)
-      ctx.getImageData(0, 0, 1, 1);
+      if (!viaWorker) {
+        await (nextPrep || prep(t));
+        renderFrame(ctx, project, t, width / project.width, { final: true });
+        // se a GPU caiu no meio do quadro, recria o contexto e refaz o quadro (antes saía preto até o fim)
+        for (let retry = 0; retry < 3 && glLost(); retry++) {
+          await new Promise((r) => setTimeout(r, 250));
+          getGL();
+          renderFrame(ctx, project, t, width / project.width, { final: true });
+        }
+        // espera a GPU terminar o quadro antes de entregar ao codificador: com efeitos pesados o codificador ficava
+        // esperando a placa, a fila enchia e o app achava que o codificador tinha travado (exportação falhava)
+        ctx.getImageData(0, 0, 1, 1);
+      }
       const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
       ui.preview?.(canvas);
       // o próximo quadro começa a ser lido do vídeo enquanto este é codificado
-      nextPrep = i + 1 < total ? prep((i + 1) / fps) : null;
+      nextPrep = !wr && i + 1 < total ? prep((i + 1) / fps) : null;
       venc.encode(frame, { keyFrame: i % (fps * 2) === 0 });
       frame.close();
       // codificador parado (acontece no iPhone com pouca memória): não espera para sempre — avisa e tenta o modo tempo real
@@ -190,6 +267,7 @@ export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {})
         ui.set((i + 1) / total, `Quadro ${i + 1}/${total} · faltam ~${Math.ceil(eta)}s`);
       }
     }
+    if (wr) { wNext?.then((b) => b?.close?.(), () => {}); wr.end(); wr = null; }
     if (failure) throw failure;
     if (ui.cancelled) { venc.close(); toast('Exportação cancelada.'); return true; }
     await withTimeout(venc.flush(), 30000, 'o codificador de vídeo não terminou');

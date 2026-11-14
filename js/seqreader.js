@@ -60,7 +60,7 @@ export class SeqReader {
     // quadro decodificado → canvas na orientação certa (vídeo vertical do iPhone vem girado no arquivo)
     const i = this.byTs.get(fr.timestamp);
     const w = fr.displayWidth, h = fr.displayHeight, r = this.rot;
-    const c = document.createElement('canvas');
+    const c = typeof document !== 'undefined' ? document.createElement('canvas') : new OffscreenCanvas(1, 1); // Worker
     const side = r === 90 || r === 270;
     const ow = side ? h : w, oh = side ? w : h;
     c.width = this.size ? this.size[0] : ow; c.height = this.size ? this.size[1] : oh;

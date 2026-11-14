@@ -85,7 +85,7 @@ void main() { gl_FragColor = mix(texture2D(u_tex, v_uv), texture2D(u_tex2, v_uv)
 
 export class GLEngine {
   constructor() {
-    this.canvas = document.createElement('canvas');
+    this.canvas = typeof document !== 'undefined' ? document.createElement('canvas') : new OffscreenCanvas(16, 16); // Worker: OffscreenCanvas
     this.canvas.width = this.canvas.height = 16;
     const opts = { premultipliedAlpha: true, preserveDrawingBuffer: true, alpha: true, antialias: false };
     this.gl = this.canvas.getContext('webgl', opts) || this.canvas.getContext('experimental-webgl', opts);
