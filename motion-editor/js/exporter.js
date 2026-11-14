@@ -1,7 +1,8 @@
 // Exportação: MP4 quadro a quadro (WebCodecs + mp4-muxer, com áudio) e fallback em tempo real (MediaRecorder).
 import { renderFrame, resetRenderCaches } from './renderer.js';
 import { getGL, glLost } from './gl.js';
-import { prepare, pauseAll, setExporting, srcBlob, getImage } from './media.js';
+import { prepare, pauseAll, setExporting } from './media.js';
+import { startRenderWorker } from './render-client.js';
 import { renderMix, stopAudio } from './audio.js';
 import { modal, toast } from './ui.js';
 import { saveFile, keepAwake } from './platform.js';
@@ -11,64 +12,6 @@ import { flatLayers } from './state.js';
 const withTimeout = (pr, ms, msg) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
 const even = (n) => Math.max(2, Math.round(n / 2) * 2);
 
-// ---- Renderização da exportação num Worker (fora da tela principal): a interface não trava e o .exe não mostra
-// "não está respondendo". Camadas/efeitos que dependem da página (texto com fontes, Remover fundo, Element 3D,
-// Tracery) continuam na tela principal; se o Worker falhar em qualquer quadro, a exportação segue sem ele.
-const WK_LAYERS = new Set(['video', 'image', 'shape', 'solid', 'rect', 'ellipse', 'adjustment', 'group', 'audio', 'null', 'camera']);
-const WK_BAD_FX = new Set(['bgRemove', 'element3d', 'tracery']);
-function workerEligible(project) {
-  if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined' || typeof VideoDecoder === 'undefined' || !('transferToImageBitmap' in OffscreenCanvas.prototype)) return false;
-  for (const l of flatLayers(project.layers)) {
-    if (!WK_LAYERS.has(l.type)) return false;
-    if ((l.effects || []).some((f) => f.enabled !== false && WK_BAD_FX.has(f.type))) return false;
-  }
-  return true;
-}
-function startRenderWorker(project, width, height, scale) {
-  if (!workerEligible(project)) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    let w, ready = false;
-    try { w = new Worker(new URL('./render-worker.js', import.meta.url), { type: 'module' }); } catch { resolve(null); return; }
-    const waits = new Map();
-    const failAll = (msg) => { for (const x of waits.values()) x.rej(new Error(msg)); waits.clear(); };
-    const api = {
-      req(i, t) {
-        return new Promise((res, rej) => {
-          const to = setTimeout(() => { waits.delete(i); rej(new Error('quadro demorou demais no Worker')); }, 90000);
-          waits.set(i, { res: (b) => { clearTimeout(to); res(b); }, rej: (e) => { clearTimeout(to); rej(e); } });
-          w.postMessage({ type: 'frame', i, t });
-        });
-      },
-      end() { try { w.postMessage({ type: 'end' }); } catch { /* ok */ } setTimeout(() => w.terminate(), 3000); },
-      kill() { failAll('Worker encerrado'); try { w.terminate(); } catch { /* ok */ } },
-    };
-    w.onmessage = ({ data: m }) => {
-      if (m.type === 'ready') { ready = true; resolve(api); }
-      else if (m.type === 'frame') { const x = waits.get(m.i); waits.delete(m.i); x ? x.res(m.bm) : m.bm?.close?.(); }
-      else if (m.type === 'error') {
-        if (!ready) { try { w.terminate(); } catch { /* ok */ } resolve(null); return; }
-        const x = waits.get(m.i); waits.delete(m.i); x?.rej(new Error(m.message));
-      }
-    };
-    w.onerror = (e) => { e.preventDefault?.(); if (!ready) resolve(null); failAll(e.message || 'erro no Worker'); try { w.terminate(); } catch { /* ok */ } };
-    setTimeout(() => { if (!ready) { try { w.terminate(); } catch { /* ok */ } resolve(null); } }, 20000);
-    (async () => {
-      const media = { images: {}, blobs: {} }, transfer = [];
-      for (const l of flatLayers(project.layers)) {
-        const src = l.props?.src;
-        if (!src) continue;
-        if (l.type === 'video' && !media.blobs[src]) media.blobs[src] = await srcBlob(src);
-        if (l.type === 'image' && !media.images[src]) {
-          const img = getImage(src);
-          try { await img.decode?.(); } catch { /* usa o que tiver */ }
-          const bm = await createImageBitmap(img);
-          media.images[src] = bm; transfer.push(bm);
-        }
-      }
-      w.postMessage({ type: 'init', project, width, height, scale, media }, transfer);
-    })().catch(() => { try { w.terminate(); } catch { /* ok */ } resolve(null); });
-  });
-}
 /** Bitrate alto pela resolução e fps (~0,35 bit por pixel: 1080×1920 a 30 fps ≈ 22 Mbps, 4K ≈ 87 Mbps). */
 export const autoBitrate = (p, scale = 1, fps = p.fps) => Math.round(Math.max(20, Math.min(150, (p.width * scale) * (p.height * scale) * fps * 0.35 / 1e6)));
 

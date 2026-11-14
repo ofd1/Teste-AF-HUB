@@ -8,7 +8,8 @@ import { setBgListener, ensureBgModel, bgStatus } from './bgremove.js';
 import { setGLLostListener, glLost } from './gl.js';
 import { createEffectInstance, setPluginLookup, upgradeLayerEffects, applyPreset } from './presets.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
-import { prepare, prepareEpoch, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, cacheVersion, detectFps, mediaReady, framesDrawable, liveVideoAt } from './media.js';
+import { startRenderWorker, workerEligible } from './render-client.js';
+import { prepare, prepareEpoch, exactFramesReady, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, cacheVersion, detectFps, mediaReady, framesDrawable, liveVideoAt } from './media.js';
 import { loadAudio, playAudio, stopAudio, detectBeats, pruneAudio } from './audio.js';
 import { valueAt, setValue, setKey, anim } from './anim.js';
 import { setThreeD } from './three-d.js';
@@ -93,7 +94,10 @@ const frameCache = new Map(); // chave → { c: canvas, bytes }
 let frameCacheBytes = 0;
 const backBuf = document.createElement('canvas');
 const backCtx = backBuf.getContext('2d');
-function frameCacheClear() { frameCache.clear(); frameCacheBytes = 0; }
+function frameCacheClear(keepPre = false) {
+  if (!keepPre) { frameCache.clear(); frameCacheBytes = 0; return; }
+  for (const [k, e] of frameCache) if (!k.endsWith('|pre')) { frameCache.delete(k); frameCacheBytes -= e.bytes; }
+}
 function frameCachePut(key, src) {
   const bytes = src.width * src.height * 4;
   if (bytes * 3 > FRAME_CACHE_BUDGET) return;
@@ -145,12 +149,29 @@ async function preStart() {
     const room = Math.floor((FRAME_CACHE_BUDGET * 0.8) / (W * H * 4));
     if (preBuf.width !== W || preBuf.height !== H) { preBuf.width = W; preBuf.height = H; }
     const f0 = Math.round(store.time * fps + 1e-6), fEnd = Math.min(Math.ceil(P.duration * fps) - 1, f0 + Math.min(room, PRE_MAX_S * fps));
+    // no Worker (fora da tela principal) quando o projeto permite: nada trava, nem o play logo depois
+    let wk = await preWorker(P, W, H, q);
+    if (gen !== preGen || !preIdle()) return;
     for (let fi = f0; fi <= fEnd; fi++) {
       if (gen !== preGen || !preIdle()) return;
       preAhead = (fi - f0) / fps;
       if (frameCache.has(preKey(fi))) continue;
       const t = fi / fps;
       let ok = false;
+      if (wk) {
+        const r0 = performance.now();
+        let bm = null;
+        try { bm = await wk.req(fi, t); } catch (e) { console.warn('pré-renderização no Worker falhou; seguindo na tela principal', e); preWorkerDrop(); wk = null; }
+        if (bm) {
+          if (gen === preGen && bm.ready) frameCachePut(preKey(fi), bm); // quadro sem a imagem de algum vídeo: não guarda (era o quadro preto)
+          bm.close();
+          const ms = performance.now() - r0;
+          slowN = ms > 700 ? slowN + 1 : 0; // no Worker a tela não trava: só baixa a resolução se estiver bem lento
+          if (slowN >= 3 && q > 0.2) { slowN = 0; preScale = Math.max(0.2, q * Math.sqrt(500 / ms)); clearTimeout(preIdleT); preIdleT = setTimeout(preStart, 50); return; }
+          if (fi % 5 === 0) prePill(fi - f0 + 1, fEnd - f0 + 1, fps);
+          continue;
+        }
+      }
       for (let tries = 0; tries < 2 && !ok; tries++) {
         await prepare(P, t, { exact: true });
         const ep = prepareEpoch();
@@ -159,7 +180,7 @@ async function preStart() {
         try {
           renderFrame(preCtx, P, t, q, { exact: true });
           preCtx.getImageData(0, 0, 1, 1); // espera a GPU terminar: o tempo medido é o custo real do quadro
-          ok = ep === prepareEpoch() && !glLost();
+          ok = ep === prepareEpoch() && !glLost() && exactFramesReady(P, t); // sem a imagem de algum vídeo: não guarda (quadro preto)
         } catch { ok = false; }
         // projeto pesado (remover fundo, Twixtor, Shatter…): cada quadro travaria a tela por muito tempo — renderiza a
         // prévia numa resolução menor (como o ½/¼ do AE) e recomeça; a tela nunca fica presa mais que alguns décimos
@@ -173,6 +194,18 @@ async function preStart() {
     }
     prePill(1, 1, fps, true);
   } finally { preRunning = false; if (gen !== preGen) { clearTimeout(preIdleT); preIdleT = setTimeout(preStart, 700); } }
+}
+// sessão do Worker da prévia: uma por versão do projeto/tamanho (qualquer edição recria)
+let preW = null, preWKey = '', projVer = 0;
+function preWorkerDrop() { try { preW?.kill(); } catch { /* ok */ } preW = null; preWKey = ''; }
+async function preWorker(P, W, H, q) {
+  const key = `${projVer}|${W}x${H}|${q.toFixed(3)}`;
+  if (preW && preWKey === key) return preW;
+  preWorkerDrop();
+  if (IOS_M || store.exporting || !workerEligible(P)) return null; // iPhone: memória curta para dois motores ao mesmo tempo
+  const w = await startRenderWorker(JSON.parse(JSON.stringify(P)), W, H, q, { mode: 'preview' });
+  if (w) { preW = w; preWKey = key; }
+  return w;
 }
 let prePillEl = null, prePillT = 0;
 function prePill(n, total, fps, doneAll = false) {
@@ -332,7 +365,8 @@ stage.appendChild(cachePill);
 let lastCacheSt = null, lastCacheVer = 0, lastEnsure = 0;
 setCacheListener(() => {
   const st = cacheStatus();
-  if (cacheVersion() !== lastCacheVer) { lastCacheVer = cacheVersion(); frameCacheClear(); } // cache novo pronto: quadros mudam
+  // cache novo pronto: quadros da prévia ao vivo mudam — os pré-renderizados (quadros exatos) continuam valendo
+  if (cacheVersion() !== lastCacheVer) { lastCacheVer = cacheVersion(); frameCacheClear(true); }
   lastCacheSt = st;
   cachePill.textContent = st == null ? '' : `Preparando quadros… ${st}%`;
   cachePill.classList.toggle('show', st != null);
@@ -367,7 +401,7 @@ store.on((kind) => {
   // número do quadro (shownKey), senão o mesmo quadro era renderizado 2–4× (tela de 60–120 Hz, projeto de 30 fps)
   if (!(kind === 'time' && store.playing)) dirty = true;
   if (!store.playing) preStop(); // mexeu (tempo, edição): para e recomeça do cursor quando ficar parado
-  if (kind === 'structure' || kind === 'change') preScale = 0; // projeto mudou: volta a tentar a resolução cheia
+  if (kind === 'structure' || kind === 'change') { preScale = 0; projVer++; } // projeto mudou: volta à resolução cheia e recria o Worker
   if (kind !== 'time' && kind !== 'selection' && kind !== 'keys') frameCacheClear();
   if (kind !== 'selection' && !store.playing) lastEdit = performance.now();
   if (kind === 'structure' || kind === 'change') scheduleCaches();

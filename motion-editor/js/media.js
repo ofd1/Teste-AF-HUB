@@ -246,6 +246,20 @@ function activeVideos(project, t) {
  * exact=true (exportação): busca o quadro exato e aguarda (await).
  * exact=false (prévia): reprodução nativa com playbackRate quando tocando; busca quando pausado.
  */
+/** Depois de prepare(exact): todo vídeo visível em t tem o quadro exato pronto (não vazio)? Pré-renderização e Worker
+ *  só guardam o quadro se sim — antes, quando o leitor demorava, a camada saía vazia e um quadro PRETO ia para a prévia. */
+export function exactFramesReady(project, t) {
+  for (const { l } of activeVideos(project, t)) {
+    const e = videos.get(l.id), fr = e?.frame;
+    if (!e || !fr) return false;
+    for (const st of [fr.a, fr.b]) {
+      if (st === null || st === undefined) continue;
+      const c = e.snaps?.get(Math.round(st * 1000));
+      if (!c || !c.width || !c.height) return false;
+    }
+  }
+  return true;
+}
 let prepEpoch = 0;
 /** Conta as chamadas de prepare(): a pré-renderização confere se ninguém trocou os quadros enquanto ela esperava. */
 export const prepareEpoch = () => prepEpoch;

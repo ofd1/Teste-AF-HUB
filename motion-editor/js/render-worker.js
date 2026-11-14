@@ -3,15 +3,15 @@
 // .exe não mostra mais "o editor não está respondendo". Os vídeos são lidos pelo leitor sequencial (WebCodecs) e as
 // imagens chegam como ImageBitmap. Qualquer erro é avisado e a exportação continua na tela principal.
 import { renderFrame } from './renderer.js';
-import { prepare, setWorkerMedia, setExporting } from './media.js';
+import { prepare, setWorkerMedia, setExporting, exactFramesReady } from './media.js';
 import { getGL, glLost } from './gl.js';
 
-let P = null, canvas = null, ctx = null, scale = 1;
+let P = null, canvas = null, ctx = null, scale = 1, preview = false;
 
 self.onmessage = async ({ data: m }) => {
   try {
     if (m.type === 'init') {
-      P = m.project; scale = m.scale;
+      P = m.project; scale = m.scale; preview = m.mode === 'preview'; // prévia: quadros exatos, qualidade leve
       setWorkerMedia(m.media || {});
       setExporting(true);
       canvas = new OffscreenCanvas(m.width, m.height);
@@ -20,14 +20,16 @@ self.onmessage = async ({ data: m }) => {
       self.postMessage({ type: 'ready' });
     } else if (m.type === 'frame') {
       await prepare(P, m.t, { exact: true });
-      renderFrame(ctx, P, m.t, scale, { final: true });
+      const opts = preview ? { exact: true } : { final: true };
+      const ready = exactFramesReady(P, m.t);
+      renderFrame(ctx, P, m.t, scale, opts);
       for (let retry = 0; retry < 3 && glLost(); retry++) { // GPU caiu: recria o contexto e refaz o quadro
         await new Promise((r) => setTimeout(r, 250));
         getGL();
-        renderFrame(ctx, P, m.t, scale, { final: true });
+        renderFrame(ctx, P, m.t, scale, opts);
       }
       const bm = canvas.transferToImageBitmap();
-      self.postMessage({ type: 'frame', i: m.i, bm }, [bm]);
+      self.postMessage({ type: 'frame', i: m.i, bm, ready }, [bm]);
     } else if (m.type === 'end') {
       setExporting(false);
       self.close();
