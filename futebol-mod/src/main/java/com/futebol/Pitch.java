@@ -9,13 +9,17 @@ import net.minecraft.world.phys.Vec3;
 
 /** Geometria do campo + construção (e restauração) dos blocos. O comprimento corre ao longo do eixo X. */
 public final class Pitch {
-    public static final int HALF_L = 32;          // campo de 64 de comprimento
-    public static final int HALF_W = 20;          // e 40 de largura
-    public static final double GOAL_HALF = 3.5;   // gol com 7 de largura
+    public static final int HALF_L = 45;          // campo de 90 de comprimento
+    public static final int HALF_W = 28;          // e 56 de largura
+    /** A lógica do jogo usa um campo "virtual" de 64x40; SL/SW convertem para blocos. */
+    public static final double SL = HALF_L / 32.0, SW = HALF_W / 20.0;
+    public static final double GOAL_HALF = 4.5;   // gol com 9 de largura
     public static final double GOAL_H = 3.0;      // e 3 de altura
-    public static final int BOX_D = 12, BOX_HALF = 12;      // grande área
-    public static final int SMALL_D = 5, SMALL_HALF = 6;    // pequena área
-    public static final int PEN_SPOT = 8;
+    public static final int BOX_D = 17, BOX_HALF = 17;      // grande área (blocos)
+    public static final int SMALL_D = 7, SMALL_HALF = 8;    // pequena área
+    public static final int PEN_SPOT = 11;
+    public static final int CIRCLE_R = 7;
+    public static final double BOXV_D = 12, BOXV_H = 12, PEN_SPOT_V = 8;   // mesmas medidas, em unidades virtuais
     private static final int MX = Stadium.REACH_X + 1, MZ = Stadium.REACH_Z + 1, DY_DOWN = 3, DY_UP = Stadium.ROOF + 4;
 
     public final ServerLevel level;
@@ -127,7 +131,7 @@ public final class Pitch {
         if (ax == HALF_L || az == HALF_W) return true;                 // contorno
         if (dx == 0) return true;                                      // meio de campo
         double r = Math.sqrt(dx * dx + dz * dz);
-        if (Math.abs(r - 5) < 0.55 || r < 0.6) return true;            // círculo central e ponto
+        if (Math.abs(r - CIRCLE_R) < 0.55 || r < 0.6) return true;            // círculo central e ponto
         if (ax >= HALF_L - BOX_D && ax <= HALF_L && (az == BOX_HALF)) return true;       // grande área
         if (ax == HALF_L - BOX_D && az <= BOX_HALF) return true;
         if (ax >= HALF_L - SMALL_D && ax <= HALF_L && az == SMALL_HALF) return true;     // pequena área
@@ -160,7 +164,7 @@ public final class Pitch {
 
     /** Converte (u, v) de um time com direção de ataque dir (+1/-1) em coordenadas de mundo. */
     public Vec3 world(double u, double v, int dir) {
-        return new Vec3(cx() + dir * (-HALF_L + u), surf(), cz() + dir * v);
+        return new Vec3(cx() + dir * (-HALF_L + u * SL), surf(), cz() + dir * v * SW);
     }
 
     public double goalX(int dir) { return cx() + dir * HALF_L; }          // gol que o time (atacando em dir) ataca

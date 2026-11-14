@@ -125,8 +125,8 @@ public final class Cameras {
         Vec3 pos, focus = new Vec3(b.x + bv.x * 6, b.y + 0.5, b.z + bv.z * 6);
         double alpha = 0.08;
         switch (mode) {
-            case TV -> pos = new Vec3(clamp(b.x, cx - 26, cx + 26), gy + 12, cz + 31);
-            case TATICA -> { pos = new Vec3(cx, gy + 42, cz + 0.01); focus = new Vec3(cx, gy, cz); alpha = 0.2; }
+            case TV -> pos = new Vec3(clamp(b.x, cx - Pitch.HALF_L + 10, cx + Pitch.HALF_L - 10), gy + 15, cz + Pitch.HALF_W + 12);
+            case TATICA -> { pos = new Vec3(cx, gy + 52, cz + 0.01); focus = new Vec3(cx, gy, cz); alpha = 0.2; }
             case GOL -> {
                 double side = Math.signum(b.x - cx) == 0 ? 1 : Math.signum(b.x - cx);
                 pos = new Vec3(cx + side * (Pitch.HALF_L + 4.6), gy + 4.3, cz + (b.z - cz) * 0.3);
@@ -134,11 +134,11 @@ public final class Cameras {
             case BOLA -> {
                 double hv = Math.hypot(bv.x, bv.z);
                 double dx = hv > 0.1 ? bv.x / hv : 1, dz = hv > 0.1 ? bv.z / hv : 0;
-                pos = new Vec3(b.x - dx * 7, gy + 3.2, b.z - dz * 7); alpha = 0.05;
+                pos = new Vec3(b.x - dx * 9, gy + 3.6, b.z - dz * 9); alpha = 0.05;
             }
             case DRONE -> {
                 double ang = tick * 0.012;
-                pos = new Vec3(b.x + Math.cos(ang) * 15, gy + 9, b.z + Math.sin(ang) * 15); alpha = 0.06;
+                pos = new Vec3(b.x + Math.cos(ang) * 20, gy + 11, b.z + Math.sin(ang) * 20); alpha = 0.06;
             }
             case ARQ -> {
                 Vec3 seat = Tickets.seatFor(m, pl);
@@ -149,7 +149,7 @@ public final class Cameras {
                 if (f != null && f != s.followed && f.e.isAlive()) { s.followed = f; pl.setCamera(f.e); s.expect = f.e; s.grace = tick + 4; }
                 return;
             }
-            default -> pos = new Vec3(cx, gy + 14, cz + 31);
+            default -> pos = new Vec3(cx, gy + 15, cz + Pitch.HALF_W + 12);
         }
         if (s.followed != null) { s.followed = null; pl.setCamera(s.cam); s.expect = s.cam; s.grace = tick + 4; }
         s.pos = s.pos.add(pos.subtract(s.pos).scale(alpha));

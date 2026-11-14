@@ -147,7 +147,7 @@ public class FutebolMod implements ModInitializer {
             pl.getInventory().add(graveto());
             pl.getInventory().add(controle());
         }
-        src.sendSuccess(() -> Component.literal("§a⚽ Campo montado! Os times estão em campo.\n§eClique com o botão direito com o §6Graveto do Árbitro §epara começar o jogo.\n§7Botão esquerdo na bola = chutar · Graveto num jogador = ver estatísticas · Graveto + agachar = reiniciar."), false);
+        src.sendSuccess(() -> Component.literal("§a⚽ Estádio pronto. §eBotão direito com o graveto para apitar. §7(/futebol info on = mais detalhes)"), false);
         return 1;
     }
 
@@ -173,6 +173,15 @@ public class FutebolMod implements ModInitializer {
                 return 1;
             }))
 
+            .then(Commands.literal("info").then(Commands.argument("ligado", com.mojang.brigadier.arguments.BoolArgumentType.bool()).executes(c -> {
+                if (match == null) return 0;
+                match.verbose = com.mojang.brigadier.arguments.BoolArgumentType.getBool(c, "ligado");
+                c.getSource().sendSuccess(() -> Component.literal("§7Detalhes na tela: " + (match.verbose ? "ligados" : "desligados")), false); return 1;
+            })))
+            .then(Commands.literal("ritmo").then(Commands.argument("fator", com.mojang.brigadier.arguments.FloatArgumentType.floatArg(0.4f, 1.6f)).executes(c -> {
+                FPlayer.RITMO = com.mojang.brigadier.arguments.FloatArgumentType.getFloat(c, "fator");
+                c.getSource().sendSuccess(() -> Component.literal("§7Ritmo do jogo: " + FPlayer.RITMO + "x (1.0 = padrão)"), false); return 1;
+            })))
             .then(Commands.literal("camera").then(Commands.argument("modo", StringArgumentType.word()).suggests((ctx, b) -> net.minecraft.commands.SharedSuggestionProvider.suggest(java.util.stream.Stream.concat(java.util.Arrays.stream(Cameras.Mode.values()).map(m -> m.id), java.util.stream.Stream.of("normal")), b)).executes(c -> {
                 if (match == null) { c.getSource().sendFailure(Component.literal("Use /futebol ativar primeiro.")); return 0; }
                 ServerPlayer pl = c.getSource().getPlayerOrException();

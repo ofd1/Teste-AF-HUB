@@ -27,6 +27,8 @@ public final class FPlayer {
     public double aimZ, aimY;
     public int shotTicks, shotReact;
     public boolean jumped;
+    public double swX, swZ; public int swTicks;       // movimentação sutil sem bola
+    public int giveGoTicks; public FPlayer giveGoTarget;
     // dribles / fintas
     public int skillTicks, skillSplit, skillType, skillCd;
     public double skillSide, boost = 1.0;
@@ -42,12 +44,15 @@ public final class FPlayer {
 
     /** Velocidade máxima (blocos/tick), levando o fôlego em conta. */
     public double maxSpeed() {
-        double v = 0.19 + 0.0024 * st().vel();
+        double v = (0.15 + 0.0017 * st().vel()) * RITMO;
         v *= 0.82 + 0.18 * energy;
         if (isGK()) v *= 0.82;
         if (stun > 0) v *= 0.45;
         return v;
     }
 
-    public double accel() { return 0.045 + 0.0006 * st().vel(); }
+    public double accel() { return (0.03 + 0.0004 * st().vel()) * Math.max(0.6, RITMO); }
+
+    /** Ritmo do jogo (1.0 = padrão): multiplica a velocidade dos jogadores. */
+    public static double RITMO = 1.0;
 }

@@ -46,7 +46,7 @@ public final class Match {
     public final int[] score = new int[2];
     public St st = St.IDLE;
     public int half = 1;
-    public int halfLen = 20 * 150;
+    public int halfLen = 20 * 240;
     public int clock;
     final Random rnd = new Random();
     int stTicks, tickCount;
@@ -71,6 +71,7 @@ public final class Match {
     FPlayer spTaker;
     int kickoffTeam;
     int lastEventTeam = -1;
+    java.util.Set<FPlayer> offSet; int offTeam = -1, offTtl; boolean spIndirect;
     String lastEvent = "";
     public String boardInfo = "Graveto do Árbitro: botão direito = apitar";
     public final java.util.Map<String, Integer> ev = new java.util.TreeMap<>();
@@ -211,8 +212,8 @@ public final class Match {
     //  Coordenadas (u = metros a partir do gol próprio, v = lateral + para a direita)
     // =====================================================================================
 
-    double U(int t, double x) { return (x - pitch.ownGoalX(attackDir[t])) * attackDir[t]; }
-    double V(int t, double z) { return (z - pitch.cz()) * attackDir[t]; }
+    double U(int t, double x) { return (x - pitch.ownGoalX(attackDir[t])) * attackDir[t] / Pitch.SL; }
+    double V(int t, double z) { return (z - pitch.cz()) * attackDir[t] / Pitch.SW; }
     Vec3 W(int t, double u, double v) { return pitch.world(u, v, attackDir[t]); }
     static double hd(Vec3 a, Vec3 b) { return Math.hypot(a.x - b.x, a.z - b.z); }
     static double hd(double ax, double az, double bx, double bz) { return Math.hypot(ax - bx, az - bz); }
@@ -230,7 +231,6 @@ public final class Match {
         if (st == St.IDLE || st == St.FULLTIME) {
             if (st == St.FULLTIME) { score[0] = score[1] = 0; half = 1; clock = 0; attackDir[0] = 1; attackDir[1] = -1; resetForKickoff(0, true); }
             whistle(1.0f);
-            title("§l⚽ BOLA ROLANDO!", Roster.COR_CHAT[0] + Roster.TIME_NOME[0] + " §fx " + Roster.COR_CHAT[1] + Roster.TIME_NOME[1]);
             beginSetPiece(SP.KICKOFF, kickoffTeam, new Vec3(pitch.cx(), pitch.surf(), pitch.cz()));
         }
     }
@@ -243,7 +243,7 @@ public final class Match {
         if (snap) for (FPlayer p : all) {
             double u = Math.min(p.def.u(), 30);
             Vec3 w = W(p.team, u, p.def.v());
-            if (p.team != team && hd(w.x, w.z, pitch.cx(), pitch.cz()) < 6.5) w = W(p.team, Math.min(u, 25), p.def.v());
+            if (p.team != team && hd(w.x, w.z, pitch.cx(), pitch.cz()) < 7.8) w = W(p.team, Math.min(u, 25), p.def.v());
             p.e.snapTo(w.x, w.y, w.z, yawTo(attackDir[p.team], 0), 0);
             p.vx = p.vz = 0; p.tx = w.x; p.tz = w.z;
         }
@@ -278,10 +278,12 @@ public final class Match {
             if (p.headCd > 0) p.headCd--;
             if (p.shoutCd > 0) p.shoutCd--;
             if (p.skillCd > 0) p.skillCd--;
+            if (p.giveGoTicks > 0) p.giveGoTicks--;
             if (p.skillTicks > 0) { p.skillTicks--; if (p.skillTicks == 0) p.boost = 1.0; }
         }
         if (passTtl > 0 && --passTtl == 0) passTarget = null;
         if (skillMsgCd > 0) skillMsgCd--;
+        if (offTtl > 0 && --offTtl == 0) offSet = null;
         for (int t = 0; t < 2; t++) { if (trans[t] > 0) trans[t]--; if (counterPress[t] > 0) counterPress[t]--; }
         int ct = carrier != null ? carrier.team : -1;
         if (ct >= 0 && ct != lastCarrierTeam) { if (lastCarrierTeam >= 0 && st == St.PLAYING) { trans[ct] = 100; counterPress[lastCarrierTeam] = 70; trans[lastCarrierTeam] = 0; } lastCarrierTeam = ct; }
@@ -382,13 +384,11 @@ public final class Match {
         whistle(1.3f);
         if (half == 1) {
             st = St.HALFTIME; stTicks = 0;
-            title("§lINTERVALO", Roster.COR_CHAT[0] + score[0] + " §f x " + Roster.COR_CHAT[1] + score[1]);
-            say("§e⏸ Fim do 1º tempo: " + placar());
+            sayV("§e⏸ Intervalo: " + placar());
         } else {
             st = St.FULLTIME; stTicks = 0;
             String venc = score[0] == score[1] ? "§eEMPATE!" : (score[0] > score[1] ? Roster.COR_CHAT[0] + Roster.TIME_NOME[0] : Roster.COR_CHAT[1] + Roster.TIME_NOME[1]) + " §evence!";
-            title("§l§6FIM DE JOGO", venc);
-            say("§6🏁 Fim de jogo: " + placar() + " §7(use o graveto para jogar de novo)");
+            say("§6🏁 Fim de jogo: " + placar());
             if (crowd != null) crowd.event("end", 0);
             if (onFinish != null) { var cb = onFinish; onFinish = null; cb.accept(this); }
         }
@@ -445,7 +445,7 @@ public final class Match {
         if (Math.abs(dz) > pitch.limZ()) {                         // lateral
             int team = lastTouchTeam < 0 ? kickoffTeam : 1 - lastTouchTeam;
             double sx = clamp(dx, -Pitch.HALF_L + 2, Pitch.HALF_L - 2);
-            sayEvent("§7↔ Lateral para " + nome(team)); cnt("lateral");
+            sayV("§7↔ Lateral para " + nome(team)); cnt("lateral");
             beginSetPiece(SP.THROW_IN, team, new Vec3(pitch.cx() + sx, pitch.surf(), pitch.cz() + Math.signum(dz) * Pitch.HALF_W));
             return true;
         }
@@ -457,10 +457,10 @@ public final class Match {
             if (noGol) { goal(attacker); return true; }
             if (lastTouchTeam == defender || lastTouchTeam < 0) {
                 double cz = pitch.cz() + (dz >= 0 ? 1 : -1) * (Pitch.HALF_W - 0.5);
-                sayEvent("§7⚑ Escanteio para " + nome(attacker)); cnt("escanteio");
+                sayV("§7⚑ Escanteio para " + nome(attacker)); cnt("escanteio");
                 beginSetPiece(SP.CORNER, attacker, new Vec3(pitch.cx() + side * (Pitch.HALF_L - 0.5), pitch.surf(), cz));
             } else {
-                sayEvent("§7▢ Tiro de meta para " + nome(defender)); cnt("tiro_de_meta");
+                sayV("§7▢ Tiro de meta para " + nome(defender)); cnt("tiro_de_meta");
                 Vec3 spot = new Vec3(pitch.ownGoalX(attackDir[defender]) + attackDir[defender] * 4.5, pitch.surf(), pitch.cz() + (dz >= 0 ? 2.5 : -2.5));
                 beginSetPiece(SP.GOAL_KICK, defender, spot);
             }
@@ -482,8 +482,8 @@ public final class Match {
         if (crowd != null) crowd.event("goal", team);
         level.playSound(null, bp().x, bp().y, bp().z, SoundEvents.FIREWORK_ROCKET_LARGE_BLAST, SoundSource.NEUTRAL, 3f, 1f);
         String autor = who == null ? "" : (contra ? "gol contra de " : "") + who.def.nome() + " (#" + who.def.num() + ")";
-        title("§l§e⚽ GOOOOOL!", Roster.COR_CHAT[team] + autor);
-        say("§e⚽ GOL! " + Roster.COR_CHAT[team] + nome(team) + " §f— " + autor + " §7| " + placar());
+        title("§l⚽ GOL", Roster.COR_CHAT[team] + autor);
+        say("§e⚽ " + placar() + " §7— " + autor);
         Vec3 b = bp();
         pinBall(new Vec3(b.x, b.y, b.z));
     }
@@ -494,7 +494,7 @@ public final class Match {
 
     void beginSetPiece(SP type, int team, Vec3 spot) {
         st = St.SETPIECE; stTicks = 0; spTicks = 0;
-        sp = type; spTeam = team; spSpot = spot;
+        sp = type; spTeam = team; spSpot = spot; spIndirect = false; offSet = null;
         carrier = null; passTarget = null;
         for (FPlayer p : all) { p.holding = false; p.shotActive = false; }
         pinBall(spot);
@@ -530,7 +530,7 @@ public final class Match {
         double kx = spSpot.x - dx / d * 0.9, kz = spSpot.z - dz / d * 0.9;
         spTaker.tx = kx; spTaker.tz = kz; spTaker.spd = 0.8; spTaker.mode = FPlayer.Mode.SETPIECE;
         boolean near = hd(spTaker.pos().x, spTaker.pos().z, kx, kz) < 1.0;
-        int minWait = sp == SP.KICKOFF ? 50 : sp == SP.PENALTY ? 90 : 45;
+        int minWait = sp == SP.KICKOFF ? 90 : sp == SP.PENALTY ? 110 : 70;
         boolean gkOk = sp != SP.PENALTY || hd(gk(1 - spTeam).pos().x, gk(1 - spTeam).pos().z, W(1 - spTeam, 0.8, 0).x, W(1 - spTeam, 0.8, 0).z) < 1.3;
         if ((near && spTicks >= minWait && gkOk) || spTicks > 260) executeSetPiece();
     }
@@ -569,7 +569,7 @@ public final class Match {
                 for (FPlayer p : teams[spTeam]) {
                     if (p == k || p.isGK()) continue;
                     double u = U(spTeam, p.pos().x), v = Math.abs(V(spTeam, p.pos().z));
-                    if (u < 64 - Pitch.BOX_D - 2 || v > Pitch.BOX_HALF) continue;
+                    if (u < 64 - Pitch.BOXV_D - 2 || v > Pitch.BOXV_H) continue;
                     double s = p.st().forca() * 0.5 + p.st().fin() * 0.5 - openness(p) * -2.0;
                     if (s > bs) { bs = s; r = p; }
                 }
@@ -588,17 +588,17 @@ public final class Match {
             }
             case FREE_KICK -> {
                 double dGoal = hd(b, W(spTeam, 64, 0));
-                if (dGoal < 24 + k.st().fin() * 0.05 && rnd.nextDouble() < 0.4 + k.st().fin() * 0.004) freeKickShot(k);
+                if (!spIndirect && dGoal < (24 + k.st().fin() * 0.05) * Pitch.SL && rnd.nextDouble() < 0.4 + k.st().fin() * 0.004) freeKickShot(k);
                 else {
                     FPlayer r = bestPass(k, true, 5, 30, false);
                     if (r == null) r = nearestTeammate(k);
-                    kickPass(k, r, hd(k.pos(), r.pos()) > 16);
+                    kickPass(k, r, hd(k.pos(), r.pos()) > 16 * Pitch.SL);
                 }
             }
             case PENALTY -> {
                 FPlayer g = gk(1 - spTeam);
                 double side = rnd.nextBoolean() ? 1 : -1;
-                shootAt(k, 64, side * (Pitch.GOAL_HALF - 0.7) * (0.6 + k.st().fin() * 0.004), 0.7 + rnd.nextDouble() * 1.2, 1.0, 0.8);
+                shootAt(k, 64, side * (Pitch.GOAL_HALF - 0.7) / Pitch.SW * (0.6 + k.st().fin() * 0.004), 0.7 + rnd.nextDouble() * 1.2, 1.0, 0.8);
                 // goleiro escolhe um canto (chuta; os melhores adivinham mais)
                 boolean acerta = rnd.nextDouble() < 0.40 + (g.st().ref() - 50) * 0.003;
                 double gz = (acerta ? side : -side) * 2.3;
@@ -656,6 +656,10 @@ public final class Match {
         }
         if (best == null) return;
         FPlayer p = best;
+        if (offSet != null) {
+            if (p.team != offTeam) offSet = null;
+            else if (offSet.contains(p) && st == St.PLAYING) { offside(p); return; }
+        }
         if (air) { header(p); return; }
         if (p.isGK() && inBox(p.team, b)) {
             double chance = clamp(0.55 + p.st().ref() * 0.004 - bv * 0.35, 0.2, 0.95);
@@ -722,16 +726,16 @@ public final class Match {
     }
 
     boolean inBox(int t, Vec3 pos) {
-        return U(t, pos.x) < Pitch.BOX_D + 0.5 && Math.abs(V(t, pos.z)) < Pitch.BOX_HALF + 0.5;
+        return U(t, pos.x) < Pitch.BOXV_D + 0.5 && Math.abs(V(t, pos.z)) < Pitch.BOXV_H + 0.5;
     }
 
     void foul(FPlayer fouler, FPlayer victim) {
         Vec3 spot = victim.pos();
         whistle(1.1f);
         boolean pen = inBox(fouler.team, spot);
-        cnt(pen ? "penalti" : "falta"); if (crowd != null) crowd.event("foul", fouler.team); say("§c✋ Falta de " + Roster.COR_CHAT[fouler.team] + fouler.def.nome() + " §c(#" + fouler.def.num() + ")" + (pen ? " — §lPÊNALTI!" : ""));
+        cnt(pen ? "penalti" : "falta"); if (crowd != null) crowd.event("foul", fouler.team); sayV("§c✋ Falta de " + Roster.COR_CHAT[fouler.team] + fouler.def.nome() + " §c(#" + fouler.def.num() + ")" + (pen ? " — §lPÊNALTI!" : ""));
         if (pen) {
-            Vec3 ps = W(victim.team, 64 - Pitch.PEN_SPOT, 0);
+            Vec3 ps = W(victim.team, 64 - Pitch.PEN_SPOT_V, 0);
             beginSetPiece(SP.PENALTY, victim.team, new Vec3(ps.x, pitch.surf(), ps.z));
         } else beginSetPiece(SP.FREE_KICK, victim.team, new Vec3(spot.x, pitch.surf(), spot.z));
     }
@@ -742,7 +746,7 @@ public final class Match {
         p.touchCd = 8;
         double fn = U(p.team, p.pos().x);
         double dGoal = hd(p.pos(), W(p.team, 64, 0));
-        if (fn > 64 - 17 && dGoal < 17 && !p.isGK()) {
+        if (fn > 64 - 17 && dGoal < 17 * Pitch.SL && !p.isGK()) {
             shootAt(p, 64, rnd.nextGaussian() * 1.8, 0.4 + rnd.nextDouble() * 0.8, 0.95, 1.8);
         } else {
             // cabeceio de apoio ou afastamento (sempre baixo, para a bola não ficar "no ar" para sempre)
@@ -763,6 +767,7 @@ public final class Match {
     // =====================================================================================
 
     void gkCatch(FPlayer g) {
+        offSet = null;
         g.holding = true; g.holdTicks = 0; g.holdMax = 25 + rnd.nextInt(30);
         carrier = g; lastTouchTeam = g.team; lastToucher = g; g.shotActive = false; passTarget = null;
         g.vx = g.vz = 0;
@@ -790,7 +795,7 @@ public final class Match {
                 for (int n = 1; n < traj.length; n++) {
                     if (U(t, traj[n].x) <= 0.4) {
                         double z = V(t, traj[n].z), y = traj[n].y - pitch.surf();
-                        if (Math.abs(z) < Pitch.GOAL_HALF + 1.6 && y < Pitch.GOAL_H + 0.4 && y > -0.1 && U(t, bp().x) > 0.5) {
+                        if (Math.abs(z * Pitch.SW) < Pitch.GOAL_HALF + 1.8 && y < Pitch.GOAL_H + 0.4 && y > -0.1 && U(t, bp().x) > 0.5) {
                             double sd = 0.5 + (100 - g.st().ref()) * 0.032 + (100 - g.st().vis()) * 0.006;
                             g.shotActive = true; g.shotTicks = 0; g.jumped = false;
                             g.shotReact = (int) Math.round(7 - g.st().ref() * 0.055);
@@ -824,7 +829,7 @@ public final class Match {
         Vec3 b = bp();
         if (rnd.nextDouble() < catchP) {
             gkCatch(g);
-            if (crowd != null) crowd.event("save", g.team); cnt("defesa"); say("§b🧤 Defesa de " + Roster.COR_CHAT[g.team] + g.def.nome() + "§b!");
+            if (crowd != null) crowd.event("save", g.team); cnt("defesa"); sayV("§b🧤 Defesa de " + Roster.COR_CHAT[g.team] + g.def.nome() + "§b!");
         } else {
             double out = Math.signum(b.z - g.pos().z + (rnd.nextDouble() - 0.5) * 0.2);
             double ang = Math.toRadians(35 + rnd.nextDouble() * 55);
@@ -832,7 +837,7 @@ public final class Match {
             double s = Math.max(0.35, speed * 0.55);
             ball.setDeltaMovement(dir * Math.cos(ang) * s * 0.55, 0.18 + rnd.nextDouble() * 0.15, out * Math.sin(ang) * s);
             g.touchCd = 15;
-            if (crowd != null) crowd.event("save", g.team); cnt("espalmada"); say("§b🧤 Espalmou " + Roster.COR_CHAT[g.team] + g.def.nome() + "§b!");
+            if (crowd != null) crowd.event("save", g.team); cnt("espalmada"); sayV("§b🧤 Espalmou " + Roster.COR_CHAT[g.team] + g.def.nome() + "§b!");
         }
         level.playSound(null, b.x, b.y, b.z, SoundEvents.ARMOR_EQUIP_LEATHER.value(), SoundSource.NEUTRAL, 1f, 0.9f);
     }
@@ -879,7 +884,7 @@ public final class Match {
     void shoot(FPlayer k, double errMul) {
         FPlayer g = gk(1 - k.team);
         double gv = V(k.team, g.pos().z);
-        double maxOff = Pitch.GOAL_HALF - 0.45;
+        double maxOff = (Pitch.GOAL_HALF - 0.45) / Pitch.SW;
         double aim = maxOff * (0.55 + k.st().fin() * 0.0045);
         double side = gv > 0.4 ? -1 : gv < -0.4 ? 1 : (rnd.nextBoolean() ? 1 : -1);
         double h = rnd.nextDouble() < (0.15 + k.st().fin() * 0.003) ? 1.9 + rnd.nextDouble() * 0.7 : 0.3 + rnd.nextDouble() * 1.0;
@@ -889,7 +894,7 @@ public final class Match {
         if (cavada) {                                               // cavadinha por cima do goleiro que saiu
             shootAt(k, 64, rnd.nextGaussian() * 0.8, 1.9, 0.62, 0.9);
             Vec3 bv = ball.getDeltaMovement(); ball.setDeltaMovement(bv.x, Math.max(bv.y, 0.42), bv.z);
-            say("§d✨ Cavadinha de " + Roster.COR_CHAT[k.team] + k.def.nome() + "§d!"); cnt("cavadinha"); return;
+            sayV("§d✨ Cavadinha de " + Roster.COR_CHAT[k.team] + k.def.nome() + "§d!"); cnt("cavadinha"); return;
         }
         if (d > 11 && k.st().fin() >= 65 && rnd.nextDouble() < (k.st().fin() - 55) * 0.011) {
             curl = (0.16 + rnd.nextDouble() * 0.16) * (rnd.nextBoolean() ? 1 : -1);
@@ -897,7 +902,7 @@ public final class Match {
             cnt("chute_curva");
         }
         shootAt(k, 64, side * aim, h, 1.0, errMul, curl, 0);
-        say("§f" + Roster.COR_CHAT[k.team] + k.def.nome() + (curl != 0 ? "§f chuta com efeito!" : "§f chuta!")); cnt("chute_t" + k.team); if (crowd != null) crowd.event("chance", k.team);
+        sayV("§f" + Roster.COR_CHAT[k.team] + k.def.nome() + (curl != 0 ? "§f chuta com efeito!" : "§f chuta!")); cnt("chute_t" + k.team); if (crowd != null) crowd.event("chance", k.team);
     }
 
 
@@ -907,12 +912,12 @@ public final class Match {
         double gv = V(k.team, g.pos().z);
         double side = gv > 0.4 ? -1 : gv < -0.4 ? 1 : (rnd.nextBoolean() ? 1 : -1);
         double speed = clamp(0.9 + k.st().fin() * 0.0045 + k.st().forca() * 0.002, 0.95, 1.55);
-        double tw = 6.6 / (speed * 0.96);
+        double tw = 7.9 / (speed * 0.96);
         double minVy = (2.5 + 0.04 * tw * tw) / tw;
         double curl = (0.20 + (k.st().fin() - 50) * 0.003) * (rnd.nextBoolean() ? 1 : -1);
-        double aim = (Pitch.GOAL_HALF - 0.5) * (0.5 + k.st().fin() * 0.0045);
+        double aim = (Pitch.GOAL_HALF - 0.5) / Pitch.SW * (0.5 + k.st().fin() * 0.0045);
         shootAt(k, 64, side * aim, 1.2, 1.0, 1.0, curl, minVy);
-        say("§d🎯 Falta cobrada por " + Roster.COR_CHAT[k.team] + k.def.nome() + "§d, com efeito!");
+        sayV("§d🎯 Falta cobrada por " + Roster.COR_CHAT[k.team] + k.def.nome() + "§d, com efeito!");
         cnt("falta_chute");
     }
 
@@ -944,6 +949,9 @@ public final class Match {
             } else kickGround(k, lead.x, lead.z, 1.0);
         }
         passTarget = r; passTtl = 70;
+        markOffside(k);
+        double dd = hd(k.pos(), r.pos());
+        if (!air && dd < 20 * Pitch.SL && k.def.pos().linha >= 2 && r.def.pos().linha >= 2 && k.st().vis() >= 60 && rnd.nextDouble() < 0.35) { k.giveGoTicks = 70; k.giveGoTarget = r; }
     }
 
     Vec3 lead(FPlayer r, double ticks) {
@@ -954,7 +962,7 @@ public final class Match {
     void kickGround(FPlayer k, double tx, double tz, double power) {
         Vec3 b = bp();
         double d = hd(b.x, b.z, tx, tz);
-        double speed = clamp(0.35 + 0.035 * d, 0.45, 1.45) * power;
+        double speed = clamp(0.35 + 0.035 * d, 0.45, 1.75) * power;
         double press = 1 + 0.2 * pressure(k, 2.8);
         double sd = (0.8 + (100 - k.st().pas()) * 0.06) * press * (0.7 + d / 40);
         double yaw = Math.atan2(tz - b.z, tx - b.x) + Math.toRadians(rnd.nextGaussian() * sd);
@@ -1015,7 +1023,7 @@ public final class Match {
         if (o == null || bd < 1.1) return false;
         int dri = c.st().dri();
         double prob = 0.10 + dri * 0.0055 + (c.def.pos().linha == 3 ? 0.12 : c.def.pos().linha == 2 ? 0.04 : -0.10);
-        if (dGoalOf(c) < 11) prob *= 0.4;                      // na cara do gol: chuta
+        if (dGoalOf(c) < 11 * Pitch.SL) prob *= 0.4;                      // na cara do gol: chuta
         if (rnd.nextDouble() > prob) return false;
         // escolhe o lance conforme a habilidade
         double r = rnd.nextDouble() * 100;
@@ -1066,7 +1074,7 @@ public final class Match {
         if (crowd != null) crowd.event("skill", c.team);
         if (skillMsgCd > 0) return;
         skillMsgCd = 80;
-        say("§d✨ " + Roster.COR_CHAT[c.team] + c.def.nome() + "§d aplica " + (type == 3 || type == 4 ? "uma " : "um ") + SKILL[type] + " em " + Roster.COR_CHAT[o.team] + o.def.nome() + "§d!");
+        sayV("§d✨ " + Roster.COR_CHAT[c.team] + c.def.nome() + "§d aplica " + (type == 3 || type == 4 ? "uma " : "um ") + SKILL[type] + " em " + Roster.COR_CHAT[o.team] + o.def.nome() + "§d!");
         level.playSound(null, c.pos().x, c.pos().y, c.pos().z, SoundEvents.VILLAGER_CELEBRATE, SoundSource.NEUTRAL, 1f, 1.2f);
     }
 
@@ -1094,6 +1102,114 @@ public final class Match {
                 }
             }
         }
+    }
+
+
+    // =====================================================================================
+    //  Impedimento
+    // =====================================================================================
+
+    /** Registra quem estava em posição de impedimento no momento do passe. */
+    void markOffside(FPlayer k) {
+        double off = offsideLine(k.team), ku = U(k.team, k.pos().x);
+        java.util.Set<FPlayer> set = new java.util.HashSet<>();
+        for (FPlayer r : teams[k.team]) {
+            if (r == k || r.isGK()) continue;
+            if (U(k.team, r.pos().x) > Math.max(off, ku) + 0.15) set.add(r);
+        }
+        offSet = set.isEmpty() ? null : set; offTeam = k.team; offTtl = 110;
+    }
+
+    void offside(FPlayer p) {
+        offSet = null;
+        whistle(1.1f);
+        cnt("impedimento");
+        sayV("§e🚩 Impedimento de " + Roster.COR_CHAT[p.team] + p.def.nome());
+        if (crowd != null) crowd.event("foul", p.team);
+        Vec3 pp = p.pos();
+        Vec3 spot = new Vec3(clamp(pp.x, pitch.cx() - Pitch.HALF_L + 2, pitch.cx() + Pitch.HALF_L - 2), pitch.surf(), clamp(pp.z, pitch.cz() - Pitch.HALF_W + 2, pitch.cz() + Pitch.HALF_W - 2));
+        beginSetPiece(SP.FREE_KICK, 1 - p.team, spot);
+        spIndirect = true;
+    }
+
+    // =====================================================================================
+    //  Jogadas: cruzamento, enfiada, inversão, tabela
+    // =====================================================================================
+
+    boolean specialPlay(FPlayer c, int press, double u) {
+        int linha = c.def.pos().linha;
+        if (c.isGK() || c.holding) return false;
+        double v = V(c.team, c.pos().z), off = offsideLine(c.team);
+        // 1) linha de fundo / ala: cruzamento ou bola para trás da área
+        if (u > 42 && Math.abs(v) > 10 && linha >= 1) {
+            FPlayer tgt = null, cut = null; double bs = -1e9, bc = -1e9;
+            for (FPlayer r : teams[c.team]) {
+                if (r == c || r.isGK()) continue;
+                double ru = U(c.team, r.pos().x), rv = V(c.team, r.pos().z);
+                if (ru > 50 && Math.abs(rv) < 10 && ru <= off + 0.3) {
+                    double s2 = r.st().fin() * 0.5 + r.st().forca() * 0.25 + Math.min(openness(r), 7) * 4 + rnd.nextGaussian() * 4;
+                    if (s2 > bs) { bs = s2; tgt = r; }
+                }
+                if (ru > 42 && ru < 55 && Math.abs(rv) < 9 && openness(r) > 4.0) {
+                    double s2 = r.st().fin() * 0.6 + openness(r) * 3;
+                    if (s2 > bc) { bc = s2; cut = r; }
+                }
+            }
+            if (u > 56 && cut != null && rnd.nextDouble() < 0.45) {
+                carrier = null; cnt("bola_para_tras");
+                Vec3 ld = lead(cut, 8); kickGround(c, ld.x, ld.z, 0.9); passTarget = cut; passTtl = 60; markOffside(c);
+                return true;
+            }
+            if (tgt != null && rnd.nextDouble() < 0.35 + c.st().vis() * 0.004 + (u > 52 ? 0.2 : 0)) {
+                carrier = null; cnt("cruzamento");
+                if (rnd.nextDouble() < 0.3) { Vec3 ld = lead(tgt, 10); kickGround(c, ld.x, ld.z, 1.0); }
+                else {
+                    Vec3 gc = W(c.team, 64, 0);
+                    double cross = (tgt.pos().x - c.pos().x) * (gc.z - c.pos().z) - (tgt.pos().z - c.pos().z) * (gc.x - c.pos().x);
+                    double d = hd(c.pos(), tgt.pos());
+                    kickLob(c, tgt.pos().x, tgt.pos().z, (int) clamp(14 + d * 0.8, 16, 30), 1.5, Math.signum(cross) * (0.18 + (c.st().pas() - 50) * 0.003));
+                }
+                passTarget = tgt; passTtl = 70; markOffside(c);
+                return true;
+            }
+        }
+        // 2) enfiada: bola em profundidade para quem corre nas costas da zaga
+        if (linha >= 1 && c.st().pas() >= 62 && u < 54 && rnd.nextDouble() < 0.09 + (c.st().vis() - 60) * 0.002) {
+            FPlayer best = null; double bs = -1e9; Vec3 bp = null;
+            for (FPlayer r : teams[c.team]) {
+                if (r == c || r.isGK() || r.def.pos().linha < 3 && r.def.pos() != Pos.WG) continue;
+                double ru = U(c.team, r.pos().x);
+                if (ru < u + 10 || ru > off + 0.3) continue;
+                Vec3 P = W(c.team, Math.min(62, ru + 9), V(c.team, r.pos().z));
+                double lane = laneClear(c, P.x, P.z);
+                double s2 = lane * 3 + Math.min(openness(r), 7) * 2 + (r.st().vel() - 50) * 0.1;
+                if (lane > 1.5 && s2 > bs) { bs = s2; best = r; bp = P; }
+            }
+            if (best != null) {
+                carrier = null; cnt("enfiada");
+                kickGround(c, bp.x, bp.z, 1.0); passTarget = best; passTtl = 80; markOffside(c);
+                return true;
+            }
+        }
+        // 3) inversão de jogo para o lado oposto
+        if (press >= 1 && c.st().pas() >= 66 && linha >= 1 && rnd.nextDouble() < 0.3) {
+            FPlayer best = null; double bs = -1e9;
+            for (FPlayer r : teams[c.team]) {
+                if (r == c || r.isGK()) continue;
+                double rv = V(c.team, r.pos().z), ru = U(c.team, r.pos().x), d = hd(c.pos(), r.pos());
+                if (Math.abs(rv - v) < 24 || d > 58 || ru < u - 6 || ru > off + 0.3) continue;
+                double s2 = Math.min(openness(r), 9) * 3 + (ru - u) * 0.2;
+                if (s2 > bs && openness(r) > 6.5) { bs = s2; best = r; }
+            }
+            if (best != null) {
+                carrier = null; cnt("inversao");
+                Vec3 ld = lead(best, 12); double d = hd(c.pos(), best.pos());
+                kickLob(c, ld.x, ld.z, (int) clamp(18 + d * 0.5, 22, 34), 2.0, Math.signum(rnd.nextGaussian()) * 0.12);
+                passTarget = best; passTtl = 80; markOffside(c);
+                return true;
+            }
+        }
+        return false;
     }
 
     // =====================================================================================
@@ -1128,6 +1244,7 @@ public final class Match {
 
     /** Melhor companheiro para passar. forward = libera lançamentos; dmin/dmax em blocos. */
     FPlayer bestPass(FPlayer c, boolean allowGK, double dmin, double dmax, boolean safe) {
+        dmin *= Pitch.SL; dmax *= Pitch.SL;
         FPlayer best = null; double bs = -1e9;
         double cu = U(c.team, c.pos().x), off = offsideLine(c.team);
         boolean def = c.def.pos().linha <= 1, mid = c.def.pos().linha == 2;
@@ -1145,10 +1262,11 @@ public final class Match {
             double w = def ? 0.30 : mid ? 0.45 : 0.65;
             if (safe) w *= 0.4;
             double s = prog * w + Math.min(open, 7) * 2.3 + Math.min(lane, 4) * (3.0 + (mid ? 1.5 : 0))
-                    - Math.max(0, d - 22) * (0.6 - c.st().pas() * 0.004)
+                    - Math.max(0, d - 22 * Pitch.SL) * (0.6 - c.st().pas() * 0.004)
                     + (r.def.pos().linha == 3 ? 3 : 0) + (r.isGK() ? -8 : 0)
                     + rnd.nextGaussian() * (2.5 - c.st().vis() * 0.02);
-            if (lane < 1.1 && d < 24) s -= 14;                              // linha de passe bloqueada
+            if (r.giveGoTicks > 0 && r.giveGoTarget == c) s += 16;
+            if (lane < 1.1 && d < 24 * Pitch.SL) s -= 14;                              // linha de passe bloqueada
             if (press >= 2 && prog < 0) s += 3; else if (prog < -2 && !safe) s -= 2.5;                              // sob pressão aceita recuar
             if (s > bs) { bs = s; best = r; }
         }
@@ -1161,7 +1279,7 @@ public final class Match {
         FPlayer c = carrier;
         if (c == null || c.holding) return;
         if (c.skillTicks > 0) return;
-        if (c.ctrlTicks < 6 + (100 - c.st().vis()) / 14 || tickCount % 3 != 0) return;
+        if (c.ctrlTicks < 10 + (100 - c.st().vis()) / 9 || tickCount % 3 != 0) return;
         if (trySkill(c, pressure(c, 3.0))) return;
         Vec3 goal = W(c.team, 64, 0);
         double dGoal = hd(c.pos(), goal);
@@ -1171,16 +1289,17 @@ public final class Match {
         FPlayer g = gk(1 - c.team);
 
         // 1) finalização
-        double range = 13 + c.st().fin() * 0.17;
+        double range = (13 + c.st().fin() * 0.17) * Pitch.SL;
         double bias = linha == 3 ? 1.0 : linha == 2 ? 0.55 : 0.12;
         double lane = laneClear(c, goal.x, goal.z);
         if (dGoal < range && !c.isGK() && Math.abs(V(c.team, c.pos().z)) < 17) {
-            boolean must = dGoal < 9;
-            boolean free = lane > 1.0 || press >= 1 && dGoal < 15;
+            boolean must = dGoal < 9 * Pitch.SL;
+            boolean free = lane > 1.0 || press >= 1 && dGoal < 15 * Pitch.SL;
             if ((must && rnd.nextDouble() < 0.9) || (free && rnd.nextDouble() < bias * (0.8 + c.st().fin() * 0.004))) {
                 carrier = null; shoot(c, 1.0); return;
             }
         }
+        if (specialPlay(c, press, u)) return;
         // 2) passe
         boolean ownThird = u < 20;
         FPlayer r = bestPass(c, ownThird && press >= 1, 4, c.st().pas() > 70 ? 36 : 28, false);
@@ -1199,7 +1318,7 @@ public final class Match {
         if (r != null && passScore > carryScore - 3 + (c.ctrlTicks > 40 ? 9 : 0)) {
             carrier = null;
             double d = hd(c.pos(), r.pos());
-            boolean air = laneClear(c, r.pos().x, r.pos().z) < 1.2 && d > 15 || d > 31;
+            boolean air = laneClear(c, r.pos().x, r.pos().z) < 1.2 && d > 15 * Pitch.SL || d > 42;
             kickPass(c, r, air);
         }
     }
@@ -1307,7 +1426,7 @@ public final class Match {
             } else if (own) {
                 // apoio: os dois mais próximos oferecem linha de passe
                 double dc = hd(p.pos(), carrier.pos());
-                if (pos.linha >= 2 && dc < 16 && pos != Pos.ST) {
+                if (pos.linha >= 2 && dc < 16 * Pitch.SL && pos != Pos.ST) {
                     Vec3 sup = supportSpot(p, carrier, off);
                     tx = tx * 0.4 + sup.x * 0.6; tz = tz * 0.4 + sup.z * 0.6; spd = 0.7; mode = FPlayer.Mode.RUN;
                 }
@@ -1347,6 +1466,14 @@ public final class Match {
                         mode = FPlayer.Mode.MARK; spd = 0.75;
                     }
                 }
+            }
+            if (mode == FPlayer.Mode.HOLD && !setp) {                      // sem bola: movimentação sutil, nada de estátua
+                if (--p.swTicks <= 0) { p.swTicks = 50 + rnd.nextInt(80); p.swX = rnd.nextGaussian() * 1.7; p.swZ = rnd.nextGaussian() * 1.7; }
+                tx += p.swX; tz += p.swZ; spd = 0.45;
+            }
+            if (p.giveGoTicks > 0 && p.giveGoTarget != null && carrier == p.giveGoTarget && own) {        // tabela: corre para receber de volta
+                Vec3 w = W(t, Math.min(off - 0.7, U(t, carrier.pos().x) + 11), V(t, carrier.pos().z) + (p.def.v() >= 0 ? 7 : -7));
+                tx = w.x; tz = w.z; spd = 1.0; mode = FPlayer.Mode.RUN;
             }
             // regras de reposição (distância / áreas)
             if (setp) { Vec3 c = enforceSetPiece(p, t, tx, tz); tx = c.x; tz = c.z; }
@@ -1433,7 +1560,7 @@ public final class Match {
             } else { g.tx = g.pos().x; g.tz = g.pos().z; g.spd = 0; }
             return;
         }
-        boolean inBox = bu < Pitch.BOX_D && Math.abs(bv) < Pitch.BOX_HALF;
+        boolean inBox = bu < Pitch.BOXV_D && Math.abs(bv) < Pitch.BOXV_H;
         if (st == St.PLAYING && inBox && carrier == null && bh() < 1.6 && ballSlowish()) {
             // sair para pegar se for o mais perto
             double mine = ttb(g, bp()); boolean first = true;
@@ -1495,14 +1622,14 @@ public final class Match {
                 Vec3 gc = W(spTeam, 64, 0);
                 double dG = hd(spSpot, gc);
                 if (atk) {
-                    if (dG < 34 && (pos == Pos.ST || pos == Pos.SS || pos == Pos.CB || pos == Pos.DM)) {
+                    if (dG < 34 * Pitch.SL && (pos == Pos.ST || pos == Pos.SS || pos == Pos.CB || pos == Pos.DM)) {
                         double[][] spots = {{58, 4}, {57, -4}, {54, 8}, {54, -8}};
                         int slot = Math.floorMod(p.def.num(), 4);
                         return W(t, spots[slot][0], spots[slot][1]);
                     }
                     return W(t, p.def.u(), p.def.v());
                 }
-                if (dG < 30) {                                         // barreira de 3 jogadores a 6,6 m
+                if (dG < 30 * Pitch.SL) {                              // barreira de 3 jogadores a 9 m
                     java.util.List<FPlayer> cand = new java.util.ArrayList<>();
                     for (FPlayer q : teams[t]) if (!q.isGK()) cand.add(q);
                     cand.sort(java.util.Comparator.comparingDouble(q -> hd(q.pos(), spSpot)));
@@ -1510,7 +1637,7 @@ public final class Match {
                     if (rank >= 0 && rank < 3) {
                         double dx = gc.x - spSpot.x, dz = gc.z - spSpot.z, dn = Math.max(0.1, Math.hypot(dx, dz));
                         dx /= dn; dz /= dn;
-                        double cx = spSpot.x + dx * 6.6, cz = spSpot.z + dz * 6.6;
+                        double cx = spSpot.x + dx * 7.9, cz = spSpot.z + dz * 7.9;
                         return new Vec3(cx - dz * (rank - 1) * 0.95, 0, cz + dx * (rank - 1) * 0.95);
                     }
                 }
@@ -1518,8 +1645,8 @@ public final class Match {
             }
             case PENALTY -> {
                 // todos fora da grande área, atrás da marca
-                if (atk) return W(t, 64 - Pitch.BOX_D - 3, p.def.v());
-                return W(t, Pitch.BOX_D + 3, p.def.v());
+                if (atk) return W(t, 64 - Pitch.BOXV_D - 3, p.def.v());
+                return W(t, Pitch.BOXV_D + 3, p.def.v());
             }
             default -> { return W(t, p.def.u(), p.def.v()); }
         }
@@ -1527,7 +1654,7 @@ public final class Match {
 
     /** Aplica regras: adversário a 6,5 m da bola, no kickoff fora do círculo e na própria metade. */
     Vec3 enforceSetPiece(FPlayer p, int t, double tx, double tz) {
-        double minD = sp == SP.KICKOFF ? 6.0 : sp == SP.THROW_IN ? 3.0 : sp == SP.FREE_KICK ? 6.4 : (sp == SP.GOAL_KICK ? 8.0 : 7.0);
+        double minD = sp == SP.KICKOFF ? 7.4 : sp == SP.THROW_IN ? 3.5 : sp == SP.FREE_KICK ? 7.6 : (sp == SP.GOAL_KICK ? 10.0 : 8.0);
         if (t != spTeam) {
             double dx = tx - spSpot.x, dz = tz - spSpot.z, d = Math.hypot(dx, dz);
             if (d < minD) {
@@ -1542,7 +1669,7 @@ public final class Match {
         if (sp == SP.GOAL_KICK && t != spTeam) {          // adversário fora da grande área
             double u = U(t, tx), v = Math.abs(V(t, tz));
             double ou = 64 - u;
-            if (ou < Pitch.BOX_D + 1 && v < Pitch.BOX_HALF + 1) { Vec3 w = W(t, 64 - Pitch.BOX_D - 2, V(t, tz)); tx = w.x; tz = w.z; }
+            if (ou < Pitch.BOXV_D + 1 && v < Pitch.BOXV_H + 1) { Vec3 w = W(t, 64 - Pitch.BOXV_D - 2, V(t, tz)); tx = w.x; tz = w.z; }
         }
         return new Vec3(tx, 0, tz);
     }
@@ -1571,6 +1698,8 @@ public final class Match {
             if (sd < 1.15 && sd > 0.001) { double k = (1.15 - sd) * 0.12; wx += sx / sd * k; wz += sz / sd * k; }
         }
         double a = p.accel() * (p.spd > 1.0 ? 3 : 1);
+        double sp0 = Math.hypot(p.vx, p.vz), wm = Math.hypot(wx, wz);
+        if (sp0 > 0.1 && wm > 0.05 && (wx * p.vx + wz * p.vz) / (sp0 * wm) < 0.3) { wx *= 0.6; wz *= 0.6; a *= 0.7; }   // mudança brusca de direção custa velocidade
         double ax = wx - p.vx, az = wz - p.vz, am = Math.hypot(ax, az);
         if (am > a) { ax = ax / am * a; az = az / am * a; }
         p.vx += ax; p.vz += az;
@@ -1634,7 +1763,6 @@ public final class Match {
         replayPos = 0; replaySpeed = speed; replayLen = replayFrames.size(); replayIdx = 0;
         st = St.REPLAY; stTicks = 0;
         if (cameras != null) cameras.forceAll(Cameras.Mode.AUTO);
-        title("§e§l▶ REPLAY", "§7câmera lenta");
         FutebolMod.LOG.info("REPLAY iniciado: {} quadros, {}x", replayLen, speed);
         return true;
     }
@@ -1660,7 +1788,7 @@ public final class Match {
         }
         double bx = a[k] + (b[k] - a[k]) * fr, by = a[k + 1] + (b[k + 1] - a[k + 1]) * fr, bz = a[k + 2] + (b[k + 2] - a[k + 2]) * fr;
         pinBall(new Vec3(bx, by, bz));
-        if (tickCount % 10 == 0) for (ServerPlayer pl : level.players()) pl.sendSystemMessage(Component.literal("§e▶ REPLAY §7(" + (int) (replaySpeed * 100) + "% da velocidade)"), true);
+        if (tickCount % 20 == 0) for (ServerPlayer pl : level.players()) pl.sendSystemMessage(Component.literal("§e▶ REPLAY"), true);
     }
 
     static double Mth_wrap(double d) { d %= 360; if (d > 180) d -= 360; if (d < -180) d += 360; return d; }
@@ -1686,7 +1814,9 @@ public final class Match {
     String nome(int t) { return Roster.COR_CHAT[t] + Roster.TIME_NOME[t] + "§r"; }
     String placar() { return Roster.COR_CHAT[0] + Roster.TIME_NOME[0] + " §f" + score[0] + " x " + score[1] + " " + Roster.COR_CHAT[1] + Roster.TIME_NOME[1]; }
 
-    void sayEvent(String s) { say(s); }
+    /** Só aparece com /futebol info on. */
+    public boolean verbose = false;
+    void sayV(String s) { if (verbose) say(s); }
 
     void say(String s) {
         for (ServerPlayer pl : level.players()) pl.sendSystemMessage(Component.literal(s));
@@ -1694,7 +1824,7 @@ public final class Match {
 
     void title(String t, String sub) {
         for (ServerPlayer pl : level.players()) {
-            pl.connection.send(new ClientboundSetTitlesAnimationPacket(5, 50, 15));
+            pl.connection.send(new ClientboundSetTitlesAnimationPacket(5, 35, 10));
             pl.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal(sub)));
             pl.connection.send(new ClientboundSetTitleTextPacket(Component.literal(t)));
         }
@@ -1706,14 +1836,15 @@ public final class Match {
     }
 
     void hud() {
-        int secs = clock / 20, mins = secs / 60; secs %= 60;
         int totalMin = (half == 1 ? 0 : 45) + (int) (45.0 * clock / halfLen);
-        String tempo = st == St.IDLE ? "§7aperte o graveto" : st == St.FULLTIME ? "§6fim" : "§e" + half + "º T §f" + String.format("%02d'", Math.min(totalMin, 90));
-        String txt = Roster.COR_CHAT[0] + "§l" + Roster.TIME_NOME[0].toUpperCase() + " §f§l" + score[0] + " ✕ " + score[1] + " " + Roster.COR_CHAT[1] + "§l" + Roster.TIME_NOME[1].toUpperCase() + "  §8| " + tempo;
-        for (ServerPlayer pl : level.players())
-            if (hd(pl.position(), new Vec3(pitch.cx(), 0, pitch.cz())) < 160) pl.sendSystemMessage(Component.literal(txt), true);
+        String tempo = st == St.IDLE ? "" : st == St.FULLTIME ? "fim" : String.format("%d'", Math.min(totalMin, 90));
+        if (st != St.REPLAY && (verbose || st == St.IDLE)) {
+            String txt = Roster.COR_CHAT[0] + Roster.SIGLA[0] + " §f" + score[0] + "-" + score[1] + " " + Roster.COR_CHAT[1] + Roster.SIGLA[1] + " §7" + tempo;
+            for (ServerPlayer pl : level.players())
+                if (hd(pl.position(), new Vec3(pitch.cx(), 0, pitch.cz())) < 160) pl.sendSystemMessage(Component.literal(st == St.IDLE ? "§7Botão direito com o graveto para apitar" : txt), true);
+        }
         if (screens != null) screens.update(
-            Roster.COR_CHAT[0] + "§l" + Roster.SIGLA[0] + " §f§l" + score[0] + " - " + score[1] + " " + Roster.COR_CHAT[1] + "§l" + Roster.SIGLA[1] + "\n§e" + tempo.replaceAll("§.", "") + "  §7| §fPúblico " + (crowd == null ? 0 : crowd.count * 410),
+            Roster.COR_CHAT[0] + "§l" + Roster.SIGLA[0] + " §f§l" + score[0] + " - " + score[1] + " " + Roster.COR_CHAT[1] + "§l" + Roster.SIGLA[1] + "\n§e" + tempo + "  §7| §fPúblico " + (crowd == null ? 0 : crowd.count * 410),
             "§6§l" + Roster.TIME_NOME[0] + " x " + Roster.TIME_NOME[1] + "\n§7" + boardInfo);
     }
 
@@ -1722,7 +1853,7 @@ public final class Match {
         score[0] = score[1] = 0; half = 1; clock = 0; attackDir[0] = 1; attackDir[1] = -1;
         st = St.IDLE; stTicks = 0;
         resetForKickoff(0, true);
-        say("§7Partida reiniciada. Clique com o graveto para começar.");
+        sayV("§7Partida reiniciada.");
     }
 
     /** Jogador humano chuta a bola (botão esquerdo). */
