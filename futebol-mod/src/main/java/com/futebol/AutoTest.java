@@ -29,6 +29,7 @@ final class AutoTest {
             Match m = FutebolMod.match;
             if (m == null) return;
             ticks++;
+            if (ticks % 600 == 0) { String r = m.cameras.selfTest(); if (ticks % 3000 == 0) FutebolMod.LOG.info("CAMTEST ruins=" + r); }
             if (m.carrier != null) { if (m.carrier.team == 0) possA++; else possB++; hist[(int) Math.min(3, Math.max(0, m.U(m.carrier.team, m.carrier.pos().x) / 16))]++; }
             if (m.st == Match.St.PLAYING) for (int t = 0; t < 2; t++) for (int i = 0; i < 11; i++) {
                 FPlayer p = m.teams[t][i]; double u = m.U(t, p.pos().x);

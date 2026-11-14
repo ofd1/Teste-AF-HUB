@@ -1,4 +1,4 @@
-# ⚽ Futebol — mod de Minecraft (Fabric 26.3) · v2.1
+# ⚽ Futebol — mod de Minecraft (Fabric 26.3) · v2.2
 
 Campo + estádio completos, 22 mobs jogando futebol de verdade: Pillagers (mandante) x Vindicators (visitante), goleiros Villager, bola de **Cubo de Enxofre com madeira dentro** e torcida de Villagers cantando.
 
@@ -11,6 +11,13 @@ Campo + estádio completos, 22 mobs jogando futebol de verdade: Pillagers (manda
 ```
 Constrói campo + estádio, coloca os times uniformizados (camisa, calção, número e nome), a torcida, os telões, e te dá o **Graveto do Árbitro** e o **Controle de Câmeras**.
 **Botão direito com o graveto = começa o jogo.** Graveto agachado = reinicia. `/futebol desativar` remove tudo e restaura o terreno.
+
+## Novidades da v2.2 — câmeras de transmissão
+`/futebol camera transmissao` liga o **diretor de TV**, que corta entre câmeras como numa transmissão real (câmeras 100% no estilo TV: a principal é um tripé fixo que só gira, com atraso e zona morta; quase sem tracking):
+- `principal` (câmera 1, meio de campo, alta) · `alta` (alta lateral, na linha da grande área, escolhe o lado da bola) · `gol` (alta atrás do gol) · `rasteira` (carrinho na linha lateral) · `spider` (spidercam) · `escanteio` · `rosto` (close do jogador) · `torcida` (varre a arquibancada) · `tatica` · `bola` · `jogador` · `drone` · `arquibancada`.
+- O diretor: jogo corrido na principal/alta; ataque perto da área = atrás do gol; de vez em quando um plano de acompanhamento (rasteira/spider); **escanteio** = câmera do escanteio; **falta** = close do jogador ofendido; **pênalti** = close do batedor, do goleiro e atrás do gol; **gol** = close do autor, torcida e replay em vários ângulos; intervalo/fim = torcida.
+- **Replays de lance perigoso** (defesas e chutes perto) na próxima paralisação, além do replay de gol. `/futebol replay [seg]` para pedir um.
+- Cada câmera também pode ser usada fixa: `/futebol camera <nome>` (ou o Controle de Câmeras). Agache para sair.
 
 ## Novidades da v2.1
 - **Campo maior** (90×56, gols de 9 blocos, áreas e círculo proporcionais) e estádio ampliado.

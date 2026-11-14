@@ -460,6 +460,7 @@ public final class Match {
                 sayV("§7⚑ Escanteio para " + nome(attacker)); cnt("escanteio");
                 beginSetPiece(SP.CORNER, attacker, new Vec3(pitch.cx() + side * (Pitch.HALF_L - 0.5), pitch.surf(), cz));
             } else {
+                if (tickCount - lastShotTick < 100 && lastToucher != null && lastToucher.team == attacker) markChance();
                 sayV("§7▢ Tiro de meta para " + nome(defender)); cnt("tiro_de_meta");
                 Vec3 spot = new Vec3(pitch.ownGoalX(attackDir[defender]) + attackDir[defender] * 4.5, pitch.surf(), pitch.cz() + (dz >= 0 ? 2.5 : -2.5));
                 beginSetPiece(SP.GOAL_KICK, defender, spot);
@@ -472,7 +473,7 @@ public final class Match {
     void goal(int team) {
         FPlayer who = lastToucher;
         boolean contra = who != null && who.team != team;
-        score[team]++; cnt("gol"); goalMark = recCount;
+        score[team]++; cnt("gol"); goalMark = recCount; chancePending = false;
         for (ServerPlayer pl : level.players()) { String fav = Tickets.favorito.get(pl.getUUID()); if (fav != null && fav.equals(Roster.ATUAL[team].id())) { pl.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("§aÉ do seu time!"))); pl.connection.send(new ClientboundSetTitleTextPacket(Component.literal("§6§l⚽ GOOOL DO " + Roster.ATUAL[team].nome().toUpperCase() + "!"))); } }
         lastEventTeam = team;
         st = St.GOAL; stTicks = 0;
@@ -521,6 +522,8 @@ public final class Match {
 
     void tickSetPiece() {
         spTicks++;
+        if (spTicks == 30 && chancePending && replaysChance && tickCount - lastReplayEnd > 1800 && rec.size() > 60) { chancePending = false; if (startReplayCore(chanceMark, 7, 0.6)) return; }
+        if (spTicks == 31) chancePending = false;
         pinBall(spSpot);
         // montar as posições
         for (int t = 0; t < 2; t++) aiTeam(t);
@@ -730,6 +733,7 @@ public final class Match {
     }
 
     void foul(FPlayer fouler, FPlayer victim) {
+        foulVictim = victim;
         Vec3 spot = victim.pos();
         whistle(1.1f);
         boolean pen = inBox(fouler.team, spot);
@@ -823,7 +827,7 @@ public final class Match {
     }
 
     void gkSave(FPlayer g, double speed) {
-        g.shotActive = false;
+        g.shotActive = false; markChance();
         lastTouchTeam = g.team; lastToucher = g;
         double catchP = clamp(0.88 - speed * 0.5 + g.st().ref() * 0.0035 + g.st().forca() * 0.001 - (bh() > 1.9 ? 0.15 : 0), 0.08, 0.92);
         Vec3 b = bp();
@@ -866,6 +870,7 @@ public final class Match {
 
     /** curl = rotação total (rad) da trajetória; minVy garante altura mínima (barreira). */
     void shootAt(FPlayer k, double u, double v, double height, double power, double errMul, double curl, double minVy) {
+        lastShotTick = tickCount;
         Vec3 tgt = W(k.team, u, v);
         Stats s = k.st();
         double d = hd(k.pos().x, k.pos().z, tgt.x, tgt.z);
@@ -1728,7 +1733,12 @@ public final class Match {
     // =====================================================================================
 
     final java.util.ArrayDeque<double[]> rec = new java.util.ArrayDeque<>();
-    int recCount, goalMark;
+    int recCount, goalMark, chanceMark, lastShotTick, lastReplayEnd = -9999;
+    boolean chancePending;
+    public boolean replaysChance = true;
+    public FPlayer foulVictim;
+
+    void markChance() { chanceMark = recCount; chancePending = true; }
     public boolean replaysAuto = true;
     List<double[]> replayFrames = new ArrayList<>();
     double replayPos, replaySpeed = 0.5;
@@ -1749,12 +1759,16 @@ public final class Match {
     }
 
     /** goal = true: termina um pouco depois do gol; senão, os últimos 'seconds' segundos. */
-    public boolean startReplay(boolean goal, int seconds, double speed) {
+    public boolean startReplay(boolean goal, int seconds, double speed) { return startReplayCore(goal ? goalMark : -1, seconds, speed); }
+
+    /** mark >= 0: lance marcado (termina logo depois dele); mark < 0: os últimos 'seconds' segundos. */
+    boolean startReplayCore(int mark, int seconds, double speed) {
+        boolean goal = mark >= 0;
         if (st == St.REPLAY || st == St.IDLE || rec.size() < 40) return false;
         List<double[]> all2 = new ArrayList<>(rec);
         int firstGlobal = recCount - all2.size();
         int end = all2.size(), start;
-        if (goal) { end = Math.min(all2.size(), goalMark + 25 - firstGlobal); end = Math.max(end, 20); }
+        if (goal) { end = Math.min(all2.size(), mark + 25 - firstGlobal); end = Math.max(end, 20); }
         start = Math.max(0, end - seconds * 20 - (goal ? 25 : 0));
         replayFrames = new ArrayList<>(all2.subList(start, end));
         if (replayFrames.size() < 20) return false;
@@ -1804,6 +1818,7 @@ public final class Match {
         ballPinned = replayWasPinned; pinPos = replayPin; ballVelSet = Vec3.ZERO;
         st = replayPrev; stTicks = replayPrevTicks;
         if (cameras != null) cameras.releaseForced();
+        lastReplayEnd = tickCount;
         FutebolMod.LOG.info("REPLAY terminou, voltando para {}", st);
     }
 
