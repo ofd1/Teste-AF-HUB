@@ -1,0 +1,3012 @@
+{
+"narrador.a_1": {
+"sounds": [
+{
+"name": "futebol:narrador/a_1"
+}
+]
+},
+"narrador.amarelo_1": {
+"sounds": [
+{
+"name": "futebol:narrador/amarelo_1"
+}
+]
+},
+"narrador.cabeceio_1": {
+"sounds": [
+{
+"name": "futebol:narrador/cabeceio_1"
+}
+]
+},
+"narrador.caneta_1": {
+"sounds": [
+{
+"name": "futebol:narrador/caneta_1"
+}
+]
+},
+"narrador.chapeu_1": {
+"sounds": [
+{
+"name": "futebol:narrador/chapeu_1"
+}
+]
+},
+"narrador.chute_1": {
+"sounds": [
+{
+"name": "futebol:narrador/chute_1"
+}
+]
+},
+"narrador.chute_2": {
+"sounds": [
+{
+"name": "futebol:narrador/chute_2"
+}
+]
+},
+"narrador.chute_3": {
+"sounds": [
+{
+"name": "futebol:narrador/chute_3"
+}
+]
+},
+"narrador.chute_4": {
+"sounds": [
+{
+"name": "futebol:narrador/chute_4"
+}
+]
+},
+"narrador.com_bola_parada_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_bola_parada_1"
+}
+]
+},
+"narrador.com_cansaco_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_cansaco_1"
+}
+]
+},
+"narrador.com_cartao_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_cartao_1"
+}
+]
+},
+"narrador.com_contra_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_contra_1"
+}
+]
+},
+"narrador.com_defesa_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_defesa_1"
+}
+]
+},
+"narrador.com_defesa_2": {
+"sounds": [
+{
+"name": "futebol:narrador/com_defesa_2"
+}
+]
+},
+"narrador.com_defesa_linha_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_defesa_linha_1"
+}
+]
+},
+"narrador.com_drible_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_drible_1"
+}
+]
+},
+"narrador.com_drible_2": {
+"sounds": [
+{
+"name": "futebol:narrador/com_drible_2"
+}
+]
+},
+"narrador.com_falta_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_falta_1"
+}
+]
+},
+"narrador.com_falta_2": {
+"sounds": [
+{
+"name": "futebol:narrador/com_falta_2"
+}
+]
+},
+"narrador.com_gol_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_gol_1"
+}
+]
+},
+"narrador.com_gol_2": {
+"sounds": [
+{
+"name": "futebol:narrador/com_gol_2"
+}
+]
+},
+"narrador.com_imped_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_imped_1"
+}
+]
+},
+"narrador.com_intervalo_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_intervalo_1"
+}
+]
+},
+"narrador.com_penalti_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_penalti_1"
+}
+]
+},
+"narrador.com_posse_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_posse_1"
+}
+]
+},
+"narrador.com_pressao_1": {
+"sounds": [
+{
+"name": "futebol:narrador/com_pressao_1"
+}
+]
+},
+"narrador.cruz_1": {
+"sounds": [
+{
+"name": "futebol:narrador/cruz_1"
+}
+]
+},
+"narrador.cruz_2": {
+"sounds": [
+{
+"name": "futebol:narrador/cruz_2"
+}
+]
+},
+"narrador.defesa_1": {
+"sounds": [
+{
+"name": "futebol:narrador/defesa_1"
+}
+]
+},
+"narrador.defesa_2": {
+"sounds": [
+{
+"name": "futebol:narrador/defesa_2"
+}
+]
+},
+"narrador.defesa_3": {
+"sounds": [
+{
+"name": "futebol:narrador/defesa_3"
+}
+]
+},
+"narrador.defesa_4": {
+"sounds": [
+{
+"name": "futebol:narrador/defesa_4"
+}
+]
+},
+"narrador.defesa_de_1": {
+"sounds": [
+{
+"name": "futebol:narrador/defesa_de_1"
+}
+]
+},
+"narrador.defesa_de_2": {
+"sounds": [
+{
+"name": "futebol:narrador/defesa_de_2"
+}
+]
+},
+"narrador.elastico_1": {
+"sounds": [
+{
+"name": "futebol:narrador/elastico_1"
+}
+]
+},
+"narrador.empate_fim_1": {
+"sounds": [
+{
+"name": "futebol:narrador/empate_fim_1"
+}
+]
+},
+"narrador.enfiada_1": {
+"sounds": [
+{
+"name": "futebol:narrador/enfiada_1"
+}
+]
+},
+"narrador.escanteio_1": {
+"sounds": [
+{
+"name": "futebol:narrador/escanteio_1"
+}
+]
+},
+"narrador.escanteio_2": {
+"sounds": [
+{
+"name": "futebol:narrador/escanteio_2"
+}
+]
+},
+"narrador.falta_1": {
+"sounds": [
+{
+"name": "futebol:narrador/falta_1"
+}
+]
+},
+"narrador.falta_2": {
+"sounds": [
+{
+"name": "futebol:narrador/falta_2"
+}
+]
+},
+"narrador.falta_3": {
+"sounds": [
+{
+"name": "futebol:narrador/falta_3"
+}
+]
+},
+"narrador.falta_perigosa_1": {
+"sounds": [
+{
+"name": "futebol:narrador/falta_perigosa_1"
+}
+]
+},
+"narrador.falta_perigosa_2": {
+"sounds": [
+{
+"name": "futebol:narrador/falta_perigosa_2"
+}
+]
+},
+"narrador.fil_1": {
+"sounds": [
+{
+"name": "futebol:narrador/fil_1"
+}
+]
+},
+"narrador.fil_2": {
+"sounds": [
+{
+"name": "futebol:narrador/fil_2"
+}
+]
+},
+"narrador.fil_3": {
+"sounds": [
+{
+"name": "futebol:narrador/fil_3"
+}
+]
+},
+"narrador.fil_4": {
+"sounds": [
+{
+"name": "futebol:narrador/fil_4"
+}
+]
+},
+"narrador.fil_5": {
+"sounds": [
+{
+"name": "futebol:narrador/fil_5"
+}
+]
+},
+"narrador.fil_6": {
+"sounds": [
+{
+"name": "futebol:narrador/fil_6"
+}
+]
+},
+"narrador.fim_1t_1": {
+"sounds": [
+{
+"name": "futebol:narrador/fim_1t_1"
+}
+]
+},
+"narrador.fim_jogo_1": {
+"sounds": [
+{
+"name": "futebol:narrador/fim_jogo_1"
+}
+]
+},
+"narrador.finta_1": {
+"sounds": [
+{
+"name": "futebol:narrador/finta_1"
+}
+]
+},
+"narrador.fora_1": {
+"sounds": [
+{
+"name": "futebol:narrador/fora_1"
+}
+]
+},
+"narrador.fora_2": {
+"sounds": [
+{
+"name": "futebol:narrador/fora_2"
+}
+]
+},
+"narrador.fora_3": {
+"sounds": [
+{
+"name": "futebol:narrador/fora_3"
+}
+]
+},
+"narrador.fora_4": {
+"sounds": [
+{
+"name": "futebol:narrador/fora_4"
+}
+]
+},
+"narrador.gol_abre_1": {
+"sounds": [
+{
+"name": "futebol:narrador/gol_abre_1"
+}
+]
+},
+"narrador.gol_amplia_1": {
+"sounds": [
+{
+"name": "futebol:narrador/gol_amplia_1"
+}
+]
+},
+"narrador.gol_contra_1": {
+"sounds": [
+{
+"name": "futebol:narrador/gol_contra_1"
+}
+]
+},
+"narrador.gol_diminui_1": {
+"sounds": [
+{
+"name": "futebol:narrador/gol_diminui_1"
+}
+]
+},
+"narrador.gol_empata_1": {
+"sounds": [
+{
+"name": "futebol:narrador/gol_empata_1"
+}
+]
+},
+"narrador.gol_grito_1": {
+"sounds": [
+{
+"name": "futebol:narrador/gol_grito_1"
+}
+]
+},
+"narrador.gol_grito_2": {
+"sounds": [
+{
+"name": "futebol:narrador/gol_grito_2"
+}
+]
+},
+"narrador.gol_grito_3": {
+"sounds": [
+{
+"name": "futebol:narrador/gol_grito_3"
+}
+]
+},
+"narrador.gol_pos_1": {
+"sounds": [
+{
+"name": "futebol:narrador/gol_pos_1"
+}
+]
+},
+"narrador.gol_pos_2": {
+"sounds": [
+{
+"name": "futebol:narrador/gol_pos_2"
+}
+]
+},
+"narrador.gol_pos_3": {
+"sounds": [
+{
+"name": "futebol:narrador/gol_pos_3"
+}
+]
+},
+"narrador.gol_pos_4": {
+"sounds": [
+{
+"name": "futebol:narrador/gol_pos_4"
+}
+]
+},
+"narrador.gol_vira_1": {
+"sounds": [
+{
+"name": "futebol:narrador/gol_vira_1"
+}
+]
+},
+"narrador.impedimento_1": {
+"sounds": [
+{
+"name": "futebol:narrador/impedimento_1"
+}
+]
+},
+"narrador.impedimento_2": {
+"sounds": [
+{
+"name": "futebol:narrador/impedimento_2"
+}
+]
+},
+"narrador.inicio_1": {
+"sounds": [
+{
+"name": "futebol:narrador/inicio_1"
+}
+]
+},
+"narrador.inicio_2": {
+"sounds": [
+{
+"name": "futebol:narrador/inicio_2"
+}
+]
+},
+"narrador.inicio_2t_1": {
+"sounds": [
+{
+"name": "futebol:narrador/inicio_2t_1"
+}
+]
+},
+"narrador.inicio_2t_2": {
+"sounds": [
+{
+"name": "futebol:narrador/inicio_2t_2"
+}
+]
+},
+"narrador.inicio_3": {
+"sounds": [
+{
+"name": "futebol:narrador/inicio_3"
+}
+]
+},
+"narrador.intro_a_1": {
+"sounds": [
+{
+"name": "futebol:narrador/intro_a_1"
+}
+]
+},
+"narrador.intro_a_2": {
+"sounds": [
+{
+"name": "futebol:narrador/intro_a_2"
+}
+]
+},
+"narrador.intro_b_1": {
+"sounds": [
+{
+"name": "futebol:narrador/intro_b_1"
+}
+]
+},
+"narrador.intro_c_1": {
+"sounds": [
+{
+"name": "futebol:narrador/intro_c_1"
+}
+]
+},
+"narrador.intro_c_2": {
+"sounds": [
+{
+"name": "futebol:narrador/intro_c_2"
+}
+]
+},
+"narrador.inversao_1": {
+"sounds": [
+{
+"name": "futebol:narrador/inversao_1"
+}
+]
+},
+"narrador.lateral_1": {
+"sounds": [
+{
+"name": "futebol:narrador/lateral_1"
+}
+]
+},
+"narrador.min_pos_1": {
+"sounds": [
+{
+"name": "futebol:narrador/min_pos_1"
+}
+]
+},
+"narrador.min_pos_2": {
+"sounds": [
+{
+"name": "futebol:narrador/min_pos_2"
+}
+]
+},
+"narrador.min_pre_1": {
+"sounds": [
+{
+"name": "futebol:narrador/min_pre_1"
+}
+]
+},
+"narrador.n_0": {
+"sounds": [
+{
+"name": "futebol:narrador/n_0"
+}
+]
+},
+"narrador.n_1": {
+"sounds": [
+{
+"name": "futebol:narrador/n_1"
+}
+]
+},
+"narrador.n_10": {
+"sounds": [
+{
+"name": "futebol:narrador/n_10"
+}
+]
+},
+"narrador.n_11": {
+"sounds": [
+{
+"name": "futebol:narrador/n_11"
+}
+]
+},
+"narrador.n_12": {
+"sounds": [
+{
+"name": "futebol:narrador/n_12"
+}
+]
+},
+"narrador.n_13": {
+"sounds": [
+{
+"name": "futebol:narrador/n_13"
+}
+]
+},
+"narrador.n_14": {
+"sounds": [
+{
+"name": "futebol:narrador/n_14"
+}
+]
+},
+"narrador.n_15": {
+"sounds": [
+{
+"name": "futebol:narrador/n_15"
+}
+]
+},
+"narrador.n_16": {
+"sounds": [
+{
+"name": "futebol:narrador/n_16"
+}
+]
+},
+"narrador.n_17": {
+"sounds": [
+{
+"name": "futebol:narrador/n_17"
+}
+]
+},
+"narrador.n_18": {
+"sounds": [
+{
+"name": "futebol:narrador/n_18"
+}
+]
+},
+"narrador.n_19": {
+"sounds": [
+{
+"name": "futebol:narrador/n_19"
+}
+]
+},
+"narrador.n_2": {
+"sounds": [
+{
+"name": "futebol:narrador/n_2"
+}
+]
+},
+"narrador.n_20": {
+"sounds": [
+{
+"name": "futebol:narrador/n_20"
+}
+]
+},
+"narrador.n_21": {
+"sounds": [
+{
+"name": "futebol:narrador/n_21"
+}
+]
+},
+"narrador.n_22": {
+"sounds": [
+{
+"name": "futebol:narrador/n_22"
+}
+]
+},
+"narrador.n_23": {
+"sounds": [
+{
+"name": "futebol:narrador/n_23"
+}
+]
+},
+"narrador.n_24": {
+"sounds": [
+{
+"name": "futebol:narrador/n_24"
+}
+]
+},
+"narrador.n_25": {
+"sounds": [
+{
+"name": "futebol:narrador/n_25"
+}
+]
+},
+"narrador.n_26": {
+"sounds": [
+{
+"name": "futebol:narrador/n_26"
+}
+]
+},
+"narrador.n_27": {
+"sounds": [
+{
+"name": "futebol:narrador/n_27"
+}
+]
+},
+"narrador.n_28": {
+"sounds": [
+{
+"name": "futebol:narrador/n_28"
+}
+]
+},
+"narrador.n_29": {
+"sounds": [
+{
+"name": "futebol:narrador/n_29"
+}
+]
+},
+"narrador.n_3": {
+"sounds": [
+{
+"name": "futebol:narrador/n_3"
+}
+]
+},
+"narrador.n_30": {
+"sounds": [
+{
+"name": "futebol:narrador/n_30"
+}
+]
+},
+"narrador.n_31": {
+"sounds": [
+{
+"name": "futebol:narrador/n_31"
+}
+]
+},
+"narrador.n_32": {
+"sounds": [
+{
+"name": "futebol:narrador/n_32"
+}
+]
+},
+"narrador.n_33": {
+"sounds": [
+{
+"name": "futebol:narrador/n_33"
+}
+]
+},
+"narrador.n_34": {
+"sounds": [
+{
+"name": "futebol:narrador/n_34"
+}
+]
+},
+"narrador.n_35": {
+"sounds": [
+{
+"name": "futebol:narrador/n_35"
+}
+]
+},
+"narrador.n_36": {
+"sounds": [
+{
+"name": "futebol:narrador/n_36"
+}
+]
+},
+"narrador.n_37": {
+"sounds": [
+{
+"name": "futebol:narrador/n_37"
+}
+]
+},
+"narrador.n_38": {
+"sounds": [
+{
+"name": "futebol:narrador/n_38"
+}
+]
+},
+"narrador.n_39": {
+"sounds": [
+{
+"name": "futebol:narrador/n_39"
+}
+]
+},
+"narrador.n_4": {
+"sounds": [
+{
+"name": "futebol:narrador/n_4"
+}
+]
+},
+"narrador.n_40": {
+"sounds": [
+{
+"name": "futebol:narrador/n_40"
+}
+]
+},
+"narrador.n_41": {
+"sounds": [
+{
+"name": "futebol:narrador/n_41"
+}
+]
+},
+"narrador.n_42": {
+"sounds": [
+{
+"name": "futebol:narrador/n_42"
+}
+]
+},
+"narrador.n_43": {
+"sounds": [
+{
+"name": "futebol:narrador/n_43"
+}
+]
+},
+"narrador.n_44": {
+"sounds": [
+{
+"name": "futebol:narrador/n_44"
+}
+]
+},
+"narrador.n_45": {
+"sounds": [
+{
+"name": "futebol:narrador/n_45"
+}
+]
+},
+"narrador.n_46": {
+"sounds": [
+{
+"name": "futebol:narrador/n_46"
+}
+]
+},
+"narrador.n_47": {
+"sounds": [
+{
+"name": "futebol:narrador/n_47"
+}
+]
+},
+"narrador.n_48": {
+"sounds": [
+{
+"name": "futebol:narrador/n_48"
+}
+]
+},
+"narrador.n_49": {
+"sounds": [
+{
+"name": "futebol:narrador/n_49"
+}
+]
+},
+"narrador.n_5": {
+"sounds": [
+{
+"name": "futebol:narrador/n_5"
+}
+]
+},
+"narrador.n_50": {
+"sounds": [
+{
+"name": "futebol:narrador/n_50"
+}
+]
+},
+"narrador.n_51": {
+"sounds": [
+{
+"name": "futebol:narrador/n_51"
+}
+]
+},
+"narrador.n_52": {
+"sounds": [
+{
+"name": "futebol:narrador/n_52"
+}
+]
+},
+"narrador.n_53": {
+"sounds": [
+{
+"name": "futebol:narrador/n_53"
+}
+]
+},
+"narrador.n_54": {
+"sounds": [
+{
+"name": "futebol:narrador/n_54"
+}
+]
+},
+"narrador.n_55": {
+"sounds": [
+{
+"name": "futebol:narrador/n_55"
+}
+]
+},
+"narrador.n_56": {
+"sounds": [
+{
+"name": "futebol:narrador/n_56"
+}
+]
+},
+"narrador.n_57": {
+"sounds": [
+{
+"name": "futebol:narrador/n_57"
+}
+]
+},
+"narrador.n_58": {
+"sounds": [
+{
+"name": "futebol:narrador/n_58"
+}
+]
+},
+"narrador.n_59": {
+"sounds": [
+{
+"name": "futebol:narrador/n_59"
+}
+]
+},
+"narrador.n_6": {
+"sounds": [
+{
+"name": "futebol:narrador/n_6"
+}
+]
+},
+"narrador.n_60": {
+"sounds": [
+{
+"name": "futebol:narrador/n_60"
+}
+]
+},
+"narrador.n_61": {
+"sounds": [
+{
+"name": "futebol:narrador/n_61"
+}
+]
+},
+"narrador.n_62": {
+"sounds": [
+{
+"name": "futebol:narrador/n_62"
+}
+]
+},
+"narrador.n_63": {
+"sounds": [
+{
+"name": "futebol:narrador/n_63"
+}
+]
+},
+"narrador.n_64": {
+"sounds": [
+{
+"name": "futebol:narrador/n_64"
+}
+]
+},
+"narrador.n_65": {
+"sounds": [
+{
+"name": "futebol:narrador/n_65"
+}
+]
+},
+"narrador.n_66": {
+"sounds": [
+{
+"name": "futebol:narrador/n_66"
+}
+]
+},
+"narrador.n_67": {
+"sounds": [
+{
+"name": "futebol:narrador/n_67"
+}
+]
+},
+"narrador.n_68": {
+"sounds": [
+{
+"name": "futebol:narrador/n_68"
+}
+]
+},
+"narrador.n_69": {
+"sounds": [
+{
+"name": "futebol:narrador/n_69"
+}
+]
+},
+"narrador.n_7": {
+"sounds": [
+{
+"name": "futebol:narrador/n_7"
+}
+]
+},
+"narrador.n_70": {
+"sounds": [
+{
+"name": "futebol:narrador/n_70"
+}
+]
+},
+"narrador.n_71": {
+"sounds": [
+{
+"name": "futebol:narrador/n_71"
+}
+]
+},
+"narrador.n_72": {
+"sounds": [
+{
+"name": "futebol:narrador/n_72"
+}
+]
+},
+"narrador.n_73": {
+"sounds": [
+{
+"name": "futebol:narrador/n_73"
+}
+]
+},
+"narrador.n_74": {
+"sounds": [
+{
+"name": "futebol:narrador/n_74"
+}
+]
+},
+"narrador.n_75": {
+"sounds": [
+{
+"name": "futebol:narrador/n_75"
+}
+]
+},
+"narrador.n_76": {
+"sounds": [
+{
+"name": "futebol:narrador/n_76"
+}
+]
+},
+"narrador.n_77": {
+"sounds": [
+{
+"name": "futebol:narrador/n_77"
+}
+]
+},
+"narrador.n_78": {
+"sounds": [
+{
+"name": "futebol:narrador/n_78"
+}
+]
+},
+"narrador.n_79": {
+"sounds": [
+{
+"name": "futebol:narrador/n_79"
+}
+]
+},
+"narrador.n_8": {
+"sounds": [
+{
+"name": "futebol:narrador/n_8"
+}
+]
+},
+"narrador.n_80": {
+"sounds": [
+{
+"name": "futebol:narrador/n_80"
+}
+]
+},
+"narrador.n_81": {
+"sounds": [
+{
+"name": "futebol:narrador/n_81"
+}
+]
+},
+"narrador.n_82": {
+"sounds": [
+{
+"name": "futebol:narrador/n_82"
+}
+]
+},
+"narrador.n_83": {
+"sounds": [
+{
+"name": "futebol:narrador/n_83"
+}
+]
+},
+"narrador.n_84": {
+"sounds": [
+{
+"name": "futebol:narrador/n_84"
+}
+]
+},
+"narrador.n_85": {
+"sounds": [
+{
+"name": "futebol:narrador/n_85"
+}
+]
+},
+"narrador.n_86": {
+"sounds": [
+{
+"name": "futebol:narrador/n_86"
+}
+]
+},
+"narrador.n_87": {
+"sounds": [
+{
+"name": "futebol:narrador/n_87"
+}
+]
+},
+"narrador.n_88": {
+"sounds": [
+{
+"name": "futebol:narrador/n_88"
+}
+]
+},
+"narrador.n_89": {
+"sounds": [
+{
+"name": "futebol:narrador/n_89"
+}
+]
+},
+"narrador.n_9": {
+"sounds": [
+{
+"name": "futebol:narrador/n_9"
+}
+]
+},
+"narrador.n_90": {
+"sounds": [
+{
+"name": "futebol:narrador/n_90"
+}
+]
+},
+"narrador.n_91": {
+"sounds": [
+{
+"name": "futebol:narrador/n_91"
+}
+]
+},
+"narrador.n_92": {
+"sounds": [
+{
+"name": "futebol:narrador/n_92"
+}
+]
+},
+"narrador.n_93": {
+"sounds": [
+{
+"name": "futebol:narrador/n_93"
+}
+]
+},
+"narrador.n_94": {
+"sounds": [
+{
+"name": "futebol:narrador/n_94"
+}
+]
+},
+"narrador.n_95": {
+"sounds": [
+{
+"name": "futebol:narrador/n_95"
+}
+]
+},
+"narrador.n_96": {
+"sounds": [
+{
+"name": "futebol:narrador/n_96"
+}
+]
+},
+"narrador.n_97": {
+"sounds": [
+{
+"name": "futebol:narrador/n_97"
+}
+]
+},
+"narrador.n_98": {
+"sounds": [
+{
+"name": "futebol:narrador/n_98"
+}
+]
+},
+"narrador.n_99": {
+"sounds": [
+{
+"name": "futebol:narrador/n_99"
+}
+]
+},
+"narrador.p_arsenal_1": {
+"sounds": [
+{
+"name": "futebol:narrador/p_arsenal_1"
+}
+]
+},
+"narrador.p_arsenal_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_arsenal_11"
+}
+]
+},
+"narrador.p_arsenal_12": {
+"sounds": [
+{
+"name": "futebol:narrador/p_arsenal_12"
+}
+]
+},
+"narrador.p_arsenal_14": {
+"sounds": [
+{
+"name": "futebol:narrador/p_arsenal_14"
+}
+]
+},
+"narrador.p_arsenal_2": {
+"sounds": [
+{
+"name": "futebol:narrador/p_arsenal_2"
+}
+]
+},
+"narrador.p_arsenal_36": {
+"sounds": [
+{
+"name": "futebol:narrador/p_arsenal_36"
+}
+]
+},
+"narrador.p_arsenal_4": {
+"sounds": [
+{
+"name": "futebol:narrador/p_arsenal_4"
+}
+]
+},
+"narrador.p_arsenal_41": {
+"sounds": [
+{
+"name": "futebol:narrador/p_arsenal_41"
+}
+]
+},
+"narrador.p_arsenal_6": {
+"sounds": [
+{
+"name": "futebol:narrador/p_arsenal_6"
+}
+]
+},
+"narrador.p_arsenal_7": {
+"sounds": [
+{
+"name": "futebol:narrador/p_arsenal_7"
+}
+]
+},
+"narrador.p_arsenal_8": {
+"sounds": [
+{
+"name": "futebol:narrador/p_arsenal_8"
+}
+]
+},
+"narrador.p_astonvilla_10": {
+"sounds": [
+{
+"name": "futebol:narrador/p_astonvilla_10"
+}
+]
+},
+"narrador.p_astonvilla_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_astonvilla_11"
+}
+]
+},
+"narrador.p_astonvilla_12": {
+"sounds": [
+{
+"name": "futebol:narrador/p_astonvilla_12"
+}
+]
+},
+"narrador.p_astonvilla_14": {
+"sounds": [
+{
+"name": "futebol:narrador/p_astonvilla_14"
+}
+]
+},
+"narrador.p_astonvilla_2": {
+"sounds": [
+{
+"name": "futebol:narrador/p_astonvilla_2"
+}
+]
+},
+"narrador.p_astonvilla_23": {
+"sounds": [
+{
+"name": "futebol:narrador/p_astonvilla_23"
+}
+]
+},
+"narrador.p_astonvilla_27": {
+"sounds": [
+{
+"name": "futebol:narrador/p_astonvilla_27"
+}
+]
+},
+"narrador.p_astonvilla_31": {
+"sounds": [
+{
+"name": "futebol:narrador/p_astonvilla_31"
+}
+]
+},
+"narrador.p_astonvilla_4": {
+"sounds": [
+{
+"name": "futebol:narrador/p_astonvilla_4"
+}
+]
+},
+"narrador.p_astonvilla_6": {
+"sounds": [
+{
+"name": "futebol:narrador/p_astonvilla_6"
+}
+]
+},
+"narrador.p_astonvilla_7": {
+"sounds": [
+{
+"name": "futebol:narrador/p_astonvilla_7"
+}
+]
+},
+"narrador.p_atleticomg_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_atleticomg_11"
+}
+]
+},
+"narrador.p_atleticomg_14": {
+"sounds": [
+{
+"name": "futebol:narrador/p_atleticomg_14"
+}
+]
+},
+"narrador.p_atleticomg_2": {
+"sounds": [
+{
+"name": "futebol:narrador/p_atleticomg_2"
+}
+]
+},
+"narrador.p_atleticomg_22": {
+"sounds": [
+{
+"name": "futebol:narrador/p_atleticomg_22"
+}
+]
+},
+"narrador.p_atleticomg_3": {
+"sounds": [
+{
+"name": "futebol:narrador/p_atleticomg_3"
+}
+]
+},
+"narrador.p_atleticomg_4": {
+"sounds": [
+{
+"name": "futebol:narrador/p_atleticomg_4"
+}
+]
+},
+"narrador.p_atleticomg_5": {
+"sounds": [
+{
+"name": "futebol:narrador/p_atleticomg_5"
+}
+]
+},
+"narrador.p_atleticomg_6": {
+"sounds": [
+{
+"name": "futebol:narrador/p_atleticomg_6"
+}
+]
+},
+"narrador.p_atleticomg_7": {
+"sounds": [
+{
+"name": "futebol:narrador/p_atleticomg_7"
+}
+]
+},
+"narrador.p_atleticomg_8": {
+"sounds": [
+{
+"name": "futebol:narrador/p_atleticomg_8"
+}
+]
+},
+"narrador.p_atleticomg_9": {
+"sounds": [
+{
+"name": "futebol:narrador/p_atleticomg_9"
+}
+]
+},
+"narrador.p_barcelona_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_barcelona_11"
+}
+]
+},
+"narrador.p_barcelona_13": {
+"sounds": [
+{
+"name": "futebol:narrador/p_barcelona_13"
+}
+]
+},
+"narrador.p_barcelona_19": {
+"sounds": [
+{
+"name": "futebol:narrador/p_barcelona_19"
+}
+]
+},
+"narrador.p_barcelona_20": {
+"sounds": [
+{
+"name": "futebol:narrador/p_barcelona_20"
+}
+]
+},
+"narrador.p_barcelona_21": {
+"sounds": [
+{
+"name": "futebol:narrador/p_barcelona_21"
+}
+]
+},
+"narrador.p_barcelona_23": {
+"sounds": [
+{
+"name": "futebol:narrador/p_barcelona_23"
+}
+]
+},
+"narrador.p_barcelona_3": {
+"sounds": [
+{
+"name": "futebol:narrador/p_barcelona_3"
+}
+]
+},
+"narrador.p_barcelona_4": {
+"sounds": [
+{
+"name": "futebol:narrador/p_barcelona_4"
+}
+]
+},
+"narrador.p_barcelona_5": {
+"sounds": [
+{
+"name": "futebol:narrador/p_barcelona_5"
+}
+]
+},
+"narrador.p_barcelona_8": {
+"sounds": [
+{
+"name": "futebol:narrador/p_barcelona_8"
+}
+]
+},
+"narrador.p_barcelona_9": {
+"sounds": [
+{
+"name": "futebol:narrador/p_barcelona_9"
+}
+]
+},
+"narrador.p_bayern_1": {
+"sounds": [
+{
+"name": "futebol:narrador/p_bayern_1"
+}
+]
+},
+"narrador.p_bayern_10": {
+"sounds": [
+{
+"name": "futebol:narrador/p_bayern_10"
+}
+]
+},
+"narrador.p_bayern_14": {
+"sounds": [
+{
+"name": "futebol:narrador/p_bayern_14"
+}
+]
+},
+"narrador.p_bayern_17": {
+"sounds": [
+{
+"name": "futebol:narrador/p_bayern_17"
+}
+]
+},
+"narrador.p_bayern_19": {
+"sounds": [
+{
+"name": "futebol:narrador/p_bayern_19"
+}
+]
+},
+"narrador.p_bayern_2": {
+"sounds": [
+{
+"name": "futebol:narrador/p_bayern_2"
+}
+]
+},
+"narrador.p_bayern_4": {
+"sounds": [
+{
+"name": "futebol:narrador/p_bayern_4"
+}
+]
+},
+"narrador.p_bayern_44": {
+"sounds": [
+{
+"name": "futebol:narrador/p_bayern_44"
+}
+]
+},
+"narrador.p_bayern_45": {
+"sounds": [
+{
+"name": "futebol:narrador/p_bayern_45"
+}
+]
+},
+"narrador.p_bayern_6": {
+"sounds": [
+{
+"name": "futebol:narrador/p_bayern_6"
+}
+]
+},
+"narrador.p_bayern_9": {
+"sounds": [
+{
+"name": "futebol:narrador/p_bayern_9"
+}
+]
+},
+"narrador.p_chelsea_1": {
+"sounds": [
+{
+"name": "futebol:narrador/p_chelsea_1"
+}
+]
+},
+"narrador.p_chelsea_10": {
+"sounds": [
+{
+"name": "futebol:narrador/p_chelsea_10"
+}
+]
+},
+"narrador.p_chelsea_20": {
+"sounds": [
+{
+"name": "futebol:narrador/p_chelsea_20"
+}
+]
+},
+"narrador.p_chelsea_25": {
+"sounds": [
+{
+"name": "futebol:narrador/p_chelsea_25"
+}
+]
+},
+"narrador.p_chelsea_26": {
+"sounds": [
+{
+"name": "futebol:narrador/p_chelsea_26"
+}
+]
+},
+"narrador.p_chelsea_27": {
+"sounds": [
+{
+"name": "futebol:narrador/p_chelsea_27"
+}
+]
+},
+"narrador.p_chelsea_3": {
+"sounds": [
+{
+"name": "futebol:narrador/p_chelsea_3"
+}
+]
+},
+"narrador.p_chelsea_41": {
+"sounds": [
+{
+"name": "futebol:narrador/p_chelsea_41"
+}
+]
+},
+"narrador.p_chelsea_6": {
+"sounds": [
+{
+"name": "futebol:narrador/p_chelsea_6"
+}
+]
+},
+"narrador.p_chelsea_7": {
+"sounds": [
+{
+"name": "futebol:narrador/p_chelsea_7"
+}
+]
+},
+"narrador.p_chelsea_8": {
+"sounds": [
+{
+"name": "futebol:narrador/p_chelsea_8"
+}
+]
+},
+"narrador.p_cruzeiro_1": {
+"sounds": [
+{
+"name": "futebol:narrador/p_cruzeiro_1"
+}
+]
+},
+"narrador.p_cruzeiro_10": {
+"sounds": [
+{
+"name": "futebol:narrador/p_cruzeiro_10"
+}
+]
+},
+"narrador.p_cruzeiro_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_cruzeiro_11"
+}
+]
+},
+"narrador.p_cruzeiro_15": {
+"sounds": [
+{
+"name": "futebol:narrador/p_cruzeiro_15"
+}
+]
+},
+"narrador.p_cruzeiro_19": {
+"sounds": [
+{
+"name": "futebol:narrador/p_cruzeiro_19"
+}
+]
+},
+"narrador.p_cruzeiro_2": {
+"sounds": [
+{
+"name": "futebol:narrador/p_cruzeiro_2"
+}
+]
+},
+"narrador.p_cruzeiro_4": {
+"sounds": [
+{
+"name": "futebol:narrador/p_cruzeiro_4"
+}
+]
+},
+"narrador.p_cruzeiro_5": {
+"sounds": [
+{
+"name": "futebol:narrador/p_cruzeiro_5"
+}
+]
+},
+"narrador.p_cruzeiro_6": {
+"sounds": [
+{
+"name": "futebol:narrador/p_cruzeiro_6"
+}
+]
+},
+"narrador.p_cruzeiro_8": {
+"sounds": [
+{
+"name": "futebol:narrador/p_cruzeiro_8"
+}
+]
+},
+"narrador.p_cruzeiro_9": {
+"sounds": [
+{
+"name": "futebol:narrador/p_cruzeiro_9"
+}
+]
+},
+"narrador.p_dortmund_1": {
+"sounds": [
+{
+"name": "futebol:narrador/p_dortmund_1"
+}
+]
+},
+"narrador.p_dortmund_15": {
+"sounds": [
+{
+"name": "futebol:narrador/p_dortmund_15"
+}
+]
+},
+"narrador.p_dortmund_19": {
+"sounds": [
+{
+"name": "futebol:narrador/p_dortmund_19"
+}
+]
+},
+"narrador.p_dortmund_23": {
+"sounds": [
+{
+"name": "futebol:narrador/p_dortmund_23"
+}
+]
+},
+"narrador.p_dortmund_24": {
+"sounds": [
+{
+"name": "futebol:narrador/p_dortmund_24"
+}
+]
+},
+"narrador.p_dortmund_26": {
+"sounds": [
+{
+"name": "futebol:narrador/p_dortmund_26"
+}
+]
+},
+"narrador.p_dortmund_27": {
+"sounds": [
+{
+"name": "futebol:narrador/p_dortmund_27"
+}
+]
+},
+"narrador.p_dortmund_4": {
+"sounds": [
+{
+"name": "futebol:narrador/p_dortmund_4"
+}
+]
+},
+"narrador.p_dortmund_6": {
+"sounds": [
+{
+"name": "futebol:narrador/p_dortmund_6"
+}
+]
+},
+"narrador.p_dortmund_7": {
+"sounds": [
+{
+"name": "futebol:narrador/p_dortmund_7"
+}
+]
+},
+"narrador.p_dortmund_9": {
+"sounds": [
+{
+"name": "futebol:narrador/p_dortmund_9"
+}
+]
+},
+"narrador.p_flamengo_1": {
+"sounds": [
+{
+"name": "futebol:narrador/p_flamengo_1"
+}
+]
+},
+"narrador.p_flamengo_10": {
+"sounds": [
+{
+"name": "futebol:narrador/p_flamengo_10"
+}
+]
+},
+"narrador.p_flamengo_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_flamengo_11"
+}
+]
+},
+"narrador.p_flamengo_2": {
+"sounds": [
+{
+"name": "futebol:narrador/p_flamengo_2"
+}
+]
+},
+"narrador.p_flamengo_21": {
+"sounds": [
+{
+"name": "futebol:narrador/p_flamengo_21"
+}
+]
+},
+"narrador.p_flamengo_27": {
+"sounds": [
+{
+"name": "futebol:narrador/p_flamengo_27"
+}
+]
+},
+"narrador.p_flamengo_3": {
+"sounds": [
+{
+"name": "futebol:narrador/p_flamengo_3"
+}
+]
+},
+"narrador.p_flamengo_4": {
+"sounds": [
+{
+"name": "futebol:narrador/p_flamengo_4"
+}
+]
+},
+"narrador.p_flamengo_5": {
+"sounds": [
+{
+"name": "futebol:narrador/p_flamengo_5"
+}
+]
+},
+"narrador.p_flamengo_6": {
+"sounds": [
+{
+"name": "futebol:narrador/p_flamengo_6"
+}
+]
+},
+"narrador.p_flamengo_9": {
+"sounds": [
+{
+"name": "futebol:narrador/p_flamengo_9"
+}
+]
+},
+"narrador.p_liverpool_1": {
+"sounds": [
+{
+"name": "futebol:narrador/p_liverpool_1"
+}
+]
+},
+"narrador.p_liverpool_10": {
+"sounds": [
+{
+"name": "futebol:narrador/p_liverpool_10"
+}
+]
+},
+"narrador.p_liverpool_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_liverpool_11"
+}
+]
+},
+"narrador.p_liverpool_26": {
+"sounds": [
+{
+"name": "futebol:narrador/p_liverpool_26"
+}
+]
+},
+"narrador.p_liverpool_30": {
+"sounds": [
+{
+"name": "futebol:narrador/p_liverpool_30"
+}
+]
+},
+"narrador.p_liverpool_38": {
+"sounds": [
+{
+"name": "futebol:narrador/p_liverpool_38"
+}
+]
+},
+"narrador.p_liverpool_4": {
+"sounds": [
+{
+"name": "futebol:narrador/p_liverpool_4"
+}
+]
+},
+"narrador.p_liverpool_5": {
+"sounds": [
+{
+"name": "futebol:narrador/p_liverpool_5"
+}
+]
+},
+"narrador.p_liverpool_7": {
+"sounds": [
+{
+"name": "futebol:narrador/p_liverpool_7"
+}
+]
+},
+"narrador.p_liverpool_8": {
+"sounds": [
+{
+"name": "futebol:narrador/p_liverpool_8"
+}
+]
+},
+"narrador.p_liverpool_9": {
+"sounds": [
+{
+"name": "futebol:narrador/p_liverpool_9"
+}
+]
+},
+"narrador.p_mancity_10": {
+"sounds": [
+{
+"name": "futebol:narrador/p_mancity_10"
+}
+]
+},
+"narrador.p_mancity_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_mancity_11"
+}
+]
+},
+"narrador.p_mancity_16": {
+"sounds": [
+{
+"name": "futebol:narrador/p_mancity_16"
+}
+]
+},
+"narrador.p_mancity_24": {
+"sounds": [
+{
+"name": "futebol:narrador/p_mancity_24"
+}
+]
+},
+"narrador.p_mancity_25": {
+"sounds": [
+{
+"name": "futebol:narrador/p_mancity_25"
+}
+]
+},
+"narrador.p_mancity_27": {
+"sounds": [
+{
+"name": "futebol:narrador/p_mancity_27"
+}
+]
+},
+"narrador.p_mancity_3": {
+"sounds": [
+{
+"name": "futebol:narrador/p_mancity_3"
+}
+]
+},
+"narrador.p_mancity_33": {
+"sounds": [
+{
+"name": "futebol:narrador/p_mancity_33"
+}
+]
+},
+"narrador.p_mancity_4": {
+"sounds": [
+{
+"name": "futebol:narrador/p_mancity_4"
+}
+]
+},
+"narrador.p_mancity_47": {
+"sounds": [
+{
+"name": "futebol:narrador/p_mancity_47"
+}
+]
+},
+"narrador.p_mancity_9": {
+"sounds": [
+{
+"name": "futebol:narrador/p_mancity_9"
+}
+]
+},
+"narrador.p_manutd_10": {
+"sounds": [
+{
+"name": "futebol:narrador/p_manutd_10"
+}
+]
+},
+"narrador.p_manutd_16": {
+"sounds": [
+{
+"name": "futebol:narrador/p_manutd_16"
+}
+]
+},
+"narrador.p_manutd_18": {
+"sounds": [
+{
+"name": "futebol:narrador/p_manutd_18"
+}
+]
+},
+"narrador.p_manutd_2": {
+"sounds": [
+{
+"name": "futebol:narrador/p_manutd_2"
+}
+]
+},
+"narrador.p_manutd_23": {
+"sounds": [
+{
+"name": "futebol:narrador/p_manutd_23"
+}
+]
+},
+"narrador.p_manutd_30": {
+"sounds": [
+{
+"name": "futebol:narrador/p_manutd_30"
+}
+]
+},
+"narrador.p_manutd_31": {
+"sounds": [
+{
+"name": "futebol:narrador/p_manutd_31"
+}
+]
+},
+"narrador.p_manutd_37": {
+"sounds": [
+{
+"name": "futebol:narrador/p_manutd_37"
+}
+]
+},
+"narrador.p_manutd_5": {
+"sounds": [
+{
+"name": "futebol:narrador/p_manutd_5"
+}
+]
+},
+"narrador.p_manutd_6": {
+"sounds": [
+{
+"name": "futebol:narrador/p_manutd_6"
+}
+]
+},
+"narrador.p_manutd_8": {
+"sounds": [
+{
+"name": "futebol:narrador/p_manutd_8"
+}
+]
+},
+"narrador.p_newcastle_1": {
+"sounds": [
+{
+"name": "futebol:narrador/p_newcastle_1"
+}
+]
+},
+"narrador.p_newcastle_10": {
+"sounds": [
+{
+"name": "futebol:narrador/p_newcastle_10"
+}
+]
+},
+"narrador.p_newcastle_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_newcastle_11"
+}
+]
+},
+"narrador.p_newcastle_21": {
+"sounds": [
+{
+"name": "futebol:narrador/p_newcastle_21"
+}
+]
+},
+"narrador.p_newcastle_27": {
+"sounds": [
+{
+"name": "futebol:narrador/p_newcastle_27"
+}
+]
+},
+"narrador.p_newcastle_33": {
+"sounds": [
+{
+"name": "futebol:narrador/p_newcastle_33"
+}
+]
+},
+"narrador.p_newcastle_39": {
+"sounds": [
+{
+"name": "futebol:narrador/p_newcastle_39"
+}
+]
+},
+"narrador.p_newcastle_4": {
+"sounds": [
+{
+"name": "futebol:narrador/p_newcastle_4"
+}
+]
+},
+"narrador.p_newcastle_5": {
+"sounds": [
+{
+"name": "futebol:narrador/p_newcastle_5"
+}
+]
+},
+"narrador.p_newcastle_7": {
+"sounds": [
+{
+"name": "futebol:narrador/p_newcastle_7"
+}
+]
+},
+"narrador.p_newcastle_8": {
+"sounds": [
+{
+"name": "futebol:narrador/p_newcastle_8"
+}
+]
+},
+"narrador.p_palmeiras_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_palmeiras_11"
+}
+]
+},
+"narrador.p_palmeiras_12": {
+"sounds": [
+{
+"name": "futebol:narrador/p_palmeiras_12"
+}
+]
+},
+"narrador.p_palmeiras_15": {
+"sounds": [
+{
+"name": "futebol:narrador/p_palmeiras_15"
+}
+]
+},
+"narrador.p_palmeiras_17": {
+"sounds": [
+{
+"name": "futebol:narrador/p_palmeiras_17"
+}
+]
+},
+"narrador.p_palmeiras_20": {
+"sounds": [
+{
+"name": "futebol:narrador/p_palmeiras_20"
+}
+]
+},
+"narrador.p_palmeiras_21": {
+"sounds": [
+{
+"name": "futebol:narrador/p_palmeiras_21"
+}
+]
+},
+"narrador.p_palmeiras_22": {
+"sounds": [
+{
+"name": "futebol:narrador/p_palmeiras_22"
+}
+]
+},
+"narrador.p_palmeiras_23": {
+"sounds": [
+{
+"name": "futebol:narrador/p_palmeiras_23"
+}
+]
+},
+"narrador.p_palmeiras_5": {
+"sounds": [
+{
+"name": "futebol:narrador/p_palmeiras_5"
+}
+]
+},
+"narrador.p_palmeiras_8": {
+"sounds": [
+{
+"name": "futebol:narrador/p_palmeiras_8"
+}
+]
+},
+"narrador.p_palmeiras_9": {
+"sounds": [
+{
+"name": "futebol:narrador/p_palmeiras_9"
+}
+]
+},
+"narrador.p_psg_10": {
+"sounds": [
+{
+"name": "futebol:narrador/p_psg_10"
+}
+]
+},
+"narrador.p_psg_14": {
+"sounds": [
+{
+"name": "futebol:narrador/p_psg_14"
+}
+]
+},
+"narrador.p_psg_17": {
+"sounds": [
+{
+"name": "futebol:narrador/p_psg_17"
+}
+]
+},
+"narrador.p_psg_2": {
+"sounds": [
+{
+"name": "futebol:narrador/p_psg_2"
+}
+]
+},
+"narrador.p_psg_25": {
+"sounds": [
+{
+"name": "futebol:narrador/p_psg_25"
+}
+]
+},
+"narrador.p_psg_30": {
+"sounds": [
+{
+"name": "futebol:narrador/p_psg_30"
+}
+]
+},
+"narrador.p_psg_5": {
+"sounds": [
+{
+"name": "futebol:narrador/p_psg_5"
+}
+]
+},
+"narrador.p_psg_51": {
+"sounds": [
+{
+"name": "futebol:narrador/p_psg_51"
+}
+]
+},
+"narrador.p_psg_7": {
+"sounds": [
+{
+"name": "futebol:narrador/p_psg_7"
+}
+]
+},
+"narrador.p_psg_8": {
+"sounds": [
+{
+"name": "futebol:narrador/p_psg_8"
+}
+]
+},
+"narrador.p_psg_87": {
+"sounds": [
+{
+"name": "futebol:narrador/p_psg_87"
+}
+]
+},
+"narrador.p_realmadrid_1": {
+"sounds": [
+{
+"name": "futebol:narrador/p_realmadrid_1"
+}
+]
+},
+"narrador.p_realmadrid_10": {
+"sounds": [
+{
+"name": "futebol:narrador/p_realmadrid_10"
+}
+]
+},
+"narrador.p_realmadrid_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_realmadrid_11"
+}
+]
+},
+"narrador.p_realmadrid_12": {
+"sounds": [
+{
+"name": "futebol:narrador/p_realmadrid_12"
+}
+]
+},
+"narrador.p_realmadrid_14": {
+"sounds": [
+{
+"name": "futebol:narrador/p_realmadrid_14"
+}
+]
+},
+"narrador.p_realmadrid_15": {
+"sounds": [
+{
+"name": "futebol:narrador/p_realmadrid_15"
+}
+]
+},
+"narrador.p_realmadrid_18": {
+"sounds": [
+{
+"name": "futebol:narrador/p_realmadrid_18"
+}
+]
+},
+"narrador.p_realmadrid_22": {
+"sounds": [
+{
+"name": "futebol:narrador/p_realmadrid_22"
+}
+]
+},
+"narrador.p_realmadrid_3": {
+"sounds": [
+{
+"name": "futebol:narrador/p_realmadrid_3"
+}
+]
+},
+"narrador.p_realmadrid_5": {
+"sounds": [
+{
+"name": "futebol:narrador/p_realmadrid_5"
+}
+]
+},
+"narrador.p_realmadrid_7": {
+"sounds": [
+{
+"name": "futebol:narrador/p_realmadrid_7"
+}
+]
+},
+"narrador.p_saqueadores_1": {
+"sounds": [
+{
+"name": "futebol:narrador/p_saqueadores_1"
+}
+]
+},
+"narrador.p_saqueadores_10": {
+"sounds": [
+{
+"name": "futebol:narrador/p_saqueadores_10"
+}
+]
+},
+"narrador.p_saqueadores_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_saqueadores_11"
+}
+]
+},
+"narrador.p_saqueadores_2": {
+"sounds": [
+{
+"name": "futebol:narrador/p_saqueadores_2"
+}
+]
+},
+"narrador.p_saqueadores_3": {
+"sounds": [
+{
+"name": "futebol:narrador/p_saqueadores_3"
+}
+]
+},
+"narrador.p_saqueadores_4": {
+"sounds": [
+{
+"name": "futebol:narrador/p_saqueadores_4"
+}
+]
+},
+"narrador.p_saqueadores_5": {
+"sounds": [
+{
+"name": "futebol:narrador/p_saqueadores_5"
+}
+]
+},
+"narrador.p_saqueadores_6": {
+"sounds": [
+{
+"name": "futebol:narrador/p_saqueadores_6"
+}
+]
+},
+"narrador.p_saqueadores_7": {
+"sounds": [
+{
+"name": "futebol:narrador/p_saqueadores_7"
+}
+]
+},
+"narrador.p_saqueadores_8": {
+"sounds": [
+{
+"name": "futebol:narrador/p_saqueadores_8"
+}
+]
+},
+"narrador.p_saqueadores_9": {
+"sounds": [
+{
+"name": "futebol:narrador/p_saqueadores_9"
+}
+]
+},
+"narrador.p_tottenham_1": {
+"sounds": [
+{
+"name": "futebol:narrador/p_tottenham_1"
+}
+]
+},
+"narrador.p_tottenham_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_tottenham_11"
+}
+]
+},
+"narrador.p_tottenham_17": {
+"sounds": [
+{
+"name": "futebol:narrador/p_tottenham_17"
+}
+]
+},
+"narrador.p_tottenham_19": {
+"sounds": [
+{
+"name": "futebol:narrador/p_tottenham_19"
+}
+]
+},
+"narrador.p_tottenham_20": {
+"sounds": [
+{
+"name": "futebol:narrador/p_tottenham_20"
+}
+]
+},
+"narrador.p_tottenham_23": {
+"sounds": [
+{
+"name": "futebol:narrador/p_tottenham_23"
+}
+]
+},
+"narrador.p_tottenham_24": {
+"sounds": [
+{
+"name": "futebol:narrador/p_tottenham_24"
+}
+]
+},
+"narrador.p_tottenham_37": {
+"sounds": [
+{
+"name": "futebol:narrador/p_tottenham_37"
+}
+]
+},
+"narrador.p_tottenham_5": {
+"sounds": [
+{
+"name": "futebol:narrador/p_tottenham_5"
+}
+]
+},
+"narrador.p_tottenham_6": {
+"sounds": [
+{
+"name": "futebol:narrador/p_tottenham_6"
+}
+]
+},
+"narrador.p_tottenham_7": {
+"sounds": [
+{
+"name": "futebol:narrador/p_tottenham_7"
+}
+]
+},
+"narrador.p_vindicadores_1": {
+"sounds": [
+{
+"name": "futebol:narrador/p_vindicadores_1"
+}
+]
+},
+"narrador.p_vindicadores_10": {
+"sounds": [
+{
+"name": "futebol:narrador/p_vindicadores_10"
+}
+]
+},
+"narrador.p_vindicadores_11": {
+"sounds": [
+{
+"name": "futebol:narrador/p_vindicadores_11"
+}
+]
+},
+"narrador.p_vindicadores_2": {
+"sounds": [
+{
+"name": "futebol:narrador/p_vindicadores_2"
+}
+]
+},
+"narrador.p_vindicadores_3": {
+"sounds": [
+{
+"name": "futebol:narrador/p_vindicadores_3"
+}
+]
+},
+"narrador.p_vindicadores_4": {
+"sounds": [
+{
+"name": "futebol:narrador/p_vindicadores_4"
+}
+]
+},
+"narrador.p_vindicadores_5": {
+"sounds": [
+{
+"name": "futebol:narrador/p_vindicadores_5"
+}
+]
+},
+"narrador.p_vindicadores_6": {
+"sounds": [
+{
+"name": "futebol:narrador/p_vindicadores_6"
+}
+]
+},
+"narrador.p_vindicadores_7": {
+"sounds": [
+{
+"name": "futebol:narrador/p_vindicadores_7"
+}
+]
+},
+"narrador.p_vindicadores_8": {
+"sounds": [
+{
+"name": "futebol:narrador/p_vindicadores_8"
+}
+]
+},
+"narrador.p_vindicadores_9": {
+"sounds": [
+{
+"name": "futebol:narrador/p_vindicadores_9"
+}
+]
+},
+"narrador.pedalada_1": {
+"sounds": [
+{
+"name": "futebol:narrador/pedalada_1"
+}
+]
+},
+"narrador.penalti_1": {
+"sounds": [
+{
+"name": "futebol:narrador/penalti_1"
+}
+]
+},
+"narrador.penalti_cobra_1": {
+"sounds": [
+{
+"name": "futebol:narrador/penalti_cobra_1"
+}
+]
+},
+"narrador.penalti_cobra_2": {
+"sounds": [
+{
+"name": "futebol:narrador/penalti_cobra_2"
+}
+]
+},
+"narrador.placar_pre_1": {
+"sounds": [
+{
+"name": "futebol:narrador/placar_pre_1"
+}
+]
+},
+"narrador.replay_1": {
+"sounds": [
+{
+"name": "futebol:narrador/replay_1"
+}
+]
+},
+"narrador.replay_2": {
+"sounds": [
+{
+"name": "futebol:narrador/replay_2"
+}
+]
+},
+"narrador.replay_3": {
+"sounds": [
+{
+"name": "futebol:narrador/replay_3"
+}
+]
+},
+"narrador.t_arsenal": {
+"sounds": [
+{
+"name": "futebol:narrador/t_arsenal"
+}
+]
+},
+"narrador.t_astonvilla": {
+"sounds": [
+{
+"name": "futebol:narrador/t_astonvilla"
+}
+]
+},
+"narrador.t_atleticomg": {
+"sounds": [
+{
+"name": "futebol:narrador/t_atleticomg"
+}
+]
+},
+"narrador.t_barcelona": {
+"sounds": [
+{
+"name": "futebol:narrador/t_barcelona"
+}
+]
+},
+"narrador.t_bayern": {
+"sounds": [
+{
+"name": "futebol:narrador/t_bayern"
+}
+]
+},
+"narrador.t_chelsea": {
+"sounds": [
+{
+"name": "futebol:narrador/t_chelsea"
+}
+]
+},
+"narrador.t_cruzeiro": {
+"sounds": [
+{
+"name": "futebol:narrador/t_cruzeiro"
+}
+]
+},
+"narrador.t_dortmund": {
+"sounds": [
+{
+"name": "futebol:narrador/t_dortmund"
+}
+]
+},
+"narrador.t_flamengo": {
+"sounds": [
+{
+"name": "futebol:narrador/t_flamengo"
+}
+]
+},
+"narrador.t_liverpool": {
+"sounds": [
+{
+"name": "futebol:narrador/t_liverpool"
+}
+]
+},
+"narrador.t_mancity": {
+"sounds": [
+{
+"name": "futebol:narrador/t_mancity"
+}
+]
+},
+"narrador.t_manutd": {
+"sounds": [
+{
+"name": "futebol:narrador/t_manutd"
+}
+]
+},
+"narrador.t_newcastle": {
+"sounds": [
+{
+"name": "futebol:narrador/t_newcastle"
+}
+]
+},
+"narrador.t_palmeiras": {
+"sounds": [
+{
+"name": "futebol:narrador/t_palmeiras"
+}
+]
+},
+"narrador.t_psg": {
+"sounds": [
+{
+"name": "futebol:narrador/t_psg"
+}
+]
+},
+"narrador.t_realmadrid": {
+"sounds": [
+{
+"name": "futebol:narrador/t_realmadrid"
+}
+]
+},
+"narrador.t_saqueadores": {
+"sounds": [
+{
+"name": "futebol:narrador/t_saqueadores"
+}
+]
+},
+"narrador.t_tottenham": {
+"sounds": [
+{
+"name": "futebol:narrador/t_tottenham"
+}
+]
+},
+"narrador.t_vindicadores": {
+"sounds": [
+{
+"name": "futebol:narrador/t_vindicadores"
+}
+]
+},
+"narrador.tiro_meta_1": {
+"sounds": [
+{
+"name": "futebol:narrador/tiro_meta_1"
+}
+]
+},
+"narrador.torcida_1": {
+"sounds": [
+{
+"name": "futebol:narrador/torcida_1"
+}
+]
+},
+"narrador.torcida_2": {
+"sounds": [
+{
+"name": "futebol:narrador/torcida_2"
+}
+]
+},
+"narrador.vermelho_1": {
+"sounds": [
+{
+"name": "futebol:narrador/vermelho_1"
+}
+]
+},
+"narrador.vermelho_2": {
+"sounds": [
+{
+"name": "futebol:narrador/vermelho_2"
+}
+]
+},
+"narrador.vitoria_1": {
+"sounds": [
+{
+"name": "futebol:narrador/vitoria_1"
+}
+]
+}
+}

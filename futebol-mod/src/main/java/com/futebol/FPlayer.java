@@ -27,6 +27,7 @@ public final class FPlayer {
     public double aimZ, aimY;
     public int shotTicks, shotReact;
     public boolean jumped;
+    public int yellow; public boolean out;            // cartões
     public double swX, swZ; public int swTicks;       // movimentação sutil sem bola
     public int giveGoTicks; public FPlayer giveGoTarget;
     // dribles / fintas

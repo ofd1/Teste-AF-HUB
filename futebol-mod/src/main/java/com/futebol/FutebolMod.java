@@ -182,6 +182,11 @@ public class FutebolMod implements ModInitializer {
                 FPlayer.RITMO = com.mojang.brigadier.arguments.FloatArgumentType.getFloat(c, "fator");
                 c.getSource().sendSuccess(() -> Component.literal("§7Ritmo do jogo: " + FPlayer.RITMO + "x (1.0 = padrão)"), false); return 1;
             })))
+            .then(Commands.literal("narrador")
+                .then(Commands.literal("on").executes(c -> { if (match != null) match.nar.on = true; return 1; }))
+                .then(Commands.literal("off").executes(c -> { if (match != null) match.nar.on = false; return 1; }))
+                .then(Commands.literal("legenda").then(Commands.argument("ligado", com.mojang.brigadier.arguments.BoolArgumentType.bool()).executes(c -> { if (match != null) match.nar.captions = com.mojang.brigadier.arguments.BoolArgumentType.getBool(c, "ligado"); return 1; })))
+                .then(Commands.literal("volume").then(Commands.argument("v", com.mojang.brigadier.arguments.FloatArgumentType.floatArg(0f, 2f)).executes(c -> { if (match != null) match.nar.volume = com.mojang.brigadier.arguments.FloatArgumentType.getFloat(c, "v"); return 1; }))))
             .then(Commands.literal("camera").then(Commands.argument("modo", StringArgumentType.word()).suggests((ctx, b) -> net.minecraft.commands.SharedSuggestionProvider.suggest(java.util.stream.Stream.concat(java.util.Arrays.stream(Cameras.Mode.values()).map(m -> m.id), java.util.stream.Stream.of("normal")), b)).executes(c -> {
                 if (match == null) { c.getSource().sendFailure(Component.literal("Use /futebol ativar primeiro.")); return 0; }
                 ServerPlayer pl = c.getSource().getPlayerOrException();

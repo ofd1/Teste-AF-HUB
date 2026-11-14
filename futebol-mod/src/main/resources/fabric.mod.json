@@ -7,7 +7,7 @@
   "authors": ["Futebol Mod"],
   "license": "MIT",
   "environment": "*",
-  "entrypoints": { "main": ["com.futebol.FutebolMod"] },
+  "entrypoints": { "main": ["com.futebol.FutebolMod"], "client": ["com.futebol.FutebolClient"] },
   "depends": {
     "fabricloader": ">=0.20.0",
     "minecraft": "~26.3",

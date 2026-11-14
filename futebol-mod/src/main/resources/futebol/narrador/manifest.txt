@@ -1,0 +1,430 @@
+a_1|257|a
+amarelo_1|1187|Cartão amarelo para
+cabeceio_1|735|Cabeceia
+caneta_1|1552|Caneta! Humilhou o marcador,
+chapeu_1|1807|Chapéu no marcador! Categoria de
+chute_1|725|arrisca!
+chute_2|974|bate forte!
+chute_3|808|finaliza!
+chute_4|1085|chuta de longe!
+com_bola_parada_1|2479|Na bola parada, um detalhe decide o jogo.
+com_cansaco_1|2725|Os jogadores já começam a sentir o cansaço.
+com_cartao_1|2019|Cartão justo. A entrada foi dura.
+com_contra_1|1598|O contra-ataque foi letal.
+com_defesa_1|2425|O goleiro estava muito bem posicionado.
+com_defesa_2|2091|Reflexo rápido. Ele evitou o gol.
+com_defesa_linha_1|3062|A linha defensiva precisa fechar melhor os espaços.
+com_drible_1|2215|Tem habilidade de sobra esse jogador.
+com_drible_2|2219|Quando ele pega embalado, ninguém segura.
+com_falta_1|2468|Jogo pegado. O árbitro precisa controlar.
+com_falta_2|2624|É uma falta tática, para parar o contra-ataque.
+com_gol_1|2209|Foi uma jogada muito bem trabalhada.
+com_gol_2|2825|A defesa ficou parada, e o atacante não perdoa.
+com_imped_1|2542|A linha de impedimento estava bem postada.
+com_intervalo_1|3373|Um tempo de muita luta. Vai ser decidido nos detalhes.
+com_penalti_1|3324|Pênalti é pressão pura. Quem bate precisa de sangue frio.
+com_posse_1|2778|Posse de bola com paciência, esperando o espaço.
+com_pressao_1|2417|O time está pressionando a saída de bola.
+cruz_1|992|Cruza na área!
+cruz_2|1264|Bola alçada na área!
+defesa_1|822|Defendeu!
+defesa_2|865|Que defesa!
+defesa_3|1101|Salvou o goleiro!
+defesa_4|688|Espalmou!
+defesa_de_1|1233|Grande defesa de
+defesa_de_2|940|Que milagre de
+elastico_1|1367|Elástico! Que drible de
+empate_fim_1|1668|O jogo termina empatado.
+enfiada_1|1362|Enfiada de bola para
+escanteio_1|1147|Escanteio para o
+escanteio_2|1643|Vai ser cobrado o escanteio.
+falta_1|720|Falta de
+falta_2|1288|Falta cometida por
+falta_3|1149|Entrada dura de
+falta_perigosa_1|1854|Falta perigosa! Quem vai bater é
+falta_perigosa_2|1383|Bola parada. Vai cobrar
+fil_1|749|com a bola.
+fil_2|1162|toca de primeira.
+fil_3|1025|carrega a bola.
+fil_4|2286|levanta a cabeça e procura o companheiro.
+fil_5|1279|domina e olha o jogo.
+fil_6|1400|gira e protege a bola.
+fim_1t_1|1547|Termina o primeiro tempo.
+fim_jogo_1|1265|Acabou! Fim de jogo!
+finta_1|827|Que finta de
+fora_1|648|Pra fora!
+fora_2|940|Passou perto!
+fora_3|561|Quase!
+fora_4|1423|Por pouco! Foi pra fora.
+gol_abre_1|974|Abre o placar!
+gol_amplia_1|1093|Amplia o placar!
+gol_contra_1|1301|Gol contra! Que azar de
+gol_diminui_1|1455|Diminui a diferença!
+gol_empata_1|1336|É o gol de empate!
+gol_grito_1|1444|Gooool! É gol! É gol!
+gol_grito_2|1793|Gol! Gol! Que beleza de gol!
+gol_grito_3|1766|Balançou a rede! Gooooool!
+gol_pos_1|892|Que golaço!
+gol_pos_2|1006|Sensacional!
+gol_pos_3|1135|Inacreditável!
+gol_pos_4|882|Fantástico!
+gol_vira_1|895|Vira o jogo!
+impedimento_1|1972|Impedimento! Bandeira levantada.
+impedimento_2|1994|Estava adiantado! Impedimento.
+inicio_1|1744|Apita o árbitro. Rola a bola!
+inicio_2|898|Bola rolando!
+inicio_2t_1|1878|Bola rolando para o segundo tempo!
+inicio_2t_2|1310|Recomeça a partida!
+inicio_3|1070|Começa o jogo!
+intro_a_1|2798|Boa noite, torcedores! Hoje a bola vai rolar para
+intro_a_2|1937|Está tudo pronto para o jogo entre
+intro_b_1|522|contra
+intro_c_1|1524|Vai começar a partida!
+intro_c_2|1456|Que comece o espetáculo!
+inversao_1|2029|Inversão de jogo para o outro lado.
+lateral_1|952|Lateral para o
+min_pos_1|713|minutos.
+min_pos_2|706|minuto.
+min_pre_1|325|Aos
+n_0|420|0
+n_1|342|1
+n_10|469|10
+n_11|494|11
+n_12|510|12
+n_13|509|13
+n_14|723|14
+n_15|588|15
+n_16|781|16
+n_17|857|17
+n_18|699|18
+n_19|761|19
+n_2|492|2
+n_20|566|20
+n_21|763|21
+n_22|931|22
+n_23|877|23
+n_24|961|24
+n_25|897|25
+n_26|827|26
+n_27|932|27
+n_28|933|28
+n_29|932|29
+n_3|467|3
+n_30|598|30
+n_31|790|31
+n_32|906|32
+n_33|846|33
+n_34|935|34
+n_35|894|35
+n_36|853|36
+n_37|915|37
+n_38|924|38
+n_39|921|39
+n_4|549|4
+n_40|671|40
+n_41|873|41
+n_42|1090|42
+n_43|1072|43
+n_44|1078|44
+n_45|1052|45
+n_46|1022|46
+n_47|1146|47
+n_48|1074|48
+n_49|1067|49
+n_5|547|5
+n_50|821|50
+n_51|1043|51
+n_52|1176|52
+n_53|1147|53
+n_54|1228|54
+n_55|1107|55
+n_56|1122|56
+n_57|1206|57
+n_58|1153|58
+n_59|1174|59
+n_6|442|6
+n_60|743|60
+n_61|950|61
+n_62|1098|62
+n_63|1038|63
+n_64|1152|64
+n_65|1081|65
+n_66|1013|66
+n_67|1152|67
+n_68|1081|68
+n_69|1099|69
+n_7|470|7
+n_70|754|70
+n_71|942|71
+n_72|1076|72
+n_73|1073|73
+n_74|1132|74
+n_75|1062|75
+n_76|1023|76
+n_77|1154|77
+n_78|1083|78
+n_79|1077|79
+n_8|496|8
+n_80|737|80
+n_81|922|81
+n_82|1101|82
+n_83|1073|83
+n_84|1131|84
+n_85|1062|85
+n_86|1050|86
+n_87|1150|87
+n_88|1106|88
+n_89|1123|89
+n_9|459|9
+n_90|687|90
+n_91|923|91
+n_92|1101|92
+n_93|1118|93
+n_94|1147|94
+n_95|1106|95
+n_96|1046|96
+n_97|1198|97
+n_98|1073|98
+n_99|1098|99
+p_arsenal_1|465|Raya
+p_arsenal_11|761|Martinelli
+p_arsenal_12|550|Timber
+p_arsenal_14|650|Gyökeres
+p_arsenal_2|596|Saliba
+p_arsenal_36|786|Zubimendi
+p_arsenal_4|491|White
+p_arsenal_41|446|Rice
+p_arsenal_6|568|Gabriel
+p_arsenal_7|515|Saka
+p_arsenal_8|566|Ødegaard
+p_astonvilla_10|787|Buendía
+p_astonvilla_11|631|Watkins
+p_astonvilla_12|566|Digne
+p_astonvilla_14|465|Torres
+p_astonvilla_2|493|Cash
+p_astonvilla_23|950|Emi Martínez
+p_astonvilla_27|601|Rogers
+p_astonvilla_31|491|Bailey
+p_astonvilla_4|543|Konsa
+p_astonvilla_6|548|Kamara
+p_astonvilla_7|712|McGinn
+p_atleticomg_11|481|Rony
+p_atleticomg_14|639|Scarpa
+p_atleticomg_2|642|Natanael
+p_atleticomg_22|653|Everson
+p_atleticomg_3|627|Lyanco
+p_atleticomg_4|645|Alonso
+p_atleticomg_5|847|Alan Franco
+p_atleticomg_6|552|Lodi
+p_atleticomg_7|569|Hulk
+p_atleticomg_8|833|Igor Gomes
+p_atleticomg_9|629|Paulinho
+p_barcelona_11|698|Raphinha
+p_barcelona_13|861|Joan García
+p_barcelona_19|591|Yamal
+p_barcelona_20|469|Olmo
+p_barcelona_21|576|de Jong
+p_barcelona_23|545|Koundé
+p_barcelona_3|600|Balde
+p_barcelona_4|661|Araújo
+p_barcelona_5|624|Cubarsí
+p_barcelona_8|489|Pedri
+p_barcelona_9|985|Lewandowski
+p_bayern_1|501|Neuer
+p_bayern_10|686|Musiala
+p_bayern_14|521|Díaz
+p_bayern_17|509|Olise
+p_bayern_19|571|Davies
+p_bayern_2|811|Upamecano
+p_bayern_4|297|Tah
+p_bayern_44|720|Stanišić
+p_bayern_45|776|Pavlović
+p_bayern_6|534|Kimmich
+p_bayern_9|448|Kane
+p_chelsea_1|554|Sánchez
+p_chelsea_10|482|Palmer
+p_chelsea_20|766|João Pedro
+p_chelsea_25|629|Caicedo
+p_chelsea_26|573|Chalobah
+p_chelsea_27|588|Gusto
+p_chelsea_3|647|Cucurella
+p_chelsea_41|620|Estêvão
+p_chelsea_6|492|Colwill
+p_chelsea_7|470|Neto
+p_chelsea_8|547|Enzo
+p_cruzeiro_1|525|Cássio
+p_cruzeiro_10|958|Matheus Pereira
+p_cruzeiro_11|691|Wanderson
+p_cruzeiro_15|1013|Fabrício Bruno
+p_cruzeiro_19|844|Kaio Jorge
+p_cruzeiro_2|749|William
+p_cruzeiro_4|783|João Marcelo
+p_cruzeiro_5|560|Romero
+p_cruzeiro_6|532|Kaiki
+p_cruzeiro_8|670|Christian
+p_cruzeiro_9|641|Gabigol
+p_dortmund_1|498|Kobel
+p_dortmund_15|564|Anton
+p_dortmund_19|566|Brandt
+p_dortmund_23|449|Can
+p_dortmund_24|638|Svensson
+p_dortmund_26|653|Ryerson
+p_dortmund_27|636|Adeyemi
+p_dortmund_4|741|Schlotterbeck
+p_dortmund_6|661|Nmecha
+p_dortmund_7|949|Jobe Bellingham
+p_dortmund_9|658|Guirassy
+p_flamengo_1|539|Rossi
+p_flamengo_10|835|Arrascaeta
+p_flamengo_11|1010|Luiz Araújo
+p_flamengo_2|542|Varela
+p_flamengo_21|712|Jorginho
+p_flamengo_27|913|Bruno Henrique
+p_flamengo_3|739|Léo Ortiz
+p_flamengo_4|811|Léo Pereira
+p_flamengo_5|515|Pulgar
+p_flamengo_6|931|Ayrton Lucas
+p_flamengo_9|462|Pedro
+p_liverpool_1|526|Becker
+p_liverpool_10|837|Mac Allister
+p_liverpool_11|465|Salah
+p_liverpool_26|726|Robertson
+p_liverpool_30|671|Frimpong
+p_liverpool_38|822|Gravenberch
+p_liverpool_4|696|van Dijk
+p_liverpool_5|611|Konaté
+p_liverpool_7|502|Wirtz
+p_liverpool_8|697|Szoboszlai
+p_liverpool_9|594|Isak
+p_mancity_10|560|Cherki
+p_mancity_11|521|Doku
+p_mancity_16|534|Rodri
+p_mancity_24|760|Gvardiol
+p_mancity_25|785|Donnarumma
+p_mancity_27|511|Nunes
+p_mancity_3|948|Rúben Dias
+p_mancity_33|545|O'Reilly
+p_mancity_4|668|Reijnders
+p_mancity_47|561|Foden
+p_mancity_9|535|Haaland
+p_manutd_10|565|Cunha
+p_manutd_16|524|Amad
+p_manutd_18|715|Casemiro
+p_manutd_2|636|Dalot
+p_manutd_23|311|Shaw
+p_manutd_30|561|Šeško
+p_manutd_31|572|Lammens
+p_manutd_37|500|Mainoo
+p_manutd_5|701|Maguire
+p_manutd_6|728|Martínez
+p_manutd_8|1026|Bruno Fernandes
+p_newcastle_1|383|Pope
+p_newcastle_10|604|Gordon
+p_newcastle_11|581|Barnes
+p_newcastle_21|786|Livramento
+p_newcastle_27|832|Woltemade
+p_newcastle_33|509|Burn
+p_newcastle_39|725|Guimarães
+p_newcastle_4|587|Botman
+p_newcastle_5|375|Schär
+p_newcastle_7|718|Joelinton
+p_newcastle_8|541|Tonali
+p_palmeiras_11|1023|Felipe Anderson
+p_palmeiras_12|588|Khellven
+p_palmeiras_15|994|Gustavo Gómez
+p_palmeiras_17|608|Piquerez
+p_palmeiras_20|967|Facundo Torres
+p_palmeiras_21|668|Weverton
+p_palmeiras_22|565|Murilo
+p_palmeiras_23|515|Veiga
+p_palmeiras_5|898|Aníbal Moreno
+p_palmeiras_8|787|Zé Rafael
+p_palmeiras_9|861|Vitor Roque
+p_psg_10|661|Dembélé
+p_psg_14|351|Doué
+p_psg_17|694|Vitinha
+p_psg_2|617|Hakimi
+p_psg_25|618|Mendes
+p_psg_30|628|Chevalier
+p_psg_5|741|Marquinhos
+p_psg_51|445|Pacho
+p_psg_7|801|Kvaratskhelia
+p_psg_8|563|Neves
+p_psg_87|545|Ruiz
+p_realmadrid_1|552|Courtois
+p_realmadrid_10|625|Mbappé
+p_realmadrid_11|672|Rodrygo
+p_realmadrid_12|1197|Alexander-Arnold
+p_realmadrid_14|634|Tchouaméni
+p_realmadrid_15|785|Valverde
+p_realmadrid_18|612|Carreras
+p_realmadrid_22|678|Rüdiger
+p_realmadrid_3|706|Militão
+p_realmadrid_5|731|Bellingham
+p_realmadrid_7|690|Vinícius
+p_saqueadores_1|608|Muralha
+p_saqueadores_10|837|Camisa Dez
+p_saqueadores_11|702|Foguete
+p_saqueadores_2|589|Tufão
+p_saqueadores_3|512|Zeca
+p_saqueadores_4|624|Rochedo
+p_saqueadores_5|634|Paredão
+p_saqueadores_6|655|Maestro
+p_saqueadores_7|421|Raio
+p_saqueadores_8|591|Cérebro
+p_saqueadores_9|762|Artilheiro
+p_tottenham_1|655|Vicario
+p_tottenham_11|566|Odobert
+p_tottenham_17|560|Romero
+p_tottenham_19|650|Solanke
+p_tottenham_20|542|Kudus
+p_tottenham_23|393|Porro
+p_tottenham_24|588|Spence
+p_tottenham_37|810|van de Ven
+p_tottenham_5|442|Sarr
+p_tottenham_6|626|Palhinha
+p_tottenham_7|923|Xavi Simons
+p_vindicadores_1|690|Gigante
+p_vindicadores_10|598|Mágico
+p_vindicadores_11|766|Relâmpago
+p_vindicadores_2|568|Trator
+p_vindicadores_3|672|Marreta
+p_vindicadores_4|635|Brutus
+p_vindicadores_5|651|Capitão
+p_vindicadores_6|904|Cão de Guarda
+p_vindicadores_7|607|Cometa
+p_vindicadores_8|636|Armador
+p_vindicadores_9|652|Matador
+pedalada_1|1197|Olha a pedalada de
+penalti_1|1699|É pênalti! O árbitro marca!
+penalti_cobra_1|791|Vai cobrar
+penalti_cobra_2|1256|Na bola, o batedor:
+placar_pre_1|1089|O placar agora:
+replay_1|1271|Vamos rever o lance.
+replay_2|959|Olha de novo!
+replay_3|1332|Vale ver novamente.
+t_arsenal|644|Arsenal
+t_astonvilla|825|Aston Villa
+t_atleticomg|1037|Atlético Mineiro
+t_barcelona|822|FC Barcelona
+t_bayern|1168|Bayern de Munique
+t_chelsea|574|Chelsea
+t_cruzeiro|629|Cruzeiro
+t_dortmund|1133|Borussia Dortmund
+t_flamengo|708|Flamengo
+t_liverpool|711|Liverpool
+t_mancity|1107|Manchester City
+t_manutd|1277|Manchester United
+t_newcastle|724|Newcastle United
+t_palmeiras|655|Palmeiras
+t_psg|1218|Paris Saint-Germain
+t_realmadrid|847|Real Madrid
+t_saqueadores|801|Saqueadores
+t_tottenham|712|Tottenham Hotspur
+t_vindicadores|925|Vindicadores
+tiro_meta_1|1060|Tiro de meta.
+torcida_1|1510|A torcida vai à loucura!
+torcida_2|1741|Que festa nas arquibancadas!
+vermelho_1|1524|Cartão vermelho! Expulso
+vermelho_2|1250|Está fora do jogo!
+vitoria_1|736|Vitória do

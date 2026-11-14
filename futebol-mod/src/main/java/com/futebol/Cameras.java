@@ -42,7 +42,7 @@ public final class Cameras {
     private record Shot(String key, Vec3 pos, Vec3 focus, double posAlpha, double panMax, double dead, double shake) {}
 
     private static final class Sess {
-        Entity expect; int grace; ArmorStand cam; Mode mode; Vec3 pos = Vec3.ZERO; double yaw, pitch;
+        Entity expect; int grace, ready, resend1, resend2; boolean needSet; ArmorStand cam; Mode mode; Vec3 pos = Vec3.ZERO; double yaw, pitch;
         String key = ""; int born; boolean forced; Mode prev; FPlayer followed;
     }
 
@@ -52,6 +52,12 @@ public final class Cameras {
     private int tick;
 
     // diretor
+    private void apply(ServerPlayer pl, Sess s, Entity e) {
+        pl.setCamera(e);
+        s.expect = e; s.grace = tick + 6; s.resend1 = tick + 6; s.resend2 = tick + 30;
+        pl.sendSystemMessage(Component.literal("§b🎥 " + s.mode.nome + " §7(agache para sair)"), true);
+    }
+
     private Mode dMode = Mode.TV; private int dEnd, dSide = 1; private FPlayer dSubject; private int dTeam;
     private Match.St dLastSt; private Match.SP dLastSp; private int dNextTrack = 1200;
 
@@ -73,10 +79,11 @@ public final class Cameras {
             s.cam.snapTo(p.x, p.y, p.z);
             m.level.addFreshEntity(s.cam);
             s.pos = p.add(0, 1.6, 0);
+            s.ready = tick + 6;                      // o cliente precisa conhecer a entidade antes de trocar a câmera
             sess.put(pl.getUUID(), s);
-        }
+        } else s.ready = tick;
         s.mode = mode; s.key = ""; s.born = tick; s.forced = false;
-        pl.setCamera(s.cam); s.expect = s.cam; s.grace = tick + 4; s.followed = null;
+        s.needSet = true; s.followed = null; s.expect = null;
         pl.sendSystemMessage(Component.literal("§b🎥 " + mode.nome + " §7(agache para sair)"), true);
     }
 
@@ -85,7 +92,7 @@ public final class Cameras {
         for (ServerPlayer pl : m.level.players()) {
             Sess s = sess.get(pl.getUUID());
             if (s == null) { set(pl, mode); s = sess.get(pl.getUUID()); s.forced = true; s.prev = null; }
-            else if (!s.forced) { s.prev = s.mode; s.mode = mode; s.key = ""; s.forced = true; pl.setCamera(s.cam); s.expect = s.cam; s.grace = tick + 4; s.followed = null; }
+            else if (!s.forced) { s.prev = s.mode; s.mode = mode; s.key = ""; s.forced = true; s.needSet = true; s.ready = tick; s.expect = null; s.followed = null; }
         }
     }
 
@@ -120,6 +127,9 @@ public final class Cameras {
             ServerPlayer pl = m.level.getServer().getPlayerList().getPlayer(en.getKey());
             Sess s = en.getValue();
             if (pl == null || !pl.isAlive()) { s.cam.discard(); gone.add(en.getKey()); continue; }
+            if (s.needSet && tick >= s.ready) { apply(pl, s, s.cam); s.needSet = false; }
+            if (s.resend1 == tick || s.resend2 == tick) { if (s.expect != null) pl.connection.send(new net.minecraft.network.protocol.game.ClientboundSetCameraPacket(s.expect)); }
+            if (s.needSet) continue;
             if (tick > s.grace && pl.getCamera() != s.expect) { s.cam.discard(); gone.add(en.getKey()); continue; }   // agachou: saiu
             update(pl, s);
         }
@@ -264,10 +274,10 @@ public final class Cameras {
         Mode mode = s.mode == Mode.AUTO ? dMode : s.mode;
         if (mode == Mode.JOGADOR) {
             FPlayer f = m.carrier != null ? m.carrier : m.lastToucher;
-            if (f != null && f != s.followed && f.e.isAlive()) { s.followed = f; pl.setCamera(f.e); s.expect = f.e; s.grace = tick + 4; }
+            if (f != null && f != s.followed && f.e.isAlive()) { s.followed = f; apply(pl, s, f.e); }
             return;
         }
-        if (s.followed != null) { s.followed = null; pl.setCamera(s.cam); s.expect = s.cam; s.grace = tick + 4; }
+        if (s.followed != null) { s.followed = null; apply(pl, s, s.cam); }
         Shot sh = shotFor(mode, s, pl);
         double dx = sh.focus().x - sh.pos().x, dy = sh.focus().y - sh.pos().y, dz = sh.focus().z - sh.pos().z;
         double ty = Match.yawTo(dx, dz), tp = Math.toDegrees(Math.atan2(-dy, Math.max(0.01, Math.hypot(dx, dz))));
@@ -286,6 +296,7 @@ public final class Cameras {
         double sw = sh.shake();
         float yaw = (float) (s.yaw + (sw > 0 ? Math.sin(tick * 0.31) * sw : 0)), pitch = (float) (s.pitch + (sw > 0 ? Math.sin(tick * 0.23 + 1.7) * sw * 0.7 : 0));
         s.cam.snapTo(s.pos.x, s.pos.y - s.cam.getEyeHeight(), s.pos.z, yaw, pitch);
+        s.cam.setYHeadRot(yaw); s.cam.yBodyRot = yaw; s.cam.yBodyRotO = yaw;      // LivingEntity usa a rotação da CABEÇA como direção da câmera
     }
 
     /** Teste de desenvolvimento: calcula todos os enquadramentos e acusa valores inválidos. */

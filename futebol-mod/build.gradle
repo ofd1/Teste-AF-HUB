@@ -29,3 +29,11 @@ java {
     targetCompatibility = JavaVersion.VERSION_25
 }
 
+
+loom {
+    runs {
+        client {
+            programArgs "--username", "Dev", "--width", "1280", "--height", "720", "--quickPlayMultiplayer", "localhost:25565"
+        }
+    }
+}

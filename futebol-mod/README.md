@@ -1,4 +1,4 @@
-# ⚽ Futebol — mod de Minecraft (Fabric 26.3) · v2.2
+# ⚽ Futebol — mod de Minecraft (Fabric 26.3) · v2.3
 
 Campo + estádio completos, 22 mobs jogando futebol de verdade: Pillagers (mandante) x Vindicators (visitante), goleiros Villager, bola de **Cubo de Enxofre com madeira dentro** e torcida de Villagers cantando.
 
@@ -11,6 +11,15 @@ Campo + estádio completos, 22 mobs jogando futebol de verdade: Pillagers (manda
 ```
 Constrói campo + estádio, coloca os times uniformizados (camisa, calção, número e nome), a torcida, os telões, e te dá o **Graveto do Árbitro** e o **Controle de Câmeras**.
 **Botão direito com o graveto = começa o jogo.** Graveto agachado = reinicia. `/futebol desativar` remove tudo e restaura o terreno.
+
+## Novidades da v2.3 — narrador, arbitragem e cerimônia
+- **Narrador e comentarista com voz** (TTS offline **Kokoro-82M**, licença Apache-2.0, vozes pt-BR `pm_alex` = narrador, `pm_santa` = comentarista). Narra gol (com o nome do artilheiro, minuto e placar), defesas, chutes, faltas, cartões, escanteios, impedimentos, dribles, enfiadas, cruzamentos, intervalo, fim de jogo e replays; o comentarista entra de vez em quando. As frases são montadas com clipes que vão **dentro do mod** (precisa do mod instalado no cliente para ouvir). `/futebol narrador on|off`, `/futebol narrador volume <0-2>`, `/futebol narrador legenda true|false` (mostra a fala escrita). A categoria de som é "Voz" (ajustável nas opções de som).
+  - Para trocar a voz ou regenerar os nomes depois de editar `clubs.txt`: `tools/gerar_narracao.py` (instruções no topo do arquivo).
+- **Arbitragem:** árbitro (acompanha o jogo na diagonal) e dois assistentes na linha de impedimento.
+- **Cartões:** amarelo e vermelho (2º amarelo = expulsão; o expulso vai para o banco e o time joga com 10). Zagueiros brutos levam mais cartões.
+- **Cerimônia:** os times entram pelo túnel, se alinham de frente para a câmera principal enquanto o narrador apresenta o jogo, e só então o árbitro apita.
+- **Comemoração de gol:** o artilheiro corre para o canto e o time vai atrás.
+- **Câmeras corrigidas** (revisadas com capturas de tela reais do cliente).
 
 ## Novidades da v2.2 — câmeras de transmissão
 `/futebol camera transmissao` liga o **diretor de TV**, que corta entre câmeras como numa transmissão real (câmeras 100% no estilo TV: a principal é um tripé fixo que só gira, com atraso e zona morta; quase sem tracking):

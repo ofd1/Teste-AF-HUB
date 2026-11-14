@@ -28,7 +28,7 @@ import java.util.Random;
 
 /** O jogo: física da bola, regras, reposições e a IA dos 22 jogadores. */
 public final class Match {
-    public enum St { IDLE, SETPIECE, PLAYING, GOAL, HALFTIME, FULLTIME, REPLAY }
+    public enum St { IDLE, INTRO, SETPIECE, PLAYING, GOAL, HALFTIME, FULLTIME, REPLAY }
     public enum SP { KICKOFF, THROW_IN, CORNER, GOAL_KICK, FREE_KICK, PENALTY }
 
     static final double DG = 0.965, DA = 0.996;   // atrito da bola no chão / no ar (por tick)
@@ -40,6 +40,8 @@ public final class Match {
     public SulfurCube ball;
     public Crowd crowd;
     public Cameras cameras;
+    public Narrator nar;
+    public Referee referee;
     public java.util.function.Consumer<Match> onFinish;
     public Screens screens;
     public final int[] attackDir = {1, -1};
@@ -93,6 +95,8 @@ public final class Match {
         m.screens = new Screens(m);
         m.crowd = new Crowd(m, 140);
         m.cameras = new Cameras(m);
+        m.nar = new Narrator(m);
+        m.referee = new Referee(m);
         m.resetForKickoff(0, true);
         return m;
     }
@@ -191,6 +195,7 @@ public final class Match {
 
     public void remove() {
         if (cameras != null) cameras.stopAll();
+        if (referee != null) referee.remove();
         if (crowd != null) crowd.clear();
         if (screens != null) screens.remove();
         for (FPlayer p : all) if (p.e != null) p.e.discard();
@@ -205,6 +210,7 @@ public final class Match {
         for (FPlayer p : all) if (p.e != null) p.e.discard();
         if (ball != null) ball.discard();
         if (crowd != null) crowd.clear();
+        if (referee != null) referee.remove();
         if (screens != null) screens.remove();
     }
 
@@ -230,8 +236,7 @@ public final class Match {
     public void start() {
         if (st == St.IDLE || st == St.FULLTIME) {
             if (st == St.FULLTIME) { score[0] = score[1] = 0; half = 1; clock = 0; attackDir[0] = 1; attackDir[1] = -1; resetForKickoff(0, true); }
-            whistle(1.0f);
-            beginSetPiece(SP.KICKOFF, kickoffTeam, new Vec3(pitch.cx(), pitch.surf(), pitch.cz()));
+            startIntro();
         }
     }
 
@@ -270,6 +275,8 @@ public final class Match {
         computeTraj();
         if (crowd != null) crowd.tick();
         if (cameras != null) cameras.tick();
+        if (nar != null) nar.tick();
+        if (referee != null) referee.tick();
         if (st == St.PLAYING || st == St.SETPIECE || st == St.GOAL) record();
         for (FPlayer p : all) {
             if (p.touchCd > 0) p.touchCd--;
@@ -286,10 +293,11 @@ public final class Match {
         if (offTtl > 0 && --offTtl == 0) offSet = null;
         for (int t = 0; t < 2; t++) { if (trans[t] > 0) trans[t]--; if (counterPress[t] > 0) counterPress[t]--; }
         int ct = carrier != null ? carrier.team : -1;
-        if (ct >= 0 && ct != lastCarrierTeam) { if (lastCarrierTeam >= 0 && st == St.PLAYING) { trans[ct] = 100; counterPress[lastCarrierTeam] = 70; trans[lastCarrierTeam] = 0; } lastCarrierTeam = ct; }
+        if (ct >= 0 && ct != lastCarrierTeam) { if (lastCarrierTeam >= 0 && st == St.PLAYING) { if (nar != null && rnd.nextInt(5) == 0) nar.analyst("com_contra"); trans[ct] = 100; counterPress[lastCarrierTeam] = 70; trans[lastCarrierTeam] = 0; } lastCarrierTeam = ct; }
 
         switch (st) {
             case IDLE -> { holdAll(); }
+            case INTRO -> tickIntro();
             case SETPIECE -> tickSetPiece();
             case PLAYING -> tickPlaying();
             case GOAL -> tickGoal();
@@ -374,6 +382,7 @@ public final class Match {
         ballControl();
         if (st != St.PLAYING) return;
         skills();
+        if (nar != null && tickCount % 200 == 0 && carrier != null) nar.filler(carrier);
         carrierThink();
         for (int t = 0; t < 2; t++) aiTeam(t);
         // fim do tempo: só termina em bola parada/lance sem perigo
@@ -385,11 +394,13 @@ public final class Match {
         if (half == 1) {
             st = St.HALFTIME; stTicks = 0;
             sayV("§e⏸ Intervalo: " + placar());
+            if (nar != null) nar.halftime();
         } else {
             st = St.FULLTIME; stTicks = 0;
             String venc = score[0] == score[1] ? "§eEMPATE!" : (score[0] > score[1] ? Roster.COR_CHAT[0] + Roster.TIME_NOME[0] : Roster.COR_CHAT[1] + Roster.TIME_NOME[1]) + " §evence!";
             say("§6🏁 Fim de jogo: " + placar());
             if (crowd != null) crowd.event("end", 0);
+            if (nar != null) nar.fulltime();
             if (onFinish != null) { var cb = onFinish; onFinish = null; cb.accept(this); }
         }
         carrier = null; for (FPlayer p : all) { p.holding = false; p.shotActive = false; }
@@ -411,7 +422,7 @@ public final class Match {
 
     void tickGoal() {
         if (stTicks == 70 && replaysAuto && rec.size() > 60) { startReplay(true, 8, 0.5); return; }
-        holdAll();
+        celebrate();
         // comemoração: time que marcou pula
         if (stTicks % 14 == 0) for (FPlayer p : all) if (p.team == lastEventTeam && !p.isGK() && rnd.nextInt(3) == 0 && p.e.onGround())
             p.e.setDeltaMovement(p.e.getDeltaMovement().x, 0.42, p.e.getDeltaMovement().z);
@@ -423,6 +434,66 @@ public final class Match {
             int conceded = 1 - lastEventTeam;
             resetForKickoff(conceded, true);
             beginSetPiece(SP.KICKOFF, conceded, new Vec3(pitch.cx(), pitch.surf(), pitch.cz()));
+        }
+    }
+
+    // =====================================================================================
+    //  Entrada em campo, cerimônia e comemoração
+    // =====================================================================================
+
+    FPlayer goalScorer;
+
+    void startIntro() {
+        st = St.INTRO; stTicks = 0;
+        carrier = null;
+        for (FPlayer p : all) { p.out = false; p.yellow = 0; p.touchCd = 0; p.tackleCd = 0; p.vx = p.vz = 0; }
+    }
+
+    /** Posição na fila de apresentação (de frente para a câmera principal). */
+    Vec3 lineupSpot(FPlayer p) {
+        int i = java.util.Arrays.asList(teams[p.team]).indexOf(p);
+        double x = pitch.cx() + (p.team == 0 ? -18.5 + i * 1.55 : 3 + i * 1.55);
+        return new Vec3(x, pitch.surf(), pitch.cz() + 1.0);
+    }
+
+    void tickIntro() {
+        if (stTicks == 1) {
+            // todos saem do túnel (atrás da linha lateral), um atrás do outro
+            for (FPlayer p : all) {
+                int i = java.util.Arrays.asList(teams[p.team]).indexOf(p);
+                double x = pitch.cx() + (p.team == 0 ? -3.0 - i * 1.0 : 3.0 + i * 1.0);
+                p.e.snapTo(x, pitch.surf(), pitch.cz() + Pitch.HALF_W + 2.4, 180f, 0);
+                p.vx = p.vz = 0;
+            }
+        }
+        for (FPlayer p : all) {
+            if (stTicks < 255) { Vec3 l = lineupSpot(p); p.tx = l.x; p.tz = l.z; p.spd = 0.38; }
+            else { double u = Math.min(p.def.u(), 30); Vec3 w = W(p.team, u, p.def.v()); p.tx = w.x; p.tz = w.z; p.spd = 0.5; }
+            p.mode = FPlayer.Mode.HOLD;
+        }
+        if (stTicks == 70 && nar != null) nar.intro();
+        if (stTicks >= 330) {
+            whistle(1.0f);
+            resetForKickoff(kickoffTeam, true);
+            beginSetPiece(SP.KICKOFF, kickoffTeam, new Vec3(pitch.cx(), pitch.surf(), pitch.cz()));
+        }
+    }
+
+    /** Comemoração: o artilheiro corre para o canto e o time vai atrás; o adversário abaixa a cabeça. */
+    void celebrate() {
+        int t = lastEventTeam < 0 ? 0 : lastEventTeam;
+        FPlayer sc = goalScorer != null && goalScorer.team == t && goalScorer.e.isAlive() ? goalScorer : null;
+        if (sc == null) for (FPlayer p : teams[t]) if (p.def.pos() == Pos.ST) sc = p;
+        Vec3 sp = sc.pos();
+        double side = attackDir[t], zs = Math.signum(sp.z - pitch.cz() + 0.01);
+        Vec3 corner = new Vec3(pitch.cx() + side * (Pitch.HALF_L - 5), pitch.surf(), pitch.cz() + zs * (Pitch.HALF_W - 6));
+        for (FPlayer p : all) {
+            p.mode = FPlayer.Mode.HOLD;
+            if (p.team == t) {
+                if (p == sc) { p.tx = corner.x; p.tz = corner.z; p.spd = stTicks < 60 ? 0.95 : 0.2; }
+                else if (p.isGK()) { p.tx = p.pos().x; p.tz = p.pos().z; p.spd = 0.2; }
+                else { double a = (p.def.num() * 0.9); p.tx = sp.x + Math.cos(a) * 2.2; p.tz = sp.z + Math.sin(a) * 2.2; p.spd = stTicks < 80 ? 0.85 : 0.25; }
+            } else { p.tx = p.pos().x; p.tz = p.pos().z; p.spd = 0.2; }
         }
     }
 
@@ -445,7 +516,7 @@ public final class Match {
         if (Math.abs(dz) > pitch.limZ()) {                         // lateral
             int team = lastTouchTeam < 0 ? kickoffTeam : 1 - lastTouchTeam;
             double sx = clamp(dx, -Pitch.HALF_L + 2, Pitch.HALF_L - 2);
-            sayV("§7↔ Lateral para " + nome(team)); cnt("lateral");
+            sayV("§7↔ Lateral para " + nome(team)); cnt("lateral"); if (nar != null) nar.throwIn(team);
             beginSetPiece(SP.THROW_IN, team, new Vec3(pitch.cx() + sx, pitch.surf(), pitch.cz() + Math.signum(dz) * Pitch.HALF_W));
             return true;
         }
@@ -457,11 +528,11 @@ public final class Match {
             if (noGol) { goal(attacker); return true; }
             if (lastTouchTeam == defender || lastTouchTeam < 0) {
                 double cz = pitch.cz() + (dz >= 0 ? 1 : -1) * (Pitch.HALF_W - 0.5);
-                sayV("§7⚑ Escanteio para " + nome(attacker)); cnt("escanteio");
+                sayV("§7⚑ Escanteio para " + nome(attacker)); cnt("escanteio"); if (nar != null) nar.corner(attacker);
                 beginSetPiece(SP.CORNER, attacker, new Vec3(pitch.cx() + side * (Pitch.HALF_L - 0.5), pitch.surf(), cz));
             } else {
-                if (tickCount - lastShotTick < 100 && lastToucher != null && lastToucher.team == attacker) markChance();
-                sayV("§7▢ Tiro de meta para " + nome(defender)); cnt("tiro_de_meta");
+                if (tickCount - lastShotTick < 100 && lastToucher != null && lastToucher.team == attacker) { markChance(); if (nar != null) nar.wide(lastToucher); }
+                sayV("§7▢ Tiro de meta para " + nome(defender)); cnt("tiro_de_meta"); if (nar != null) nar.goalKick();
                 Vec3 spot = new Vec3(pitch.ownGoalX(attackDir[defender]) + attackDir[defender] * 4.5, pitch.surf(), pitch.cz() + (dz >= 0 ? 2.5 : -2.5));
                 beginSetPiece(SP.GOAL_KICK, defender, spot);
             }
@@ -482,6 +553,8 @@ public final class Match {
         whistle(0.8f);
         if (crowd != null) crowd.event("goal", team);
         level.playSound(null, bp().x, bp().y, bp().z, SoundEvents.FIREWORK_ROCKET_LARGE_BLAST, SoundSource.NEUTRAL, 3f, 1f);
+        goalScorer = who;
+        if (nar != null && who != null) nar.goal(who, team, contra);
         String autor = who == null ? "" : (contra ? "gol contra de " : "") + who.def.nome() + " (#" + who.def.num() + ")";
         title("§l⚽ GOL", Roster.COR_CHAT[team] + autor);
         say("§e⚽ " + placar() + " §7— " + autor);
@@ -500,12 +573,14 @@ public final class Match {
         for (FPlayer p : all) { p.holding = false; p.shotActive = false; }
         pinBall(spot);
         spTaker = pickTaker(type, team, spot);
+        if (nar != null) { if (type == SP.PENALTY) nar.penalty(spTaker); else if (type == SP.FREE_KICK && hd(spot, W(team, 64, 0)) < 28 * Pitch.SL) nar.freeKick(spTaker); }
         if (type != SP.KICKOFF) whistle(0.9f);
     }
 
     FPlayer pickTaker(SP type, int team, Vec3 spot) {
         FPlayer best = null; double bs = -1e9;
         for (FPlayer p : teams[team]) {
+            if (p.out) continue;
             double s;
             switch (type) {
                 case KICKOFF -> s = p.def.pos() == Pos.ST ? 100 : -50;
@@ -556,6 +631,7 @@ public final class Match {
         ball.snapTo(b.x, b.y, b.z);
         switch (sp) {
             case KICKOFF -> {
+                if (nar != null) nar.kickoff(half == 2);
                 FPlayer r = bestPass(k, false, 3, 20, true);
                 if (r == null) r = teams[spTeam][teams[spTeam].length - 1];
                 kickPass(k, r, false);
@@ -728,15 +804,31 @@ public final class Match {
         }
     }
 
+    void giveCard(FPlayer p, boolean red) {
+        cnt(red ? "vermelho" : "amarelo");
+        if (nar != null) nar.card(p, red);
+        if (crowd != null) crowd.event("foul", p.team);
+        Component msg = Component.literal(red ? "§c🟥 Expulso: §f" + p.def.nome() + " §7(#" + p.def.num() + ")" : "§e🟨 Cartão amarelo: §f" + p.def.nome() + " §7(#" + p.def.num() + ")");
+        for (ServerPlayer pl : level.players()) pl.sendSystemMessage(msg, true);
+        if (red) { p.out = true; p.touchCd = 999999; p.tackleCd = 999999; if (carrier == p) carrier = null; }
+    }
+
+    Vec3 benchSpot(FPlayer p) { return new Vec3(pitch.cx() + (p.team == 0 ? -18 : 18), pitch.surf(), pitch.cz() + Pitch.HALF_W + 2.4); }
+
     boolean inBox(int t, Vec3 pos) {
         return U(t, pos.x) < Pitch.BOXV_D + 0.5 && Math.abs(V(t, pos.z)) < Pitch.BOXV_H + 0.5;
     }
 
     void foul(FPlayer fouler, FPlayer victim) {
         foulVictim = victim;
+        if (nar != null) nar.foul(fouler);
         Vec3 spot = victim.pos();
         whistle(1.1f);
         boolean pen = inBox(fouler.team, spot);
+        double rP = 0.02 + fouler.st().agr() * 0.0008, yP = 0.14 + fouler.st().agr() * 0.0035;
+        boolean red = rnd.nextDouble() < rP, yel = !red && rnd.nextDouble() < yP;
+        if (yel && ++fouler.yellow >= 2) { red = true; yel = false; }
+        if (yel || red) giveCard(fouler, red);
         cnt(pen ? "penalti" : "falta"); if (crowd != null) crowd.event("foul", fouler.team); sayV("§c✋ Falta de " + Roster.COR_CHAT[fouler.team] + fouler.def.nome() + " §c(#" + fouler.def.num() + ")" + (pen ? " — §lPÊNALTI!" : ""));
         if (pen) {
             Vec3 ps = W(victim.team, 64 - Pitch.PEN_SPOT_V, 0);
@@ -833,7 +925,7 @@ public final class Match {
         Vec3 b = bp();
         if (rnd.nextDouble() < catchP) {
             gkCatch(g);
-            if (crowd != null) crowd.event("save", g.team); cnt("defesa"); sayV("§b🧤 Defesa de " + Roster.COR_CHAT[g.team] + g.def.nome() + "§b!");
+            if (crowd != null) crowd.event("save", g.team); if (nar != null) nar.save(g); cnt("defesa"); sayV("§b🧤 Defesa de " + Roster.COR_CHAT[g.team] + g.def.nome() + "§b!");
         } else {
             double out = Math.signum(b.z - g.pos().z + (rnd.nextDouble() - 0.5) * 0.2);
             double ang = Math.toRadians(35 + rnd.nextDouble() * 55);
@@ -841,7 +933,7 @@ public final class Match {
             double s = Math.max(0.35, speed * 0.55);
             ball.setDeltaMovement(dir * Math.cos(ang) * s * 0.55, 0.18 + rnd.nextDouble() * 0.15, out * Math.sin(ang) * s);
             g.touchCd = 15;
-            if (crowd != null) crowd.event("save", g.team); cnt("espalmada"); sayV("§b🧤 Espalmou " + Roster.COR_CHAT[g.team] + g.def.nome() + "§b!");
+            if (crowd != null) crowd.event("save", g.team); if (nar != null) nar.save(g); cnt("espalmada"); sayV("§b🧤 Espalmou " + Roster.COR_CHAT[g.team] + g.def.nome() + "§b!");
         }
         level.playSound(null, b.x, b.y, b.z, SoundEvents.ARMOR_EQUIP_LEATHER.value(), SoundSource.NEUTRAL, 1f, 0.9f);
     }
@@ -907,7 +999,7 @@ public final class Match {
             cnt("chute_curva");
         }
         shootAt(k, 64, side * aim, h, 1.0, errMul, curl, 0);
-        sayV("§f" + Roster.COR_CHAT[k.team] + k.def.nome() + (curl != 0 ? "§f chuta com efeito!" : "§f chuta!")); cnt("chute_t" + k.team); if (crowd != null) crowd.event("chance", k.team);
+        sayV("§f" + Roster.COR_CHAT[k.team] + k.def.nome() + (curl != 0 ? "§f chuta com efeito!" : "§f chuta!")); cnt("chute_t" + k.team); if (crowd != null) crowd.event("chance", k.team); if (nar != null) nar.shot(k);
     }
 
 
@@ -1077,6 +1169,7 @@ public final class Match {
 
     void announceSkill(FPlayer c, FPlayer o, int type) {
         if (crowd != null) crowd.event("skill", c.team);
+        if (nar != null) nar.skill(c, type);
         if (skillMsgCd > 0) return;
         skillMsgCd = 80;
         sayV("§d✨ " + Roster.COR_CHAT[c.team] + c.def.nome() + "§d aplica " + (type == 3 || type == 4 ? "uma " : "um ") + SKILL[type] + " em " + Roster.COR_CHAT[o.team] + o.def.nome() + "§d!");
@@ -1129,6 +1222,7 @@ public final class Match {
         offSet = null;
         whistle(1.1f);
         cnt("impedimento");
+        if (nar != null) nar.offside(p);
         sayV("§e🚩 Impedimento de " + Roster.COR_CHAT[p.team] + p.def.nome());
         if (crowd != null) crowd.event("foul", p.team);
         Vec3 pp = p.pos();
@@ -1149,7 +1243,7 @@ public final class Match {
         if (u > 42 && Math.abs(v) > 10 && linha >= 1) {
             FPlayer tgt = null, cut = null; double bs = -1e9, bc = -1e9;
             for (FPlayer r : teams[c.team]) {
-                if (r == c || r.isGK()) continue;
+                if (r == c || r.isGK() || r.out) continue;
                 double ru = U(c.team, r.pos().x), rv = V(c.team, r.pos().z);
                 if (ru > 50 && Math.abs(rv) < 10 && ru <= off + 0.3) {
                     double s2 = r.st().fin() * 0.5 + r.st().forca() * 0.25 + Math.min(openness(r), 7) * 4 + rnd.nextGaussian() * 4;
@@ -1166,7 +1260,7 @@ public final class Match {
                 return true;
             }
             if (tgt != null && rnd.nextDouble() < 0.35 + c.st().vis() * 0.004 + (u > 52 ? 0.2 : 0)) {
-                carrier = null; cnt("cruzamento");
+                carrier = null; cnt("cruzamento"); if (nar != null) nar.cross();
                 if (rnd.nextDouble() < 0.3) { Vec3 ld = lead(tgt, 10); kickGround(c, ld.x, ld.z, 1.0); }
                 else {
                     Vec3 gc = W(c.team, 64, 0);
@@ -1182,7 +1276,7 @@ public final class Match {
         if (linha >= 1 && c.st().pas() >= 62 && u < 54 && rnd.nextDouble() < 0.09 + (c.st().vis() - 60) * 0.002) {
             FPlayer best = null; double bs = -1e9; Vec3 bp = null;
             for (FPlayer r : teams[c.team]) {
-                if (r == c || r.isGK() || r.def.pos().linha < 3 && r.def.pos() != Pos.WG) continue;
+                if (r == c || r.isGK() || r.out || r.def.pos().linha < 3 && r.def.pos() != Pos.WG) continue;
                 double ru = U(c.team, r.pos().x);
                 if (ru < u + 10 || ru > off + 0.3) continue;
                 Vec3 P = W(c.team, Math.min(62, ru + 9), V(c.team, r.pos().z));
@@ -1191,7 +1285,7 @@ public final class Match {
                 if (lane > 1.5 && s2 > bs) { bs = s2; best = r; bp = P; }
             }
             if (best != null) {
-                carrier = null; cnt("enfiada");
+                carrier = null; cnt("enfiada"); if (nar != null) nar.through(best);
                 kickGround(c, bp.x, bp.z, 1.0); passTarget = best; passTtl = 80; markOffside(c);
                 return true;
             }
@@ -1200,14 +1294,14 @@ public final class Match {
         if (press >= 1 && c.st().pas() >= 66 && linha >= 1 && rnd.nextDouble() < 0.3) {
             FPlayer best = null; double bs = -1e9;
             for (FPlayer r : teams[c.team]) {
-                if (r == c || r.isGK()) continue;
+                if (r == c || r.isGK() || r.out) continue;
                 double rv = V(c.team, r.pos().z), ru = U(c.team, r.pos().x), d = hd(c.pos(), r.pos());
                 if (Math.abs(rv - v) < 24 || d > 58 || ru < u - 6 || ru > off + 0.3) continue;
                 double s2 = Math.min(openness(r), 9) * 3 + (ru - u) * 0.2;
                 if (s2 > bs && openness(r) > 6.5) { bs = s2; best = r; }
             }
             if (best != null) {
-                carrier = null; cnt("inversao");
+                carrier = null; cnt("inversao"); if (nar != null) nar.switchPlay();
                 Vec3 ld = lead(best, 12); double d = hd(c.pos(), best.pos());
                 kickLob(c, ld.x, ld.z, (int) clamp(18 + d * 0.5, 22, 34), 2.0, Math.signum(rnd.nextGaussian()) * 0.12);
                 passTarget = best; passTtl = 80; markOffside(c);
@@ -1225,6 +1319,7 @@ public final class Match {
     double offsideLine(int t) {
         double a = -1, b = -1;
         for (FPlayer o : teams[1 - t]) {
+            if (o.out) continue;
             double u = 64 - U(1 - t, o.pos().x);
             if (u > a) { b = a; a = u; } else if (u > b) b = u;
         }
@@ -1255,7 +1350,7 @@ public final class Match {
         boolean def = c.def.pos().linha <= 1, mid = c.def.pos().linha == 2;
         int press = pressure(c, 3.2);
         for (FPlayer r : teams[c.team]) {
-            if (r == c) continue;
+            if (r == c || r.out) continue;
             if (r.isGK() && (!allowGK || c.isGK())) continue;
             double d = hd(c.pos(), r.pos());
             if (d < dmin || d > dmax) continue;
@@ -1347,7 +1442,7 @@ public final class Match {
             double b1 = 1e9, b2 = 1e9;
             Vec3 tgt = opp ? carrier.pos() : interceptOf(null);
             for (FPlayer p : team) {
-                if (p.isGK()) continue;
+                if (p.isGK() || p.out) continue;
                 if (p.def.pos().linha == 1 && U(t, tgt.x) > 36 && p.def.pos() == Pos.CB) continue;
                 if (p.def.pos().linha == 1 && U(t, tgt.x) > 46) continue;
                 double tt = ttb(p, tgt);
@@ -1359,6 +1454,7 @@ public final class Match {
 
         for (FPlayer p : team) {
             Pos pos = p.def.pos();
+            if (p.out) { Vec3 bs = benchSpot(p); p.tx = bs.x; p.tz = bs.z; p.spd = 0.5; p.mode = FPlayer.Mode.HOLD; continue; }
             if (p.isGK()) { gkThink(p); continue; }
             if (p == spTaker && setp) continue;
             // posição base (formação dinâmica)
@@ -1493,7 +1589,7 @@ public final class Match {
         FPlayer best = null; double bs = 1e9;
         Vec3 anchor = W(p.team, p.def.u(), p.def.v());
         for (FPlayer o : teams[1 - p.team]) {
-            if (o.isGK() || o == carrier) continue;
+            if (o.isGK() || o == carrier || o.out) continue;
             double d = hd(anchor.x, anchor.z, o.pos().x, o.pos().z);
             double ou = U(p.team, o.pos().x);
             if (ou > U(p.team, anchor.x) + 18) continue;
@@ -1636,7 +1732,7 @@ public final class Match {
                 }
                 if (dG < 30 * Pitch.SL) {                              // barreira de 3 jogadores a 9 m
                     java.util.List<FPlayer> cand = new java.util.ArrayList<>();
-                    for (FPlayer q : teams[t]) if (!q.isGK()) cand.add(q);
+                    for (FPlayer q : teams[t]) if (!q.isGK() && !q.out) cand.add(q);
                     cand.sort(java.util.Comparator.comparingDouble(q -> hd(q.pos(), spSpot)));
                     int rank = cand.indexOf(p);
                     if (rank >= 0 && rank < 3) {
@@ -1715,7 +1811,8 @@ public final class Match {
         else if (sp2 < p.maxSpeed() * 0.5) p.energy = Math.min(1.0, p.energy + 0.00035);
         // direção do olhar
         double lx, lz;
-        if (sp2 > 0.05) { lx = p.vx; lz = p.vz; }
+        if (st == St.INTRO && stTicks < 255 && d < 0.6 && sp2 < 0.06) { lx = 0; lz = 1; }
+        else if (sp2 > 0.05) { lx = p.vx; lz = p.vz; }
         else { Vec3 b = bp(); lx = b.x - pos.x; lz = b.z - pos.z; }
         double ln = Math.hypot(lx, lz);
         if (ln > 1e-6) {
@@ -1777,6 +1874,7 @@ public final class Match {
         replayPos = 0; replaySpeed = speed; replayLen = replayFrames.size(); replayIdx = 0;
         st = St.REPLAY; stTicks = 0;
         if (cameras != null) cameras.forceAll(Cameras.Mode.AUTO);
+        if (nar != null) nar.replay();
         FutebolMod.LOG.info("REPLAY iniciado: {} quadros, {}x", replayLen, speed);
         return true;
     }

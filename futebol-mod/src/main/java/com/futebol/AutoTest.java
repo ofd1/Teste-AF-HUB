@@ -13,7 +13,35 @@ final class AutoTest {
     static { for (double[] r : mn) java.util.Arrays.fill(r, 99); }
     static int possA, possB, shots; static final int[] hist = new int[4];
 
+    /** Modo capturas: com um cliente conectado, monta o jogo e passa por todas as câmeras pedindo SHOT:nome. */
+    static void shotsInit() {
+        net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.JOIN.register((h, sender, srv) -> {
+            final net.minecraft.server.level.ServerPlayer pl = h.getPlayer();
+            final int[] t = {0};
+            pl.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+            final String[] plan = System.getenv("FUTEBOL_PLAN") != null ? System.getenv("FUTEBOL_PLAN").split(",") : new String[]{"tv", "alta", "gol", "rasteira", "spider", "rosto", "torcida", "tatica", "bola", "drone"};
+            ServerTickEvents.END_SERVER_TICK.register(s2 -> {
+                t[0]++;
+                CommandSourceStack src = pl.createCommandSourceStack();
+                if (t[0] == 60) srv.getCommands().performPrefixedCommand(src, "futebol ativar " + (System.getenv("FUTEBOL_CLUBS") != null ? System.getenv("FUTEBOL_CLUBS") : "barcelona realmadrid"));
+                if (t[0] == 200) FutebolMod.match.start();
+                int k = t[0] - 700;
+                if (k >= 0 && k % 160 == 0 && k / 160 < plan.length) {
+                    String id = plan[k / 160];
+                    if (id.equals("normal")) FutebolMod.match.cameras.stop(pl);
+                    else FutebolMod.match.cameras.set(pl, Cameras.Mode.of(id));
+                }
+                if (k >= 0 && k / 160 < plan.length) {
+                    int phase = k % 160;
+                    if (phase == 70 || phase == 130) pl.sendSystemMessage(net.minecraft.network.chat.Component.literal("SHOT:" + plan[k / 160] + "_" + (phase == 70 ? "a" : "b")));
+                }
+                if (k / 160 >= plan.length && k % 160 == 40) { FutebolMod.LOG.info("SHOTS FIM"); srv.halt(false); }
+            });
+        });
+    }
+
     static void init() {
+        if (System.getenv("FUTEBOL_SHOTS") != null) { shotsInit(); return; }
         String v = System.getenv("FUTEBOL_AUTOTEST");
         if (v == null) return;
         maxTicks = Integer.parseInt(v);
