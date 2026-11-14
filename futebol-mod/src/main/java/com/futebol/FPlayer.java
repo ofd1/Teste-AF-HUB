@@ -27,6 +27,12 @@ public final class FPlayer {
     public double aimZ, aimY;
     public int shotTicks, shotReact;
     public boolean jumped;
+    // dribles / fintas
+    public int skillTicks, skillSplit, skillType, skillCd;
+    public double skillSide, boost = 1.0;
+    public boolean skillResolved;
+    public double skillFx, skillFz;
+    public FPlayer skillTarget;
 
     public FPlayer(int team, Roster.Def def) { this.team = team; this.def = def; }
 

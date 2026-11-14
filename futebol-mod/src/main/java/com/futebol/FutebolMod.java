@@ -2,6 +2,7 @@ package com.futebol;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -33,6 +34,7 @@ public class FutebolMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        Clubs.load();
         AutoTest.init();
         CommandRegistrationCallback.EVENT.register((d, r, env) -> registerCommands(d));
 
@@ -98,7 +100,7 @@ public class FutebolMod implements ModInitializer {
         lixo.forEach(net.minecraft.world.entity.Entity::discard);
     }
 
-    static int ativar(CommandSourceStack src) {
+    static int ativar(CommandSourceStack src, Club home, Club away) {
         ServerLevel level = src.getLevel();
         if (match != null) { match.remove(); match = null; }
         purge(level);
@@ -108,7 +110,7 @@ public class FutebolMod implements ModInitializer {
         }
         Vec3 pos = src.getPosition();
         int bx = (int) Math.floor(pos.x), bz = (int) Math.floor(pos.z), gy = (int) Math.floor(pos.y) - 1;
-        match = Match.create(level, bx, gy, bz);
+        match = Match.create(level, bx, gy, bz, home, away);
         ServerPlayer pl = src.getPlayer();
         if (pl != null) {
             Pitch p = match.pitch;
@@ -121,8 +123,26 @@ public class FutebolMod implements ModInitializer {
 
     static void registerCommands(CommandDispatcher<CommandSourceStack> d) {
         var root = Commands.literal("futebol")
-            .executes(c -> { c.getSource().sendSuccess(() -> Component.literal("§e/futebol ativar §7| §e desativar §7| §e graveto §7| §e iniciar §7| §e elenco §7| §e saqueadores <n> §7| §e vindicadores <n> §7| §e tempo <segundos>"), false); return 1; })
-            .then(Commands.literal("ativar").executes(c -> ativar(c.getSource())))
+            .executes(c -> { c.getSource().sendSuccess(() -> Component.literal("§e/futebol ativar [casa] [fora] §7| trocar | times | elenco <clube> | jogador <clube> <n> | desativar | graveto | iniciar | tempo <s> | recarregar"), false); return 1; })
+            .then(Commands.literal("ativar").executes(c -> ativar(c.getSource(), Clubs.get("barcelona") != null ? Clubs.get("barcelona") : Clubs.get("saqueadores"), Clubs.get("realmadrid") != null ? Clubs.get("realmadrid") : Clubs.get("vindicadores")))
+                .then(Commands.argument("casa", StringArgumentType.word()).suggests(CLUBES).then(Commands.argument("fora", StringArgumentType.word()).suggests(CLUBES).executes(c -> {
+                    Club h = Clubs.get(StringArgumentType.getString(c, "casa")), a = Clubs.get(StringArgumentType.getString(c, "fora"));
+                    if (h == null || a == null || h == a) { c.getSource().sendFailure(Component.literal("Clube inválido. Use /futebol times.")); return 0; }
+                    return ativar(c.getSource(), h, a);
+                }))))
+            .then(Commands.literal("trocar").then(Commands.argument("casa", StringArgumentType.word()).suggests(CLUBES).then(Commands.argument("fora", StringArgumentType.word()).suggests(CLUBES).executes(c -> {
+                if (match == null) { c.getSource().sendFailure(Component.literal("Use /futebol ativar primeiro.")); return 0; }
+                Club h = Clubs.get(StringArgumentType.getString(c, "casa")), a = Clubs.get(StringArgumentType.getString(c, "fora"));
+                if (h == null || a == null || h == a) { c.getSource().sendFailure(Component.literal("Clube inválido. Use /futebol times.")); return 0; }
+                match.swapClubs(h, a);
+                return 1;
+            }))))
+            .then(Commands.literal("times").executes(c -> {
+                for (Club cl : Clubs.ALL.values())
+                    c.getSource().sendSuccess(() -> Component.literal("§f" + cl.id() + " §7— " + cl.nome() + " (" + cl.pais() + ", " + cl.formation().charAt(0) + "-" + cl.formation().substring(1).replaceAll("(.)", "$1-").replaceAll("-$", "") + ") §e★" + overallClube(cl)), false);
+                return 1;
+            }))
+            .then(Commands.literal("recarregar").executes(c -> { Clubs.load(); c.getSource().sendSuccess(() -> Component.literal("§a" + Clubs.ALL.size() + " clubes carregados."), false); return 1; }))
             .then(Commands.literal("desativar").executes(c -> {
                 if (match == null) { c.getSource().sendFailure(Component.literal("Nenhum campo ativo.")); return 0; }
                 match.remove(); match = null;
@@ -146,38 +166,37 @@ public class FutebolMod implements ModInitializer {
                 c.getSource().sendSuccess(() -> Component.literal("§aCada tempo agora dura " + s + "s."), true);
                 return 1;
             })))
-            .then(Commands.literal("elenco").executes(c -> {
-                for (int t = 0; t < 2; t++) {
-                    final int tt = t;
-                    c.getSource().sendSuccess(() -> Component.literal(Roster.COR_CHAT[tt] + "§l" + Roster.TIME_NOME[tt] + "§r §7(" + (tt == 0 ? "pillagers" : "vindicators") + ")"), false);
-                    for (Roster.Def df : Roster.time(t))
-                        c.getSource().sendSuccess(() -> Component.literal(" §f#" + df.num() + " " + df.nome() + " §7" + df.pos().sigla + " §e★" + df.st().overall(df.pos())), false);
-                }
+            .then(Commands.literal("elenco").then(Commands.argument("clube", StringArgumentType.word()).suggests(CLUBES).executes(c -> {
+                Club cl = Clubs.get(StringArgumentType.getString(c, "clube"));
+                if (cl == null) { c.getSource().sendFailure(Component.literal("Clube inválido. Use /futebol times.")); return 0; }
+                c.getSource().sendSuccess(() -> Component.literal("§l" + cl.nome() + " §7(" + cl.formation() + ")"), false);
+                for (Roster.Def df : cl.defs())
+                    c.getSource().sendSuccess(() -> Component.literal(" §f#" + df.num() + " " + df.nome() + " §7" + df.pos().sigla + " §e★" + df.st().overall(df.pos())), false);
                 return 1;
-            }));
-        for (int t = 0; t < 2; t++) {
-            final int tt = t;
-            root.then(Commands.literal(t == 0 ? "saqueadores" : "vindicadores").then(Commands.argument("numero", IntegerArgumentType.integer(1, 11)).executes(c -> {
+            })))
+            .then(Commands.literal("jogador").then(Commands.argument("clube", StringArgumentType.word()).suggests(CLUBES).then(Commands.argument("numero", IntegerArgumentType.integer(1, 99)).executes(c -> {
+                Club cl = Clubs.get(StringArgumentType.getString(c, "clube"));
                 int n = IntegerArgumentType.getInteger(c, "numero");
-                for (Roster.Def df : Roster.time(tt)) if (df.num() == n) {
-                    c.getSource().sendSuccess(() -> card(tt, df), false);
-                    return 1;
-                }
-                c.getSource().sendFailure(Component.literal("Esse time não tem camisa " + n + ". Use /futebol elenco."));
+                if (cl == null) { c.getSource().sendFailure(Component.literal("Clube inválido. Use /futebol times.")); return 0; }
+                for (Roster.Def df : cl.defs()) if (df.num() == n) { c.getSource().sendSuccess(() -> card(0, df, cl), false); return 1; }
+                c.getSource().sendFailure(Component.literal("Esse time não tem camisa " + n + " entre os titulares. Use /futebol elenco " + cl.id()));
                 return 0;
-            })));
-        }
+            }))));
         d.register(root);
     }
 
-    static void sendCard(ServerPlayer pl, FPlayer p) { pl.sendSystemMessage(card(p.team, p.def)); }
+    static final com.mojang.brigadier.suggestion.SuggestionProvider<CommandSourceStack> CLUBES = (ctx, b) -> net.minecraft.commands.SharedSuggestionProvider.suggest(Clubs.ALL.keySet(), b);
+
+    static int overallClube(Club c) { int s = 0; for (Roster.Def d : c.defs()) s += d.st().overall(d.pos()); return s / 11; }
+
+    static void sendCard(ServerPlayer pl, FPlayer p) { pl.sendSystemMessage(card(p.team, p.def, Roster.ATUAL[p.team])); }
 
     /** Ficha do jogador: melhor estatística em verde, pior em vermelho. */
-    static Component card(int team, Roster.Def df) {
+    static Component card(int team, Roster.Def df, Club club) {
         Stats s = df.st();
         int best = s.melhor(df.pos()), worst = s.pior(df.pos());
         StringBuilder sb = new StringBuilder();
-        sb.append(Roster.COR_CHAT[team]).append("§l#").append(df.num()).append(" ").append(df.nome())
+        sb.append(Roster.chat(club.chest())).append("§l#").append(df.num()).append(" ").append(df.nome())
           .append("§r §7").append(df.pos().nome).append(" §8| §e★ ").append(s.overall(df.pos())).append("\n");
         for (int i = 0; i < 10; i++) {
             if (i == 8 && df.pos() != Pos.GK) continue;

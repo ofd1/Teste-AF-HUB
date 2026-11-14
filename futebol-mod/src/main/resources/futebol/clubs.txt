@@ -1,0 +1,238 @@
+# VERSAO=2
+# ============================================================================================
+#  CLUBES DO MOD FUTEBOL  (edite à vontade: o arquivo copiado em config/futebol/clubs.txt
+#  tem prioridade sobre este; use /futebol recarregar para ler de novo)
+#
+#  AVISO: nomes e escalações são de memória (temporada 2025/26) e as notas são ESTIMATIVAS
+#  no estilo EA FC (não são dados oficiais). Elencos mudam: ajuste como quiser.
+#
+#  Linha de clube : CLUBE|id|Nome|Sigla|corCamisa|corShort|corCamisaReserva|formacao|Pais
+#  Linha de jogador (11, na ordem dos postos da formação):
+#       camisa|Nome|Pos|PAC|SHO|PAS|DRI|DEF|PHY
+#       Goleiro: camisa|Nome|GK|DIV|HAN|KIC|REF|SPE|POS
+#  Formações e ordem dos postos:
+#   433 : GK, LD, ZAG, ZAG, LE, VOL, MEI, MEI, PD, CA, PE
+#   4231: GK, LD, ZAG, ZAG, LE, VOL, VOL, PD, MEIA-ATA, PE, CA
+#   442 : GK, LD, ZAG, ZAG, LE, MD, VOL, MEI, ME, CA, SA
+# ============================================================================================
+
+CLUBE|barcelona|FC Barcelona|BAR|004D98|A50044|EDBB00|433|Espanha
+13|Joan García|GK|80|78|74|82|50|79
+23|Jules Koundé|RB|78|52|72|76|83|78
+5|Pau Cubarsí|CB|72|38|74|72|82|70
+4|Ronald Araújo|CB|74|40|58|62|85|85
+3|Alejandro Balde|LB|91|55|74|80|75|66
+21|Frenkie de Jong|CM|74|66|86|88|77|72
+8|Pedri|CM|73|70|88|89|70|62
+20|Dani Olmo|CAM|78|79|83|86|52|60
+19|Lamine Yamal|RW|84|82|83|92|40|56
+9|Robert Lewandowski|ST|72|90|80|82|43|78
+11|Raphinha|LW|81|83|80|87|52|67
+
+CLUBE|realmadrid|Real Madrid|RMA|F2F2F2|FFFFFF|1B2A6B|433|Espanha
+1|Thibaut Courtois|GK|87|85|80|88|48|87
+12|Trent Alexander-Arnold|RB|75|66|88|80|76|70
+3|Éder Militão|CB|84|38|62|72|85|84
+22|Antonio Rüdiger|CB|82|55|66|71|85|86
+18|Álvaro Carreras|LB|86|48|72|76|78|72
+14|Aurélien Tchouaméni|CDM|74|66|82|78|82|82
+15|Federico Valverde|CM|87|78|82|82|78|84
+5|Jude Bellingham|CM|79|83|84|88|78|81
+11|Rodrygo|RW|86|78|79|87|40|62
+10|Kylian Mbappé|ST|97|91|80|92|36|78
+7|Vinícius Jr.|LW|95|82|81|92|29|68
+
+CLUBE|cruzeiro|Cruzeiro|CRU|0033A0|FFFFFF|F2F2F2|4231|Brasil
+1|Cássio|GK|74|72|68|75|45|74
+2|William|RB|72|50|68|70|72|72
+15|Fabrício Bruno|CB|66|40|58|58|76|80
+4|João Marcelo|CB|68|35|55|58|74|76
+6|Kaiki Bruno|LB|80|50|66|72|68|66
+5|Lucas Romero|CDM|60|52|70|68|76|78
+8|Christian|CDM|66|55|72|70|70|70
+11|Wanderson|RW|82|68|66|76|36|62
+10|Matheus Pereira|CAM|72|74|82|82|44|60
+19|Kaio Jorge|LW|78|74|66|78|40|66
+9|Gabigol|ST|74|80|68|78|36|70
+
+CLUBE|atleticomg|Atlético Mineiro|CAM|1A1A1A|FFFFFF|F2F2F2|4231|Brasil
+22|Everson|GK|74|70|66|76|46|74
+2|Natanael|RB|74|48|64|68|70|70
+3|Lyanco|CB|66|38|56|58|75|78
+4|Júnior Alonso|CB|64|36|56|56|75|78
+6|Renan Lodi|LB|78|58|70|70|72|68
+5|Alan Franco|CDM|64|54|72|66|74|76
+8|Igor Gomes|CDM|66|56|74|74|64|62
+11|Rony|RW|82|74|66|78|32|68
+14|Gustavo Scarpa|CAM|60|74|82|80|50|58
+7|Hulk|LW|66|84|74|76|40|86
+9|Paulinho|ST|74|80|66|76|36|70
+
+CLUBE|psg|Paris Saint-Germain|PSG|004170|004170|F2F2F2|433|França
+30|Lucas Chevalier|GK|80|76|74|82|48|78
+2|Achraf Hakimi|RB|91|72|78|82|76|76
+5|Marquinhos|CB|76|50|78|78|87|76
+51|Willian Pacho|CB|76|38|66|70|83|80
+25|Nuno Mendes|LB|90|62|76|82|79|74
+17|Vitinha|CM|74|68|88|87|68|62
+87|Fabián Ruiz|CM|70|74|86|84|68|74
+8|João Neves|CM|72|58|84|80|78|68
+14|Désiré Doué|RW|86|78|78|88|48|62
+10|Ousmane Dembélé|ST|92|86|84|92|40|66
+7|Khvicha Kvaratskhelia|LW|86|82|78|90|44|68
+
+CLUBE|mancity|Manchester City|MCI|6CABDD|FFFFFF|7B1F2E|433|Inglaterra
+25|Gianluigi Donnarumma|GK|88|82|78|87|48|85
+27|Matheus Nunes|RB|78|66|78|80|76|78
+3|Rúben Dias|CB|66|40|68|66|89|88
+24|Joško Gvardiol|CB|76|58|74|78|85|82
+33|Nico O'Reilly|LB|74|66|78|78|74|74
+16|Rodri|CDM|62|80|86|84|87|86
+4|Tijjani Reijnders|CM|75|78|84|84|70|74
+47|Phil Foden|CM|80|84|88|90|60|62
+11|Jérémy Doku|RW|94|74|76|92|40|64
+9|Erling Haaland|ST|88|94|70|80|45|92
+10|Rayan Cherki|LW|82|76|84|90|34|58
+
+CLUBE|arsenal|Arsenal|ARS|EF0107|FFFFFF|1B2A6B|433|Inglaterra
+1|David Raya|GK|84|78|82|85|55|84
+4|Ben White|RB|72|56|76|76|82|76
+2|William Saliba|CB|77|46|74|76|88|83
+6|Gabriel Magalhães|CB|70|52|66|66|88|86
+12|Jurriën Timber|LB|80|52|74|79|82|74
+41|Declan Rice|CDM|76|72|84|82|85|85
+8|Martin Ødegaard|CM|74|78|90|88|66|66
+36|Martín Zubimendi|CM|68|62|82|80|80|74
+7|Bukayo Saka|RW|84|84|84|89|58|68
+14|Viktor Gyökeres|ST|82|87|72|82|44|86
+11|Gabriel Martinelli|LW|88|78|74|86|46|66
+
+CLUBE|liverpool|Liverpool|LIV|C8102E|C8102E|F2F2F2|433|Inglaterra
+1|Alisson Becker|GK|87|82|88|88|50|87
+30|Jeremie Frimpong|RB|92|74|76|84|66|68
+4|Virgil van Dijk|CB|76|60|72|74|90|88
+5|Ibrahima Konaté|CB|80|42|62|70|85|88
+26|Andy Robertson|LB|80|60|82|78|78|78
+38|Ryan Gravenberch|CM|76|66|82|85|78|82
+10|Alexis Mac Allister|CM|68|74|86|84|78|74
+8|Dominik Szoboszlai|CM|76|82|84|84|68|76
+11|Mohamed Salah|RW|90|89|84|90|45|76
+9|Alexander Isak|ST|88|86|76|88|40|78
+7|Florian Wirtz|LW|78|80|88|90|46|60
+
+CLUBE|chelsea|Chelsea|CHE|034694|034694|F2F2F2|433|Inglaterra
+1|Robert Sánchez|GK|80|72|74|82|48|78
+27|Malo Gusto|RB|82|60|72|78|78|72
+6|Levi Colwill|CB|72|38|68|70|82|78
+26|Trevoh Chalobah|CB|74|42|70|70|80|80
+3|Marc Cucurella|LB|76|50|72|76|82|78
+25|Moisés Caicedo|CDM|80|58|80|82|84|82
+8|Enzo Fernández|CM|74|74|88|86|76|74
+10|Cole Palmer|CAM|78|86|88|90|44|62
+7|Pedro Neto|RW|90|78|78|86|36|60
+20|João Pedro|ST|80|82|76|86|44|70
+41|Estêvão|LW|86|78|78|90|34|56
+
+CLUBE|manutd|Manchester United|MUN|DA291C|FFFFFF|1A1A1A|4231|Inglaterra
+31|Senne Lammens|GK|78|74|70|80|48|76
+2|Diogo Dalot|RB|78|60|72|78|78|74
+5|Harry Maguire|CB|56|50|70|66|82|86
+6|Lisandro Martínez|CB|68|42|74|74|84|78
+23|Luke Shaw|LB|74|60|82|78|78|78
+18|Casemiro|CDM|56|70|74|72|82|86
+37|Kobbie Mainoo|CDM|70|62|80|84|72|70
+16|Amad Diallo|RW|84|76|76|88|40|60
+8|Bruno Fernandes|CAM|70|84|90|84|66|70
+10|Matheus Cunha|LW|80|82|76|86|50|74
+30|Benjamin Šeško|ST|78|82|66|78|36|86
+
+CLUBE|tottenham|Tottenham Hotspur|TOT|F5F5F5|132257|FFD700|4231|Inglaterra
+1|Guglielmo Vicario|GK|82|74|70|83|50|80
+23|Pedro Porro|RB|80|68|80|80|76|74
+37|Micky van de Ven|CB|92|42|68|74|84|82
+17|Cristian Romero|CB|68|50|68|72|87|86
+24|Djed Spence|LB|86|56|72|80|74|72
+6|João Palhinha|CDM|60|60|72|68|84|88
+5|Pape Matar Sarr|CDM|76|62|74|78|72|76
+20|Mohammed Kudus|RW|82|80|74|86|50|78
+7|Xavi Simons|CAM|80|78|84|88|44|58
+11|Wilson Odobert|LW|90|70|66|84|34|60
+19|Dominic Solanke|ST|74|82|70|78|50|82
+
+CLUBE|newcastle|Newcastle United|NEW|2B2B2B|1A1A1A|F2F2F2|433|Inglaterra
+1|Nick Pope|GK|80|78|68|80|46|80
+21|Tino Livramento|RB|84|56|74|80|78|70
+5|Fabian Schär|CB|56|60|78|66|80|80
+4|Sven Botman|CB|64|40|60|62|83|86
+33|Dan Burn|LB|56|44|64|58|80|88
+39|Bruno Guimarães|CM|68|72|86|86|78|78
+7|Joelinton|CM|64|68|72|76|76|88
+8|Sandro Tonali|CM|68|68|84|80|80|78
+11|Harvey Barnes|RW|84|76|72|82|44|66
+27|Nick Woltemade|ST|72|82|72|78|42|84
+10|Anthony Gordon|LW|88|78|74|84|44|74
+
+CLUBE|astonvilla|Aston Villa|AVL|670E36|FFFFFF|7FB3E8|4231|Inglaterra
+23|Emiliano Martínez|GK|82|76|78|85|52|84
+2|Matty Cash|RB|74|66|74|76|78|76
+4|Ezri Konsa|CB|68|42|66|68|82|82
+14|Pau Torres|CB|58|46|74|68|82|78
+12|Lucas Digne|LB|68|60|80|74|76|70
+6|Boubacar Kamara|CDM|66|56|78|76|84|78
+7|John McGinn|CDM|68|72|80|80|70|78
+31|Leon Bailey|RW|86|76|70|84|40|66
+27|Morgan Rogers|CAM|80|76|78|86|54|78
+10|Emiliano Buendía|LW|74|72|82|82|44|60
+11|Ollie Watkins|ST|86|82|70|80|42|78
+
+CLUBE|bayern|Bayern de Munique|BAY|DC052D|DC052D|F2F2F2|4231|Alemanha
+1|Manuel Neuer|GK|85|82|88|85|48|87
+44|Josip Stanišić|RB|76|54|74|76|78|74
+4|Jonathan Tah|CB|68|42|68|68|85|86
+2|Dayot Upamecano|CB|80|40|66|72|84|86
+19|Alphonso Davies|LB|94|58|74|84|76|78
+6|Joshua Kimmich|CDM|72|72|90|84|82|74
+45|Aleksandar Pavlović|CDM|66|70|82|80|76|72
+17|Michael Olise|RW|84|82|84|91|42|64
+10|Jamal Musiala|CAM|82|80|84|92|50|60
+14|Luis Díaz|LW|90|82|76|88|44|72
+9|Harry Kane|ST|68|93|84|82|44|84
+
+CLUBE|dortmund|Borussia Dortmund|BVB|FDE100|1A1A1A|2B2B2B|4231|Alemanha
+1|Gregor Kobel|GK|84|78|74|86|50|82
+26|Julian Ryerson|RB|74|60|74|74|78|78
+4|Nico Schlotterbeck|CB|66|44|74|68|84|82
+15|Waldemar Anton|CB|66|40|66|66|83|82
+24|Daniel Svensson|LB|78|56|68|72|74|70
+23|Emre Can|CDM|60|70|78|74|78|84
+6|Felix Nmecha|CDM|70|68|76|78|72|78
+27|Karim Adeyemi|RW|95|74|68|84|36|66
+19|Julian Brandt|CAM|70|78|84|84|50|62
+7|Jobe Bellingham|LW|72|72|78|80|66|74
+9|Serhou Guirassy|ST|78|86|64|78|38|84
+
+CLUBE|flamengo|Flamengo|FLA|C52613|1A1A1A|F2F2F2|4231|Brasil
+1|Rossi|GK|78|76|70|80|46|78
+2|Varela|RB|74|54|68|74|74|72
+3|Léo Ortiz|CB|66|50|68|66|78|80
+4|Léo Pereira|CB|68|40|66|66|80|80
+6|Ayrton Lucas|LB|82|60|70|74|70|68
+5|Erick Pulgar|CDM|60|66|78|72|76|76
+21|Jorginho|CDM|52|58|88|78|74|60
+11|Luiz Araújo|RW|82|70|66|80|36|62
+10|Giorgian de Arrascaeta|CAM|70|80|88|86|44|56
+27|Bruno Henrique|LW|82|74|68|80|36|68
+9|Pedro|ST|68|82|64|74|38|82
+
+CLUBE|palmeiras|Palmeiras|PAL|006437|FFFFFF|F2F2F2|4231|Brasil
+21|Weverton|GK|78|76|72|80|46|80
+12|Khellven|RB|82|52|66|74|68|68
+15|Gustavo Gómez|CB|60|50|64|62|82|88
+22|Murilo|CB|70|38|58|62|78|78
+17|Piquerez|LB|76|54|72|72|72|70
+5|Aníbal Moreno|CDM|66|58|76|72|76|76
+8|Zé Rafael|CDM|62|62|74|72|70|72
+11|Felipe Anderson|RW|78|72|78|82|40|62
+23|Raphael Veiga|CAM|62|80|82|80|48|60
+20|Facundo Torres|LW|82|70|68|78|40|62
+9|Vitor Roque|ST|84|78|62|78|36|76

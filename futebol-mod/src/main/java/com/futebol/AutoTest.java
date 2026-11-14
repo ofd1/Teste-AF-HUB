@@ -19,7 +19,7 @@ final class AutoTest {
         maxTicks = Integer.parseInt(v);
         ServerLifecycleEvents.SERVER_STARTED.register(srv -> {
             CommandSourceStack src = srv.createCommandSourceStack();
-            srv.getCommands().performPrefixedCommand(src, "futebol ativar");
+            srv.getCommands().performPrefixedCommand(src, "futebol ativar" + (System.getenv("FUTEBOL_CLUBS") != null ? " " + System.getenv("FUTEBOL_CLUBS") : ""));
             srv.getCommands().performPrefixedCommand(src, "futebol tempo " + (System.getenv("FUTEBOL_HALF") != null ? System.getenv("FUTEBOL_HALF") : "" + (maxTicks / 40)));
             dump(FutebolMod.match);
             FutebolMod.match.start();

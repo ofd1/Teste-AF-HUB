@@ -53,6 +53,11 @@ public final class Match {
     Vec3 ballVelSet = Vec3.ZERO;
     final Vec3[] traj = new Vec3[50];
     boolean ballPinned;
+    double spin;                      // efeito: rotação (rad/tick) da direção horizontal da bola no ar
+    int skillMsgCd;
+    final int[] trans = new int[2];   // >0: transição ofensiva (contra-ataque)
+    final int[] counterPress = new int[2];
+    int lastCarrierTeam = -1;
     Vec3 pinPos;
 
     // reposição
@@ -72,7 +77,8 @@ public final class Match {
     //  Criação
     // =====================================================================================
 
-    public static Match create(ServerLevel level, int bx, int gy, int bz) {
+    public static Match create(ServerLevel level, int bx, int gy, int bz, Club home, Club away) {
+        Roster.apply(home, away);
         Pitch pitch = new Pitch(level, bx, gy, bz);
         pitch.build();
         Match m = new Match(level, pitch);
@@ -89,6 +95,11 @@ public final class Match {
     }
 
     void spawnAll() {
+        spawnPlayers();
+        spawnBall();
+    }
+
+    void spawnPlayers() {
         for (int t = 0; t < 2; t++) {
             List<Roster.Def> defs = Roster.time(t);
             teams[t] = new FPlayer[defs.size()];
@@ -99,6 +110,9 @@ public final class Match {
                 all.add(p);
             }
         }
+    }
+
+    void spawnBall() {
         ball = EntityTypes.SULFUR_CUBE.create(level, EntitySpawnReason.COMMAND);
         ball.removeFreeWill();
         ball.setItemSlot(EquipmentSlot.BODY, new ItemStack(Items.OAK_PLANKS));   // madeira dentro = bola quicante
@@ -145,8 +159,21 @@ public final class Match {
 
     static Component nameTag(FPlayer p) {
         int cor = p.isGK() ? Roster.COR_GOLEIRO[p.team] : Roster.COR_CAMISA[p.team];
-        Component num = Component.literal("#" + p.def.num() + " ").withStyle(Style.EMPTY.withColor(cor | 0x000000).withBold(true));
+        int lum = ((cor >> 16) & 255) * 3 + ((cor >> 8) & 255) * 6 + (cor & 255);
+        if (lum < 900) cor = 0xBBBBBB;                                   // camisa escura: número em cinza claro
+        Component num = Component.literal("#" + p.def.num() + " ").withStyle(Style.EMPTY.withColor(cor).withBold(true));
         return Component.empty().append(num).append(Component.literal(p.def.nome()).withStyle(ChatFormatting.WHITE));
+    }
+
+    /** Troca os clubes em campo mantendo o estádio (próxima partida de um campeonato, por exemplo). */
+    public void swapClubs(Club home, Club away) {
+        for (FPlayer p : all) if (p.e != null) p.e.discard();
+        all.clear();
+        Roster.apply(home, away);
+        score[0] = score[1] = 0; half = 1; clock = 0; attackDir[0] = 1; attackDir[1] = -1;
+        st = St.IDLE; stTicks = 0; carrier = null; spin = 0;
+        spawnPlayers();
+        resetForKickoff(0, true);
     }
 
     public void remove() {
@@ -230,8 +257,14 @@ public final class Match {
             if (p.stun > 0) p.stun--;
             if (p.headCd > 0) p.headCd--;
             if (p.shoutCd > 0) p.shoutCd--;
+            if (p.skillCd > 0) p.skillCd--;
+            if (p.skillTicks > 0) { p.skillTicks--; if (p.skillTicks == 0) p.boost = 1.0; }
         }
         if (passTtl > 0 && --passTtl == 0) passTarget = null;
+        if (skillMsgCd > 0) skillMsgCd--;
+        for (int t = 0; t < 2; t++) { if (trans[t] > 0) trans[t]--; if (counterPress[t] > 0) counterPress[t]--; }
+        int ct = carrier != null ? carrier.team : -1;
+        if (ct >= 0 && ct != lastCarrierTeam) { if (lastCarrierTeam >= 0 && st == St.PLAYING) { trans[ct] = 100; counterPress[lastCarrierTeam] = 70; trans[lastCarrierTeam] = 0; } lastCarrierTeam = ct; }
 
         switch (st) {
             case IDLE -> { holdAll(); }
@@ -280,6 +313,12 @@ public final class Match {
             double k = hp * DA / hn;
             nx *= k; nz *= k;
         }
+        if (!ball.onGround() && Math.abs(spin) > 1e-5 && hn > 0.1) {     // efeito (Magnus): curva a bola no ar
+            double c = Math.cos(spin), sn = Math.sin(spin);
+            double rx = nx * c - nz * sn, rz = nx * sn + nz * c;
+            nx = rx; nz = rz;
+            spin *= 0.996;
+        } else if (ball.onGround()) spin = 0;
         if (prev.y < -0.22 && v.y > 0) ny = -prev.y * 0.5;     // quique mais baixo
         if (ny > 0 && ny < 0.1 && ball.onGround()) ny = 0;
         ball.setDeltaMovement(nx, ny, nz);
@@ -311,6 +350,7 @@ public final class Match {
         gkShots();
         ballControl();
         if (st != St.PLAYING) return;
+        skills();
         carrierThink();
         for (int t = 0; t < 2; t++) aiTeam(t);
         // fim do tempo: só termina em bola parada/lance sem perigo
@@ -508,7 +548,11 @@ public final class Match {
                     if (s > bs) { bs = s; r = p; }
                 }
                 Vec3 target = r != null ? r.pos() : W(spTeam, 58, rnd.nextGaussian() * 3);
-                kickLob(k, target.x, target.z, 24 + rnd.nextInt(5), 2.4 - k.st().pas() * 0.012);
+                Vec3 gc = W(spTeam, 64, 0);
+                double cross = (target.x - b.x) * (gc.z - b.z) - (target.z - b.z) * (gc.x - b.x);
+                double curl = Math.signum(cross) * (0.22 + (k.st().pas() - 50) * 0.003);
+                kickLob(k, target.x, target.z, 24 + rnd.nextInt(5), 2.4 - k.st().pas() * 0.012, curl);
+                cnt("escanteio_curvo");
                 passTarget = r; passTtl = 60;
             }
             case GOAL_KICK -> {
@@ -518,7 +562,7 @@ public final class Match {
             }
             case FREE_KICK -> {
                 double dGoal = hd(b, W(spTeam, 64, 0));
-                if (dGoal < 24 + k.st().fin() * 0.05 && rnd.nextDouble() < 0.4 + k.st().fin() * 0.004) shoot(k, 1.0);
+                if (dGoal < 24 + k.st().fin() * 0.05 && rnd.nextDouble() < 0.4 + k.st().fin() * 0.004) freeKickShot(k);
                 else {
                     FPlayer r = bestPass(k, true, 5, 30, false);
                     if (r == null) r = nearestTeammate(k);
@@ -627,6 +671,7 @@ public final class Match {
             o.tackleCd = 22;
             double p = clamp(0.24 + (o.st().des() - c.st().dri()) * 0.0065 + (o.st().forca() - c.st().forca()) * 0.002 + 0.08
                     - (Math.hypot(c.vx, c.vz) > 0.25 ? 0.05 : 0), 0.06, 0.72);
+            if (c.skillTicks > 0) p *= 0.45;
             cnt("desarme_tentativa");
             if (rnd.nextDouble() < p) {
                 cnt("desarme_ok");
@@ -786,19 +831,23 @@ public final class Match {
     }
 
     /** Chute a gol: alvo (u,v) na linha do gol, com altura. err = multiplicador do erro, spd = potência 0..1. */
-    void shootAt(FPlayer k, double u, double v, double height, double power, double errMul) {
+    void shootAt(FPlayer k, double u, double v, double height, double power, double errMul) { shootAt(k, u, v, height, power, errMul, 0, 0); }
+
+    /** curl = rotação total (rad) da trajetória; minVy garante altura mínima (barreira). */
+    void shootAt(FPlayer k, double u, double v, double height, double power, double errMul, double curl, double minVy) {
         Vec3 tgt = W(k.team, u, v);
         Stats s = k.st();
         double d = hd(k.pos().x, k.pos().z, tgt.x, tgt.z);
         double speed = clamp(0.9 + s.fin() * 0.0045 + s.forca() * 0.0020, 0.95, 1.55) * power;
         double press = 1 + 0.18 * pressure(k, 3.0) + (Math.hypot(k.vx, k.vz) > 0.3 ? 0.12 : 0);
         double sd = (1.1 + (100 - s.fin()) * 0.075) * press * errMul;          // desvio angular em graus
-        double yaw = Math.atan2(tgt.z - bp().z, tgt.x - bp().x) + Math.toRadians(rnd.nextGaussian() * sd);
+        double yaw = Math.atan2(tgt.z - bp().z, tgt.x - bp().x) + Math.toRadians(rnd.nextGaussian() * sd) - curl / 2;
         double t = Math.max(3, d / (speed * 0.93));
-        double vy = (height + 0.04 * t * t) / t;
+        double vy = Math.max(minVy, (height + 0.04 * t * t) / t);
         vy += rnd.nextGaussian() * (0.012 + (100 - s.fin()) * 0.0014) * press;
         if (s.fin() < 55 && rnd.nextDouble() < 0.10) vy += 0.12;       // finalização ruim: bola nas nuvens
         kick(k, Math.cos(yaw) * speed, vy, Math.sin(yaw) * speed);
+        spin = curl / t;
     }
 
     void shoot(FPlayer k, double errMul) {
@@ -808,8 +857,51 @@ public final class Match {
         double aim = maxOff * (0.55 + k.st().fin() * 0.0045);
         double side = gv > 0.4 ? -1 : gv < -0.4 ? 1 : (rnd.nextBoolean() ? 1 : -1);
         double h = rnd.nextDouble() < (0.15 + k.st().fin() * 0.003) ? 1.9 + rnd.nextDouble() * 0.7 : 0.3 + rnd.nextDouble() * 1.0;
-        shootAt(k, 64, side * aim, h, 1.0, errMul);
-        say("§f" + Roster.COR_CHAT[k.team] + k.def.nome() + "§f chuta!"); cnt("chute_t" + k.team);
+        double d = hd(k.pos(), W(k.team, 64, 0));
+        double curl = 0;
+        boolean cavada = d < 19 && g.pos().x != 0 && U(1 - k.team, g.pos().x) > 4.2 && k.st().fin() >= 72 && k.st().dri() >= 70 && rnd.nextDouble() < 0.55;
+        if (cavada) {                                               // cavadinha por cima do goleiro que saiu
+            shootAt(k, 64, rnd.nextGaussian() * 0.8, 1.9, 0.62, 0.9);
+            Vec3 bv = ball.getDeltaMovement(); ball.setDeltaMovement(bv.x, Math.max(bv.y, 0.42), bv.z);
+            say("§d✨ Cavadinha de " + Roster.COR_CHAT[k.team] + k.def.nome() + "§d!"); cnt("cavadinha"); return;
+        }
+        if (d > 11 && k.st().fin() >= 65 && rnd.nextDouble() < (k.st().fin() - 55) * 0.011) {
+            curl = (0.16 + rnd.nextDouble() * 0.16) * (rnd.nextBoolean() ? 1 : -1);
+            h = Math.max(h, 1.2 + rnd.nextDouble() * 0.9);
+            cnt("chute_curva");
+        }
+        shootAt(k, 64, side * aim, h, 1.0, errMul, curl, 0);
+        say("§f" + Roster.COR_CHAT[k.team] + k.def.nome() + (curl != 0 ? "§f chuta com efeito!" : "§f chuta!")); cnt("chute_t" + k.team);
+    }
+
+
+    /** Falta direta: bola com efeito por cima da barreira. */
+    void freeKickShot(FPlayer k) {
+        FPlayer g = gk(1 - k.team);
+        double gv = V(k.team, g.pos().z);
+        double side = gv > 0.4 ? -1 : gv < -0.4 ? 1 : (rnd.nextBoolean() ? 1 : -1);
+        double speed = clamp(0.9 + k.st().fin() * 0.0045 + k.st().forca() * 0.002, 0.95, 1.55);
+        double tw = 6.6 / (speed * 0.96);
+        double minVy = (2.5 + 0.04 * tw * tw) / tw;
+        double curl = (0.20 + (k.st().fin() - 50) * 0.003) * (rnd.nextBoolean() ? 1 : -1);
+        double aim = (Pitch.GOAL_HALF - 0.5) * (0.5 + k.st().fin() * 0.0045);
+        shootAt(k, 64, side * aim, 1.2, 1.0, 1.0, curl, minVy);
+        say("§d🎯 Falta cobrada por " + Roster.COR_CHAT[k.team] + k.def.nome() + "§d, com efeito!");
+        cnt("falta_chute");
+    }
+
+    /** +1 se o adversário mais perto da linha de passe está à esquerda dela, -1 à direita, 0 se livre. */
+    double laneBlocker(FPlayer from, double tx, double tz) {
+        double ax = from.pos().x, az = from.pos().z, dx = tx - ax, dz = tz - az, len2 = dx * dx + dz * dz + 1e-6;
+        double best = 1.5, sign = 0;
+        for (FPlayer o : teams[1 - from.team]) {
+            double t = clamp(((o.pos().x - ax) * dx + (o.pos().z - az) * dz) / len2, 0, 1);
+            if (t < 0.12) continue;
+            double px = ax + dx * t, pz = az + dz * t;
+            double d = hd(o.pos().x, o.pos().z, px, pz);
+            if (d < best) { best = d; sign = Math.signum(dx * (o.pos().z - az) - dz * (o.pos().x - ax)); }
+        }
+        return sign;
     }
 
     /** Passe rasteiro (ou lançamento alto quando air=true), com leitura de lance. */
@@ -819,7 +911,11 @@ public final class Match {
         else {
             double d = hd(k.pos(), r.pos());
             Vec3 lead = lead(r, d / 0.9);
-            kickGround(k, lead.x, lead.z, 1.0);
+            double bl = d > 8 && k.st().pas() >= 72 && k.st().vis() >= 62 ? laneBlocker(k, lead.x, lead.z) : 0;
+            if (bl != 0 && rnd.nextDouble() < 0.75) {               // passe de trivela: contorna o marcador
+                kickLob(k, lead.x, lead.z, (int) clamp(8 + d * 0.8, 12, 30), 1.0, bl * (0.22 + rnd.nextDouble() * 0.12));
+                cnt("passe_curvo");
+            } else kickGround(k, lead.x, lead.z, 1.0);
         }
         passTarget = r; passTtl = 70;
     }
@@ -841,21 +937,24 @@ public final class Match {
     }
 
     /** Bola alta que (idealmente) cai perto de (tx,tz) após ~T ticks. */
-    void kickLob(FPlayer k, double tx, double tz, int T, double extraErr) {
+    void kickLob(FPlayer k, double tx, double tz, int T, double extraErr) { kickLob(k, tx, tz, T, extraErr, 0); }
+
+    void kickLob(FPlayer k, double tx, double tz, int T, double extraErr, double curl) {
         Vec3 b = bp();
         double d = hd(b.x, b.z, tx, tz);
         T = Math.max(10, T);
         double press = 1 + 0.15 * pressure(k, 2.8);
         double sd = (1.0 + (100 - k.st().pas()) * 0.07) * press + extraErr * 0.3;
-        double yaw = Math.atan2(tz - b.z, tx - b.x) + Math.toRadians(rnd.nextGaussian() * sd);
+        double yaw = Math.atan2(tz - b.z, tx - b.x) + Math.toRadians(rnd.nextGaussian() * sd) - curl / 2;
         double hs = d / (T * 0.96) * (1 + rnd.nextGaussian() * (0.03 + (100 - k.st().pas()) * 0.0007));
         double vy = 0.040 * T + 0.01;
         kick(k, Math.cos(yaw) * hs, vy, Math.sin(yaw) * hs);
+        spin = curl / T;
     }
 
     void kick(FPlayer k, double vx, double vy, double vz) {
         unpin();
-        carrier = null;
+        carrier = null; spin = 0;
         if (k.holding) k.holding = false;
         ball.setDeltaMovement(vx, vy, vz);
         ballVelSet = ball.getDeltaMovement();
@@ -870,6 +969,104 @@ public final class Match {
         FPlayer b = null; double bd = 1e9;
         for (FPlayer p : teams[k.team]) if (p != k && !p.isGK()) { double d = hd(p.pos(), k.pos()); if (d < bd) { bd = d; b = p; } }
         return b;
+    }
+
+
+    // =====================================================================================
+    //  Fintas e dribles
+    // =====================================================================================
+
+    static final String[] SKILL = {"finta de corpo", "pedalada", "elástico", "chapéu", "caneta"};
+
+    boolean trySkill(FPlayer c, int press) {
+        if (c.skillCd > 0 || c.isGK() || c.holding) return false;
+        FPlayer o = null; double bd = 3.2;
+        for (FPlayer q : teams[1 - c.team]) {
+            if (q.isGK()) continue;
+            double dx = q.pos().x - c.pos().x, dz = q.pos().z - c.pos().z, d = Math.hypot(dx, dz);
+            if (d < bd && (dx * c.fx + dz * c.fz) / Math.max(d, 0.01) > 0.3) { bd = d; o = q; }
+        }
+        if (o == null || bd < 1.1) return false;
+        int dri = c.st().dri();
+        double prob = 0.10 + dri * 0.0055 + (c.def.pos().linha == 3 ? 0.12 : c.def.pos().linha == 2 ? 0.04 : -0.10);
+        if (dGoalOf(c) < 11) prob *= 0.4;                      // na cara do gol: chuta
+        if (rnd.nextDouble() > prob) return false;
+        // escolhe o lance conforme a habilidade
+        double r = rnd.nextDouble() * 100;
+        int type = 0;
+        if (dri >= 80 && r < 22) type = 2;
+        else if (dri >= 70 && bd > 1.8 && r < 42) type = 3;
+        else if (dri >= 60 && bd < 2.3 && r < 58) type = 4;
+        else if (dri >= 65 && r < 80) type = 1;
+        c.skillCd = 60 + rnd.nextInt(40);
+        c.skillType = type; c.skillTarget = o; c.skillSide = rnd.nextBoolean() ? 1 : -1; c.skillResolved = false;
+        c.skillFx = c.fx; c.skillFz = c.fz;
+        double p = clamp(0.36 + (dri - o.st().des()) * 0.009 + (c.st().vel() - o.st().vel()) * 0.002 - 0.05 * Math.max(0, press - 1), 0.08, 0.88);
+        if (type == 3 || type == 4) { skillBall(c, o, type, p); return true; }
+        c.skillTicks = type == 1 ? 26 : type == 2 ? 18 : 22;
+        c.skillSplit = type == 1 ? 15 : type == 2 ? 9 : 12;
+        c.e.swing(net.minecraft.world.InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
+        c.e.setDeltaMovement(c.e.getDeltaMovement().x, 0.2, c.e.getDeltaMovement().z);    // saltinho
+        skillSuccess.put(c, p + (type == 2 ? 0.08 : type == 1 ? 0.04 : 0));
+        return true;
+    }
+
+    final java.util.Map<FPlayer, Double> skillSuccess = new java.util.HashMap<>();
+
+    double dGoalOf(FPlayer c) { return hd(c.pos(), W(c.team, 64, 0)); }
+
+    /** Chapéu e caneta: a bola passa pelo adversário e o jogador corre para pegar do outro lado. */
+    void skillBall(FPlayer c, FPlayer o, int type, double p) {
+        boolean ok = rnd.nextDouble() < p;
+        unpin();
+        carrier = null; c.touchCd = 4; passTarget = c; passTtl = 45;
+        double fx = c.fx, fz = c.fz;
+        double dist = hd(c.pos(), o.pos());
+        if (type == 3) {                                                  // chapéu
+            double hs = ok ? 0.45 : 0.25;
+            ball.setDeltaMovement(fx * hs, 0.43, fz * hs);
+        } else {                                                          // caneta: por baixo das pernas
+            double hs = ok ? 0.85 : 0.5;
+            ball.setDeltaMovement(fx * hs, 0.03, fz * hs);
+        }
+        ballVelSet = ball.getDeltaMovement(); spin = 0;
+        lastTouchTeam = c.team; lastToucher = c;
+        c.e.swing(net.minecraft.world.InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
+        if (ok) { o.stun = 14; o.vx *= 0.3; o.vz *= 0.3; announceSkill(c, o, type); cnt("drible_ok"); }
+        else { o.touchCd = 0; cnt("drible_falha"); }
+    }
+
+    void announceSkill(FPlayer c, FPlayer o, int type) {
+        if (skillMsgCd > 0) return;
+        skillMsgCd = 80;
+        say("§d✨ " + Roster.COR_CHAT[c.team] + c.def.nome() + "§d aplica " + (type == 3 || type == 4 ? "uma " : "um ") + SKILL[type] + " em " + Roster.COR_CHAT[o.team] + o.def.nome() + "§d!");
+        level.playSound(null, c.pos().x, c.pos().y, c.pos().z, SoundEvents.VILLAGER_CELEBRATE, SoundSource.NEUTRAL, 1f, 1.2f);
+    }
+
+    /** Resolve fintas em andamento (no meio do movimento) e faz os saltinhos da pedalada. */
+    void skills() {
+        for (FPlayer c : all) {
+            if (c.skillTicks <= 0) continue;
+            if (c.skillType == 1 && (c.skillTicks == c.skillSplit + 7 || c.skillTicks == c.skillSplit + 3)) {
+                c.e.setDeltaMovement(c.e.getDeltaMovement().x, 0.2, c.e.getDeltaMovement().z);
+                c.e.swing(net.minecraft.world.InteractionHand.MAIN_HAND, net.minecraft.world.item.component.SwingAnimation.DEFAULT, false);
+            }
+            if (!c.skillResolved && c.skillTicks <= c.skillSplit) {
+                c.skillResolved = true;
+                FPlayer o = c.skillTarget;
+                double p = skillSuccess.getOrDefault(c, 0.4);
+                if (carrier != c || o == null) { c.skillTicks = 0; c.boost = 1; continue; }
+                if (rnd.nextDouble() < p) {
+                    double sx = -c.skillFz * c.skillSide, sz = c.skillFx * c.skillSide;
+                    o.stun = 20; o.vx += sx * 0.22; o.vz += sz * 0.22;       // adversário vai pro lado errado
+                    cnt("drible_ok"); announceSkill(c, o, c.skillType);
+                } else {
+                    cnt("drible_falha");
+                    carrier = o; o.ctrlTicks = 0; release(c, 25); lastTouchTeam = o.team; lastToucher = o;
+                    c.skillTicks = 0; c.boost = 1;
+                }
+            }
+        }
     }
 
     // =====================================================================================
@@ -936,7 +1133,9 @@ public final class Match {
     void carrierThink() {
         FPlayer c = carrier;
         if (c == null || c.holding) return;
+        if (c.skillTicks > 0) return;
         if (c.ctrlTicks < 6 + (100 - c.st().vis()) / 14 || tickCount % 3 != 0) return;
+        if (trySkill(c, pressure(c, 3.0))) return;
         Vec3 goal = W(c.team, 64, 0);
         double dGoal = hd(c.pos(), goal);
         double u = U(c.team, c.pos().x);
@@ -1003,7 +1202,7 @@ public final class Match {
                 double tt = ttb(p, tgt);
                 if (tt < b1) { b2 = b1; chaser2 = chaser; b1 = tt; chaser = p; } else if (tt < b2) { b2 = tt; chaser2 = p; }
             }
-            if (chaser2 != null && (b2 > b1 + 22 || (!opp && chaser2.def.pos().linha < 2))) chaser2 = null;
+            if (chaser2 != null && counterPress[t] == 0 && (b2 > b1 + 22 || (!opp && chaser2.def.pos().linha < 2))) chaser2 = null;
         }
         double off = offsideLine(t);
 
@@ -1036,15 +1235,48 @@ public final class Match {
                 u = Math.min(bu - 1, 52); v = Math.signum(p.def.v()) * 17; spd = 0.8; mode = FPlayer.Mode.RUN;
             }
             if (pos == Pos.DM) u = Math.min(u, bu - 6);
+            // ---- inteligência específica por posição ----
+            boolean build = own && carrier != null && U(t, carrier.pos().x) < 28;
+            if (pos.linha == 1) {                                     // linha defensiva coordenada
+                double line = clamp(14 + (bu - 32) * 0.42 + (poss ? 5 : -1), 8, 42);
+                if (poss && bu > 40) line = Math.min(line, 34);           // defesa de espera: não sobe demais
+                if (counterPress[t] > 0 || trans[1 - t] > 0) line = Math.min(line, 24);   // recomposição
+                u = clamp(line + (p.def.u() - 12.5) * 0.6, lo, hi);
+                if (pos == Pos.FB && poss && Math.signum(bv) != Math.signum(p.def.v()) && Math.abs(bv) > 6) v *= 0.45;  // lateral oposto fecha por dentro
+            }
+            if (pos == Pos.DM && build) { u = Math.min(u, 18); v = clamp(bv * 0.4, -6, 6); spd = 0.7; }     // volante recua entre os zagueiros
+            if (pos == Pos.DM && poss && bu > 40) u = Math.min(u, 34);                                      // cobertura
+            if (pos == Pos.CM && poss && bu > 36) { u = Math.min(off - 2, 52); v = clamp(bv * 0.5 + p.def.v() * 0.6, -9, 9); spd = 0.85; mode = FPlayer.Mode.RUN; }  // chega de segunda linha
+            if (pos == Pos.WG) {
+                boolean sameFlank = Math.signum(bv) == Math.signum(p.def.v());
+                if (poss && !sameFlank && Math.abs(bv) > 8 && bu > 28) v = Math.signum(p.def.v()) * 7;     // infiltra por dentro
+                if (!poss && sameFlank && bu < 36 && carrier != null) { u = Math.max(14, bu - 2); spd = 0.8; mode = FPlayer.Mode.MARK; }   // recompõe ajudando o lateral
+            }
+            if ((pos.linha == 3 || pos == Pos.WG) && trans[t] > 0 && !setp) { u = Math.min(off - 0.7, u + 8); spd = 1.0; mode = FPlayer.Mode.RUN; }  // contra-ataque
+            if (pos == Pos.FB && trans[t] > 0 && !setp) { u = Math.min(bu + 2, 46); spd = 0.95; }
+            if (pos == Pos.ST && poss && bu > 24 && bu < 40 && carrier != null && carrier.def.pos().linha == 2 && (tickCount / 240 + p.def.num()) % 3 == 0) {
+                u = Math.min(off - 0.7, bu + 7); spd = 0.8;                                                // pivô: desce para tabelar
+            }
             Vec3 tgtW = W(t, u, v);
             double tx = tgtW.x, tz = tgtW.z;
 
             if (own && p == carrier) {
-                // conduzir
-                Vec3 goal = W(t, 64, 0);
-                Vec3 dir = carryDir(p, goal);
-                tx = p.pos().x + dir.x * 6; tz = p.pos().z + dir.z * 6;
-                spd = pos.linha >= 2 ? 0.92 : 0.7; mode = FPlayer.Mode.CARRY;
+                if (p.skillTicks > 0) {
+                    double sx = -p.skillFz * p.skillSide, sz = p.skillFx * p.skillSide;       // lateral da finta
+                    if (p.skillTicks > p.skillSplit) { tx = p.pos().x + sx * 2.8 + p.skillFx * 0.5; tz = p.pos().z + sz * 2.8 + p.skillFz * 0.5; }
+                    else {
+                        double a = -p.skillSide * 0.9, ca = Math.cos(a), sa = Math.sin(a);
+                        tx = p.pos().x + (p.skillFx * ca - p.skillFz * sa) * 6; tz = p.pos().z + (p.skillFx * sa + p.skillFz * ca) * 6;
+                        p.boost = 1.22;
+                    }
+                    spd = 1.0; mode = FPlayer.Mode.CARRY;
+                } else {
+                    // conduzir
+                    Vec3 goal = W(t, 64, 0);
+                    Vec3 dir = carryDir(p, goal);
+                    tx = p.pos().x + dir.x * 6; tz = p.pos().z + dir.z * 6;
+                    spd = pos.linha >= 2 ? 0.92 : 0.7; mode = FPlayer.Mode.CARRY;
+                }
             } else if (own) {
                 // apoio: os dois mais próximos oferecem linha de passe
                 double dc = hd(p.pos(), carrier.pos());
@@ -1183,9 +1415,26 @@ public final class Match {
                 Vec3 ip = interceptOf(g); g.tx = ip.x; g.tz = ip.z; g.spd = 1.0; return;
             }
         }
+        // 1x1: fecha o ângulo saindo ao encontro do atacante
+        if (st == St.PLAYING && carrier != null && carrier.team != t && bu < 22 && Math.abs(bv) < 12 && !g.holding) {
+            double dist1 = Math.hypot(bu, bv);
+            double rr = clamp(dist1 * (0.28 + g.st().vis() * 0.0015), 2.0, 7.0);
+            Vec3 w1 = W(t, Math.max(1.2, rr * bu / dist1), clamp(rr * bv / dist1, -3.2, 3.2));
+            g.tx = w1.x; g.tz = w1.z; g.spd = 0.95; return;
+        }
+        // bola nas costas da defesa: sai para tirar de antecipação
+        if (st == St.PLAYING && carrier == null && bu > 6 && bu < 30 && Math.abs(bv) < 14 && bh() < 1.6 && !(lastToucher != null && lastToucher.team == t && lastToucher != g)) {
+            Vec3 ip = interceptOf(g);
+            double mine = ttb(g, ip); boolean first = true;
+            for (FPlayer o : all) if (o != g && !o.isGK() && o.team != t && ttb(o, ip) < mine * 1.0) first = false;
+            if (first && U(t, ip.x) < 28) { g.tx = ip.x; g.tz = ip.z; g.spd = 1.0; return; }
+        }
+        // goleiro-líbero: sobe a linha quando o time está com a bola no campo de ataque
+        boolean possT = carrier != null ? carrier.team == t : lastTouchTeam == t;
+        double sweep = (st == St.PLAYING && possT && bu > 36) ? clamp((bu - 30) * 0.25, 0, 7) : 0;
         // posicionamento na bissetriz
         double dist = Math.max(1, Math.hypot(bu, bv));
-        double r = clamp(1.3 + dist * 0.05, 1.3, 3.6);
+        double r = clamp(1.3 + dist * 0.05, 1.3, 3.6) + sweep;
         if (st == St.SETPIECE && sp == SP.PENALTY) r = 0.8;
         double u = r * bu / dist, v = clamp(r * bv / dist, -2.9, 2.9);
         Vec3 w = W(t, Math.max(0.8, u), v);
@@ -1215,6 +1464,31 @@ public final class Match {
                     return W(t, 40, p.def.v() * 0.6);
                 }
             }
+            case FREE_KICK -> {
+                Vec3 gc = W(spTeam, 64, 0);
+                double dG = hd(spSpot, gc);
+                if (atk) {
+                    if (dG < 34 && (pos == Pos.ST || pos == Pos.SS || pos == Pos.CB || pos == Pos.DM)) {
+                        double[][] spots = {{58, 4}, {57, -4}, {54, 8}, {54, -8}};
+                        int slot = Math.floorMod(p.def.num(), 4);
+                        return W(t, spots[slot][0], spots[slot][1]);
+                    }
+                    return W(t, p.def.u(), p.def.v());
+                }
+                if (dG < 30) {                                         // barreira de 3 jogadores a 6,6 m
+                    java.util.List<FPlayer> cand = new java.util.ArrayList<>();
+                    for (FPlayer q : teams[t]) if (!q.isGK()) cand.add(q);
+                    cand.sort(java.util.Comparator.comparingDouble(q -> hd(q.pos(), spSpot)));
+                    int rank = cand.indexOf(p);
+                    if (rank >= 0 && rank < 3) {
+                        double dx = gc.x - spSpot.x, dz = gc.z - spSpot.z, dn = Math.max(0.1, Math.hypot(dx, dz));
+                        dx /= dn; dz /= dn;
+                        double cx = spSpot.x + dx * 6.6, cz = spSpot.z + dz * 6.6;
+                        return new Vec3(cx - dz * (rank - 1) * 0.95, 0, cz + dx * (rank - 1) * 0.95);
+                    }
+                }
+                return W(t, p.def.u(), p.def.v());
+            }
             case PENALTY -> {
                 // todos fora da grande área, atrás da marca
                 if (atk) return W(t, 64 - Pitch.BOX_D - 3, p.def.v());
@@ -1226,7 +1500,7 @@ public final class Match {
 
     /** Aplica regras: adversário a 6,5 m da bola, no kickoff fora do círculo e na própria metade. */
     Vec3 enforceSetPiece(FPlayer p, int t, double tx, double tz) {
-        double minD = sp == SP.KICKOFF ? 6.0 : sp == SP.THROW_IN ? 3.0 : (sp == SP.GOAL_KICK ? 8.0 : 7.0);
+        double minD = sp == SP.KICKOFF ? 6.0 : sp == SP.THROW_IN ? 3.0 : sp == SP.FREE_KICK ? 6.4 : (sp == SP.GOAL_KICK ? 8.0 : 7.0);
         if (t != spTeam) {
             double dx = tx - spSpot.x, dz = tz - spSpot.z, d = Math.hypot(dx, dz);
             if (d < minD) {
@@ -1259,6 +1533,7 @@ public final class Match {
         if (frac > 1.0) vmax *= frac;       // goleiro em mergulho
         else vmax *= clamp(frac, 0, 1);
         if (carrier == p && !p.isGK()) vmax *= 0.86 + p.st().dri() * 0.0013;
+        vmax *= p.boost;
         double want = Math.min(vmax, d * 0.22);
         if (d < 0.12) want = 0;
         double wx = d > 1e-6 ? dx / d * want : 0, wz = d > 1e-6 ? dz / d * want : 0;

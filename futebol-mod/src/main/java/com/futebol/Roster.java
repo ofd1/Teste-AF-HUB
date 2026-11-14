@@ -9,12 +9,47 @@ public final class Roster {
     /** u = metros a partir do próprio gol (0..64), v = lateral (+ direita do time). */
     public record Def(int num, String nome, Pos pos, double u, double v, Stats st) {}
 
+    // estado atual dos dois times em campo (casa = 0, fora = 1)
     public static final String[] TIME_NOME = {"Saqueadores", "Vindicadores"};
+    public static final String[] SIGLA = {"SAQ", "VIN"};
     public static final int[] COR_CAMISA = {0xC62828, 0x1565C0};
     public static final int[] COR_CALCAO = {0xFFFFFF, 0xFFFFFF};
     public static final int[] COR_GOLEIRO = {0x2E7D32, 0xF9A825};
     /** Códigos de cor de chat. */
     public static final String[] COR_CHAT = {"§c", "§9"};
+    public static final Club[] ATUAL = new Club[2];
+
+    private static final int[] CHAT_RGB = {0xFF5555, 0x5555FF, 0xFFFF55, 0x55FF55, 0xFFFFFF, 0x55FFFF, 0xFFAA00, 0xAA00AA, 0xAAAAAA, 0xFF55FF};
+    private static final String[] CHAT_COD = {"§c", "§9", "§e", "§a", "§f", "§b", "§6", "§5", "§7", "§d"};
+
+    static int dist(int a, int b) {
+        int dr = ((a >> 16) & 255) - ((b >> 16) & 255), dg = ((a >> 8) & 255) - ((b >> 8) & 255), db = (a & 255) - (b & 255);
+        return (int) Math.sqrt(dr * dr + dg * dg + db * db);
+    }
+
+    static String chat(int rgb) {
+        int best = 0, bd = Integer.MAX_VALUE;
+        for (int i = 0; i < CHAT_RGB.length; i++) { int d = dist(rgb, CHAT_RGB[i]); if (d < bd) { bd = d; best = i; } }
+        return CHAT_COD[best];
+    }
+
+    /** Define os times em campo; se as camisas forem parecidas o visitante usa a reserva. */
+    public static void apply(Club home, Club away) {
+        ATUAL[0] = home; ATUAL[1] = away;
+        int c0 = home.chest(), c1 = away.chest();
+        if (dist(c0, c1) < 110) c1 = away.alt();
+        if (dist(c0, c1) < 110) c1 = home.id().equals("saqueadores") ? 0x1565C0 : 0x222222;
+        int[] chest = {c0, c1};
+        Club[] cl = {home, away};
+        int[][] gkPal = {{0x2E7D32, 0xF9A825, 0xE91E63, 0x7E57C2}, {0xF9A825, 0x2E7D32, 0xE91E63, 0x7E57C2}};
+        for (int t = 0; t < 2; t++) {
+            TIME_NOME[t] = cl[t].nome(); SIGLA[t] = cl[t].sigla();
+            COR_CAMISA[t] = chest[t]; COR_CALCAO[t] = cl[t].shorts();
+            COR_CHAT[t] = chat(chest[t]);
+        }
+        for (int t = 0; t < 2; t++)
+            for (int c : gkPal[t]) if (dist(c, chest[0]) > 90 && dist(c, chest[1]) > 90 && (t == 0 || c != COR_GOLEIRO[0])) { COR_GOLEIRO[t] = c; break; }
+    }
 
     //                                       vel fin pas dri des for vis fol ref agr
     public static final List<Def> SAQUEADORES = List.of(
@@ -45,5 +80,5 @@ public final class Roster {
         new Def(10, "Mágico",      Pos.SS, 36,   -6,    new Stats(78, 80, 85, 92, 28, 52, 90, 70, 5, 26))
     );
 
-    public static List<Def> time(int t) { return t == 0 ? SAQUEADORES : VINDICADORES; }
+    public static List<Def> time(int t) { return ATUAL[t] != null ? ATUAL[t].defs() : (t == 0 ? SAQUEADORES : VINDICADORES); }
 }
