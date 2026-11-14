@@ -126,9 +126,12 @@ void main() {
   gl_FragColor = acc / u_n;
 }`;
 
-/** Campo de fluxo óptico A→B (texturas do GLEngine). quality: 'preview' (1/8) ou 'final' (1/4). */
+/** Campo de fluxo óptico A→B (texturas do GLEngine). quality: 'preview' (1/8) ou 'final' (~300 px de largura). */
 export function computeFlow(gl, texA, texB, quality = 'final') {
-  const base = quality === 'final' ? 2 : 8;
+  // exportação: o fluxo é calculado com ~300 px de largura (1/2 num vídeo de 540, 1/4 em 1080p, 1/8 em 4K). Medido com
+  // quadros reais (quadro do meio gerado × quadro verdadeiro): em 1080p, 1/4 ficou 3,4× mais rápido e até melhor
+  // (+0,7 dB) que 1/2 — a busca acha melhor os movimentos grandes. Prévia: 1/8 como antes.
+  const base = quality === 'final' ? Math.max(2, Math.min(8, 2 ** Math.round(Math.log2(Math.max(1, texA.w) / 300)))) : 8;
   const levels = [32, 16, 8, 4, 2].filter((s) => s >= base);
   const radii = { 32: 4, 16: 2, 8: 1, 4: 1, 2: 1 };
   const W = texA.w, H = texA.h;

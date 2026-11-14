@@ -248,7 +248,6 @@ function drawOverlay() {
 
 let lastFrame = performance.now();
 let shownKey = ''; // quadro que está na tela agora (tempo|qualidade|modo)
-let liveN = 0; // quadros renderizados ao vivo tocando (amostragem do custo real com a GPU)
 const playClock = { t0: 0, wall0: 0, last: 0 };
 function loop(now) {
   lastFrame = now;
@@ -299,7 +298,13 @@ function loop(now) {
       if (backBuf.width !== bw || backBuf.height !== bh) { backBuf.width = bw; backBuf.height = bh; }
       let ok = true;
       const tt = store.playing ? fi / fps : store.time;
-      try { renderFrame(backCtx, viewProject(), tt, quality * draftK, { hq: !store.playing && draftK === 1 }); } catch (e) { ok = false; console.warn('quadro falhou', e); }
+      try {
+        renderFrame(backCtx, viewProject(), tt, quality * draftK, { hq: !store.playing && draftK === 1 });
+        // espera a GPU terminar este quadro antes de pedir o próximo (como o AE/CapCut). Sem isso, com efeitos pesados
+        // os quadros se acumulavam na fila da placa e a tela congelava 10–25 s de uma vez (parecia que o app caiu);
+        // e o tempo medido passa a ser o real, então a resolução adaptativa reage na hora.
+        backCtx.getImageData(0, 0, 1, 1);
+      } catch (e) { ok = false; console.warn('quadro falhou', e); }
       const ms = performance.now() - r0;
       if (ok && glLosses === lost0 && !glLost()) {
         ctx.drawImage(backBuf, 0, 0, view.width, view.height);
@@ -309,10 +314,7 @@ function loop(now) {
           if (!store.playing) hqMs = hqMs ? hqMs * 0.5 + ms * 0.5 : ms;
           if (mediaReady(viewProject(), tt, store.playing)) frameCachePut(key, backBuf);
         }
-        // tocando: o custo real inclui a GPU, que termina depois (em paralelo). A cada 8 quadros espera a GPU acabar
-        // para medir de verdade (senão a resolução adaptativa achava que estava leve e a prévia engasgava)
-        if (store.playing && ++liveN % 8 === 0) { backCtx.getImageData(0, 0, 1, 1); adaptQuality(performance.now() - r0); }
-        else if (!store.playing) adaptQuality(ms);
+        adaptQuality(ms);
       } else setTimeout(() => { dirty = true; }, 60); // GPU caiu: mantém o último quadro bom e refaz este
     }
     drawOverlay();
@@ -334,7 +336,8 @@ setCacheListener(() => {
   lastCacheSt = st;
   cachePill.textContent = st == null ? '' : `Preparando quadros… ${st}%`;
   cachePill.classList.toggle('show', st != null);
-  dirty = true;
+  // só redesenha quando um cache ficou pronto (antes redesenhava o quadro pesado a cada 6 quadros preparados)
+  if (st == null) dirty = true;
 });
 let cacheTimer = 0;
 function scheduleCaches() {
