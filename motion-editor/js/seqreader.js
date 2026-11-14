@@ -77,6 +77,7 @@ export class SeqReader {
         const k0 = this.frames.keys().next().value, old = this.frames.get(k0);
         this.frames.delete(k0);
         if (this.size && old) { old.width = 0; old.height = 0; } // cache: devolve a memória na hora (iPhone)
+        else if (old) this.onEvict?.(old); // exportação: quem usa o quadro decide quando liberar
       }
     }
     this.waiters.splice(0).forEach((w2) => w2());
