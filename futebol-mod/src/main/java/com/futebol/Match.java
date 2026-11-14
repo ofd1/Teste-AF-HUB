@@ -677,7 +677,7 @@ public final class Match {
             case PENALTY -> {
                 FPlayer g = gk(1 - spTeam);
                 double side = rnd.nextBoolean() ? 1 : -1;
-                shootAt(k, 64, side * (Pitch.GOAL_HALF - 0.7) / Pitch.SW * (0.6 + k.st().fin() * 0.004), 0.7 + rnd.nextDouble() * 1.2, 1.0, 0.8);
+                shootAt(k, 64, side * (Pitch.GOAL_HALF - 1.1) / Pitch.SW * (0.4 + k.st().fin() * 0.0035), 0.5 + rnd.nextDouble() * 0.9, 1.0, 0.8);
                 // goleiro escolhe um canto (chuta; os melhores adivinham mais)
                 boolean acerta = rnd.nextDouble() < 0.40 + (g.st().ref() - 50) * 0.003;
                 double gz = (acerta ? side : -side) * 2.3;
@@ -968,12 +968,12 @@ public final class Match {
         double d = hd(k.pos().x, k.pos().z, tgt.x, tgt.z);
         double speed = clamp(0.9 + s.fin() * 0.0045 + s.forca() * 0.0020, 0.95, 1.55) * power;
         double press = 1 + 0.18 * pressure(k, 3.0) + (Math.hypot(k.vx, k.vz) > 0.3 ? 0.12 : 0);
-        double sd = (1.1 + (100 - s.fin()) * 0.075) * press * errMul;          // desvio angular em graus
+        double sd = (0.7 + (100 - s.fin()) * 0.045) * press * errMul;          // desvio angular em graus
         double yaw = Math.atan2(tgt.z - bp().z, tgt.x - bp().x) + Math.toRadians(rnd.nextGaussian() * sd) - curl / 2;
         double t = Math.max(3, d / (speed * 0.93));
         double vy = Math.max(minVy, (height + 0.04 * t * t) / t);
         vy += rnd.nextGaussian() * (0.012 + (100 - s.fin()) * 0.0014) * press;
-        if (s.fin() < 55 && rnd.nextDouble() < 0.10) vy += 0.12;       // finalização ruim: bola nas nuvens
+        if (s.fin() < 55 && rnd.nextDouble() < 0.05) vy += 0.08;       // finalização ruim: bola nas nuvens
         kick(k, Math.cos(yaw) * speed, vy, Math.sin(yaw) * speed);
         spin = curl / t;
     }
@@ -981,10 +981,10 @@ public final class Match {
     void shoot(FPlayer k, double errMul) {
         FPlayer g = gk(1 - k.team);
         double gv = V(k.team, g.pos().z);
-        double maxOff = (Pitch.GOAL_HALF - 0.45) / Pitch.SW;
-        double aim = maxOff * (0.55 + k.st().fin() * 0.0045);
+        double maxOff = (Pitch.GOAL_HALF - 1.1) / Pitch.SW;
+        double aim = maxOff * (0.30 + k.st().fin() * 0.0035);
         double side = gv > 0.4 ? -1 : gv < -0.4 ? 1 : (rnd.nextBoolean() ? 1 : -1);
-        double h = rnd.nextDouble() < (0.15 + k.st().fin() * 0.003) ? 1.9 + rnd.nextDouble() * 0.7 : 0.3 + rnd.nextDouble() * 1.0;
+        double h = rnd.nextDouble() < (0.15 + k.st().fin() * 0.003) ? 1.5 + rnd.nextDouble() * 0.5 : 0.3 + rnd.nextDouble() * 0.9;
         double d = hd(k.pos(), W(k.team, 64, 0));
         double curl = 0;
         boolean cavada = d < 19 && g.pos().x != 0 && U(1 - k.team, g.pos().x) > 4.2 && k.st().fin() >= 72 && k.st().dri() >= 70 && rnd.nextDouble() < 0.55;
@@ -994,8 +994,8 @@ public final class Match {
             sayV("§d✨ Cavadinha de " + Roster.COR_CHAT[k.team] + k.def.nome() + "§d!"); cnt("cavadinha"); return;
         }
         if (d > 11 && k.st().fin() >= 65 && rnd.nextDouble() < (k.st().fin() - 55) * 0.011) {
-            curl = (0.16 + rnd.nextDouble() * 0.16) * (rnd.nextBoolean() ? 1 : -1);
-            h = Math.max(h, 1.2 + rnd.nextDouble() * 0.9);
+            curl = (0.10 + rnd.nextDouble() * 0.10) * (rnd.nextBoolean() ? 1 : -1);
+            h = Math.max(h, 1.0 + rnd.nextDouble() * 0.6);
             cnt("chute_curva");
         }
         shootAt(k, 64, side * aim, h, 1.0, errMul, curl, 0);
@@ -1012,7 +1012,7 @@ public final class Match {
         double tw = 7.9 / (speed * 0.96);
         double minVy = (2.5 + 0.04 * tw * tw) / tw;
         double curl = (0.20 + (k.st().fin() - 50) * 0.003) * (rnd.nextBoolean() ? 1 : -1);
-        double aim = (Pitch.GOAL_HALF - 0.5) / Pitch.SW * (0.5 + k.st().fin() * 0.0045);
+        double aim = (Pitch.GOAL_HALF - 1.1) / Pitch.SW * (0.35 + k.st().fin() * 0.0035);
         shootAt(k, 64, side * aim, 1.2, 1.0, 1.0, curl, minVy);
         sayV("§d🎯 Falta cobrada por " + Roster.COR_CHAT[k.team] + k.def.nome() + "§d, com efeito!");
         cnt("falta_chute");
