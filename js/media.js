@@ -52,21 +52,53 @@ function releaseVideo(v) {
   v.remove();
 }
 
+// Arquivo original por trás de cada blob: URL. O leitor sequencial precisa do Blob; antes ele fazia fetch(src).blob(),
+// que cria uma CÓPIA do arquivo inteiro na memória a cada cache/exportação (vídeo de 500 MB = +500 MB toda vez que o
+// cache andava com o cursor) — no .exe isso enchia a memória e o editor caía ao "procurar quadros"/renderizar.
+// O navegador já mantém o Blob vivo enquanto a URL existe, então guardar a referência não gasta nada a mais.
+const blobOf = new Map();
+if (typeof URL !== 'undefined' && URL.createObjectURL && !URL.__mfPatched) {
+  const create = URL.createObjectURL.bind(URL), revoke = URL.revokeObjectURL.bind(URL);
+  URL.createObjectURL = (o) => { const u = create(o); if (o instanceof Blob) blobOf.set(u, o); return u; };
+  URL.revokeObjectURL = (u) => { blobOf.delete(u); revoke(u); };
+  URL.__mfPatched = true;
+}
+const fetched = new Map(); // src → Promise<Blob> (URLs que não vieram de createObjectURL: baixa uma vez só)
+export function srcBlob(src) {
+  const b = blobOf.get(src);
+  if (b) return Promise.resolve(b);
+  if (!fetched.has(src)) {
+    const pr = fetch(src).then((r) => r.blob());
+    pr.catch(() => fetched.delete(src));
+    fetched.set(src, pr);
+    while (fetched.size > 4) fetched.delete(fetched.keys().next().value);
+  }
+  return fetched.get(src);
+}
+
 // durante a exportação o cache de quadros pausa (o iPhone tem poucos decodificadores de vídeo)
 let exportBusy = false;
 // leitores sequenciais da exportação, um por arquivo (fechados quando a exportação termina)
 const readers = new Map();
 function readerFor(src) {
   if (!src || typeof VideoDecoder === 'undefined') return Promise.resolve(null);
-  if (!readers.has(src)) readers.set(src, (async () => { try { const blob = await (await fetch(src)).blob(); const { SeqReader } = await import('./seqreader.js'); return await SeqReader.open(blob); } catch { return null; } })());
+  if (!readers.has(src)) readers.set(src, (async () => { try { const blob = await srcBlob(src); const { SeqReader } = await import('./seqreader.js'); const r = await SeqReader.open(blob); if (r) r.onEvict = freeReaderFrame; return r; } catch { return null; } })());
   return readers.get(src);
 }
+// Quadro decodificado que saiu da lista do leitor (exportação). Cada quadro é uma tela do tamanho do vídeo; antes elas
+// ficavam esperando o coletor de lixo — no .exe (heap grande, coletor preguiçoso) centenas de telas de 8–33 MB se
+// acumulavam e a memória de vídeo estourava no meio da renderização. Agora é liberada assim que ninguém usa.
+const zero = (c) => { c.width = 0; c.height = 0; };
+function inUse(c) { for (const e of videos.values()) { if (e.last === c) return true; if (e.snaps) for (const x of e.snaps.values()) if (x === c) return true; } return false; }
+function freeReaderFrame(c) { if (inUse(c)) c._dead = true; else zero(c); }
+function dropSnap(e, old) { if ((!old._rd || old._dead) && old !== e.last) zero(old); }
+
 export function setExporting(b) {
   exportBusy = b;
   if (!b) {
     for (const r of readers.values()) r.then((x) => x?.close()).catch(() => {});
     readers.clear();
-    for (const e of videos.values()) { if (e.snaps) for (const [k, c] of [...e.snaps]) if (c._rd) e.snaps.delete(k); if (e.last?._rd) e.last = null; }
+    for (const e of videos.values()) { if (e.snaps) for (const [k, c] of [...e.snaps]) if (c._rd) { e.snaps.delete(k); zero(c); } if (e.last?._rd) { zero(e.last); e.last = null; } }
   }
   // exportação começando: cancela caches ainda sendo montados (cada um prende um decodificador de vídeo; no iPhone
   // isso podia travar a busca de quadros da exportação). Eles são refeitos depois.
@@ -235,18 +267,21 @@ export function prepare(project, t, { exact = false, playing = false } = {}) {
           if (rd) {
             const c = await rd.frameAt(st).catch(() => null);
             if (c) {
-              if (e.snaps.size >= 4) { const [k0, old] = e.snaps.entries().next().value; e.snaps.delete(k0); if (!old._rd) { old.width = 0; old.height = 0; } }
+              if (e.snaps.size >= 4) { const [k0, old] = e.snaps.entries().next().value; e.snaps.delete(k0); dropSnap(e, old); }
               c._rd = true; e.snaps.set(key, c); continue;
             }
           }
           await seekExact(e.a, st, l.props.sourceFps || project.fps || 30);
           if (e.a.readyState < 2) continue;
           let c = null;
-          if (e.snaps.size >= 4) { const [k0, old] = e.snaps.entries().next().value; e.snaps.delete(k0); c = old._rd ? null : old; }
+          if (e.snaps.size >= 4) { const [k0, old] = e.snaps.entries().next().value; e.snaps.delete(k0); if (old._rd) dropSnap(e, old); else c = old; }
           e.snaps.set(key, snapshot(e.a, c));
         }
         const ka = e.snaps.get(Math.round(fr.a * 1000));
-        if (ka) e.last = ka;
+        if (ka && ka !== e.last) {
+          const prev = e.last; e.last = ka;
+          if (prev?._dead && ![...e.snaps.values()].includes(prev)) zero(prev);
+        }
       })());
     } else if (!playing) {
       if (!e.a.paused) e.a.pause();
@@ -493,26 +528,31 @@ async function buildCache(project, layer, { key: baseKey = cacheKey(layer) + '|f
   let rd = null, misses = 0;
   if (typeof VideoDecoder !== 'undefined') {
     try {
-      const blob = await (await fetch(layer.props.src)).blob();
+      const blob = await srcBlob(layer.props.src);
       const { SeqReader } = await import('./seqreader.js');
       rd = await SeqReader.open(blob, { size: [w, h] });
     } catch { rd = null; }
   }
   const done = () => { releaseVideo(v); rd?.close(); };
+  // Sem WebCodecs para este vídeo (ex.: HEVC num decodificador que não aceita): captura TOCANDO o vídeo (quase tempo
+  // real) em vez de buscar quadro por quadro. Os quadros que o player pular são buscados depois, um a um.
+  const pre = !rd && 'requestVideoFrameCallback' in v ? await captureByPlayback(v, lo, hi, entry, n, w, h) : null;
   for (let i = 0; i < n; i++) {
     while (exportBusy && !entry.cancelled) await new Promise((r) => setTimeout(r, 250));
     if (entry.cancelled) { done(); freeCache(entry); return; }
     const tt = lo + (i + 0.5) / entry.fps; // meio do quadro: sem quadros repetidos/voltando no cache
-    let src = null;
-    if (rd) {
+    let src = null, c = pre?.[i] || null;
+    if (!c && rd) {
       src = await rd.frameAt(tt).catch(() => null);
       if (!src && ++misses >= 3) { rd.close(); rd = null; } // decodificador falhou: segue pela busca
     }
-    if (!src) { await seekExact(v, tt, entry.fps); src = v; }
-    if (entry.cancelled) { done(); freeCache(entry); return; }
-    const c = document.createElement('canvas');
-    c.width = w; c.height = h;
-    c.getContext('2d').drawImage(src, 0, 0, w, h);
+    if (!c) {
+      if (!src) { await seekExact(v, tt, entry.fps); src = v; }
+      if (entry.cancelled) { done(); freeCache(entry); return; }
+      c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(src, 0, 0, w, h);
+    }
     // assinatura pequena do quadro: detecta quadros repetidos (vídeos baixados do TikTok/IG costumam ter)
     const sig = frameSignature(c);
     entry.dup.push(i > 0 && entry.sigs.length && sigDiff(sig, entry.sigs[entry.sigs.length - 1]) < dupThr);
@@ -528,6 +568,53 @@ async function buildCache(project, layer, { key: baseKey = cacheKey(layer) + '|f
   if (swap) { const old = caches.get(layer.id); if (old && old !== entry) { old.cancelled = true; freeCache(old); } caches.set(layer.id, entry); pendingCaches.delete(layer.id); }
   cacheListener();
   onChange();
+}
+
+/** Toca o vídeo mudo do início do trecho até o fim e guarda cada quadro mostrado no(s) espaço(s) do cache cujo instante
+ *  (meio do quadro) ele cobre. Devolve um array com n posições (null = quadro pulado pelo player → busca depois). */
+async function captureByPlayback(v, lo, hi, entry, n, w, h) {
+  const slots = new Array(n).fill(null);
+  const fps = entry.fps, mid = (i) => lo + (i + 0.5) / fps;
+  try {
+    v.muted = true; v.playbackRate = 1;
+    await seek(v, Math.max(0, lo));
+    let prev = null, prevT = -1, next = 0, step = 1 / 30;
+    await new Promise((resolve) => {
+      let stall = 0, finished = false;
+      const finish = () => { if (finished) return; finished = true; clearTimeout(stall); try { v.pause(); } catch { /* ok */ } resolve(); };
+      const arm = () => { clearTimeout(stall); stall = setTimeout(finish, 3000); };
+      const put = (upTo) => { // espaços cujo meio está antes de upTo recebem o quadro anterior
+        while (next < n && mid(next) < upTo) { if (prev && mid(next) >= prevT) { slots[next] = prev; prev._used = true; } next++; }
+      };
+      const onFrame = (_now, md) => {
+        if (finished) return;
+        if (entry.cancelled || exportBusy) { finish(); return; }
+        const t = md.mediaTime;
+        if (prevT >= 0 && t > prevT) {
+          const d = t - prevT;
+          if (d < step * 1.2) step = step * 0.7 + d * 0.3; // intervalo típico entre quadros do vídeo
+          if (d > step * 1.6) { put(prevT + step); while (next < n && mid(next) < t) next++; } // o player pulou quadros: ficam vazios
+          else put(t);
+        } else put(t);
+        if (prev && !prev._used) { prev.width = 0; prev.height = 0; } // quadro que não caiu em nenhum espaço: libera
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(v, 0, 0, w, h);
+        prev = c; prevT = t;
+        entry.progress = Math.min(0.99, next / n);
+        if (next % 6 === 0) cacheListener();
+        if (t >= hi || next >= n || v.ended) { put(Infinity); finish(); return; }
+        arm(); v.requestVideoFrameCallback(onFrame);
+      };
+      v.addEventListener('ended', () => { put(prevT + step * 1.5); finish(); }, { once: true });
+      v.requestVideoFrameCallback(onFrame);
+      arm();
+      v.play().catch(() => finish());
+    });
+    // último quadro: só cobre o que estiver até ~1 quadro depois dele
+    for (let i = 0; i < n; i++) if (!slots[i] && prev && mid(i) >= prevT && mid(i) < prevT + step * 1.5) { slots[i] = prev; prev._used = true; }
+    if (prev && !prev._used) { prev.width = 0; prev.height = 0; }
+  } catch { /* segue pela busca */ }
+  return slots;
 }
 
 export function videoDuration(layer) {
