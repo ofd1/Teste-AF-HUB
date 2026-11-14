@@ -16,7 +16,7 @@ public final class Pitch {
     public static final int BOX_D = 12, BOX_HALF = 12;      // grande área
     public static final int SMALL_D = 5, SMALL_HALF = 6;    // pequena área
     public static final int PEN_SPOT = 8;
-    private static final int MX = HALF_L + 8, MZ = HALF_W + 6, DY_DOWN = 3, DY_UP = 15;
+    private static final int MX = Stadium.REACH_X + 1, MZ = Stadium.REACH_Z + 1, DY_DOWN = 3, DY_UP = Stadium.ROOF + 4;
 
     public final ServerLevel level;
     public final int bx, bz, gy;
@@ -54,13 +54,31 @@ public final class Pitch {
         for (int dy = -DY_DOWN; dy <= DY_UP; dy++)
             for (int dz = -MZ; dz <= MZ; dz++)
                 for (int dx = -MX; dx <= MX; dx++)
-                    level.setBlock(p.set(bx + dx, gy + dy, bz + dz), saved[idx(dx, dy, dz)], 2);
+                    { p.set(bx + dx, gy + dy, bz + dz); if (level.getBlockState(p) != saved[idx(dx, dy, dz)]) level.setBlock(p, saved[idx(dx, dy, dz)], 2); }
         saved = null;
     }
 
+    private final BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
+
     private BlockState set(int dx, int dy, int dz, BlockState s) {
-        level.setBlock(new BlockPos(bx + dx, gy + dy, bz + dz), s, 2);
+        mp.set(bx + dx, gy + dy, bz + dz);
+        if (level.getBlockState(mp) != s) level.setBlock(mp, s, 2);
         return s;
+    }
+
+    /** Usado pelo Stadium. */
+    void put(int dx, int dy, int dz, BlockState s) { set(dx, dy, dz, s); }
+
+    public Stadium stadium;
+
+    /** Recolore as arquibancadas e placas para os clubes atuais. */
+    public void recolor() { stadium.build(Roster.ATUAL[0], Roster.ATUAL[1]); recolorBoards(); }
+
+    private void recolorBoards() {
+        DyeColor[] cores = {Stadium.nearest(Roster.COR_CAMISA[0]), DyeColor.WHITE, Stadium.nearest(Roster.COR_CAMISA[1]), DyeColor.WHITE};
+        int bxm = HALF_L + 6, bzm = HALF_W + 4;
+        for (int dx = -bxm; dx <= bxm; dx++) for (int s = -1; s <= 1; s += 2) set(dx, 1, s * bzm, conc(cores[Math.floorMod(dx / 3, 4)]));
+        for (int dz = -bzm; dz <= bzm; dz++) for (int s = -1; s <= 1; s += 2) set(s * bxm, 1, dz, conc(cores[Math.floorMod(dz / 3, 4)]));
     }
 
     private static BlockState conc(DyeColor c) { return Blocks.CONCRETE.pick(c).defaultBlockState(); }
@@ -90,7 +108,7 @@ public final class Pitch {
         gol(+1); gol(-1);
 
         // 4) placas de publicidade em volta
-        DyeColor[] cores = {DyeColor.RED, DyeColor.WHITE, DyeColor.BLUE, DyeColor.WHITE};
+        DyeColor[] cores = {Stadium.nearest(Roster.COR_CAMISA[0]), DyeColor.WHITE, Stadium.nearest(Roster.COR_CAMISA[1]), DyeColor.WHITE};
         int bxm = HALF_L + 6, bzm = HALF_W + 4;
         for (int dx = -bxm; dx <= bxm; dx++) for (int s = -1; s <= 1; s += 2)
             set(dx, 1, s * bzm, conc(cores[Math.floorMod(dx / 3, 4)]));
@@ -100,13 +118,8 @@ public final class Pitch {
         // 5) refletores invisíveis (blocos de luz) para o jogo ficar iluminado à noite
         BlockState luz = Blocks.LIGHT.defaultBlockState();
         for (int dx = -HALF_L; dx <= HALF_L; dx += 8) for (int dz = -HALF_W; dz <= HALF_W; dz += 8) set(dx, 10, dz, luz);
-        // postes dos refletores nos 4 cantos
-        for (int sx = -1; sx <= 1; sx += 2) for (int sz = -1; sz <= 1; sz += 2) {
-            int px = sx * (HALF_L + 5), pz = sz * (HALF_W + 3);
-            for (int dy = 1; dy <= 9; dy++) set(px, dy, pz, conc(DyeColor.GRAY));
-            for (int ox = -1; ox <= 1; ox++) for (int oz = -1; oz <= 1; oz++)
-                set(px + ox, 10, pz + oz, Blocks.SEA_LANTERN.defaultBlockState());
-        }
+        stadium = new Stadium(this);
+        stadium.build(Roster.ATUAL[0], Roster.ATUAL[1]);
     }
 
     private static boolean linha(int dx, int dz) {

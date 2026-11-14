@@ -47,6 +47,17 @@ final class AutoTest {
                     FutebolMod.LOG.info(l.toString());
                 }
             }
+            if (System.getenv("FUTEBOL_TOURNEY") != null) {
+                CommandSourceStack src = srv.createCommandSourceStack();
+                if (ticks == 5) srv.getCommands().performPrefixedCommand(src, "futebol campeonato novo " + System.getenv("FUTEBOL_TOURNEY"));
+                if (ticks == 6) { srv.getCommands().performPrefixedCommand(src, "futebol campeonato jogar"); m = FutebolMod.match; m.halfLen = 600; m.start(); }
+                if (m.st == Match.St.FULLTIME && ticks > 100 && Tournament.atual != null) {
+                    if (Tournament.atual.isFinished()) { FutebolMod.LOG.info("AUTOTEST CAMPEONATO FIM"); srv.halt(false); }
+                    else { srv.getCommands().performPrefixedCommand(src, "futebol campeonato jogar"); m.halfLen = 600; m.start(); }
+                }
+                if (m.st == Match.St.PLAYING && ticks % 900 == 450 && m.rec.size() > 60 && !m.replaysAuto) m.startReplay(false, 6, 0.5);
+                return;
+            }
             if (ticks >= maxTicks) {
                 FutebolMod.LOG.info("EVENTOS " + m.ev + " histU=" + java.util.Arrays.toString(hist));
                 for (int t = 0; t < 2; t++) for (int i = 0; i < 11; i++) {
@@ -60,7 +71,23 @@ final class AutoTest {
         });
     }
 
+    static void slice(Match m) {
+        Pitch p = m.pitch;
+        net.minecraft.core.BlockPos.MutableBlockPos bp = new net.minecraft.core.BlockPos.MutableBlockPos();
+        for (int y = Stadium.ROOF + 3; y >= 0; y--) {
+            StringBuilder sb = new StringBuilder();
+            for (int dz = -Stadium.REACH_Z; dz <= Stadium.REACH_Z; dz++) {
+                var b = m.level.getBlockState(bp.set(p.bx + 0, p.gy + y, p.bz + dz)).getBlock();
+                String n = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(b).getPath();
+                char c = b == net.minecraft.world.level.block.Blocks.AIR ? '.' : n.contains("stairs") ? 's' : n.contains("glass") ? 'g' : n.contains("lantern") ? 'L' : n.contains("slab") ? '=' : '#';
+                sb.append(c);
+            }
+            FutebolMod.LOG.info("SLICE " + sb);
+        }
+    }
+
     static void dump(Match m) {
+        slice(m);
         Pitch p = m.pitch;
         net.minecraft.core.BlockPos.MutableBlockPos bp = new net.minecraft.core.BlockPos.MutableBlockPos();
         for (int dz = -Pitch.HALF_W - 5; dz <= Pitch.HALF_W + 5; dz++) {

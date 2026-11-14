@@ -49,6 +49,19 @@ public class FutebolMod implements ModInitializer {
 
         UseItemCallback.EVENT.register((player, level, hand) -> {
             ItemStack s = player.getItemInHand(hand);
+            String tk = Tickets.sectorOf(s);
+            if (tk != null) {
+                if (!level.isClientSide() && match != null && player instanceof ServerPlayer sp) Tickets.use(match, sp, tk);
+                return InteractionResult.SUCCESS;
+            }
+            if (isControle(s)) {
+                if (!level.isClientSide() && match != null && player instanceof ServerPlayer sp) {
+                    Cameras.Mode cur = match.cameras.modeOf(sp);
+                    if (player.isShiftKeyDown()) match.cameras.stop(sp);
+                    else { Cameras.Mode[] all = Cameras.Mode.values(); match.cameras.set(sp, all[cur == null ? 0 : (cur.ordinal() + 1) % all.length]); }
+                }
+                return InteractionResult.SUCCESS;
+            }
             if (!isGraveto(s)) return InteractionResult.PASS;
             if (level.isClientSide()) return InteractionResult.SUCCESS;
             if (match == null) { player.sendSystemMessage(Component.literal("§eUse §f/futebol ativar §epara montar o campo e os times.")); return InteractionResult.SUCCESS; }
@@ -87,6 +100,22 @@ public class FutebolMod implements ModInitializer {
         return s;
     }
 
+    public static ItemStack controle() {
+        ItemStack s = new ItemStack(Items.COMPASS);
+        s.set(DataComponents.CUSTOM_NAME, Component.literal("§b§l🎥 Controle de Câmeras"));
+        s.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
+        CompoundTag tag = new CompoundTag();
+        tag.putBoolean("futebol_controle", true);
+        s.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+        return s;
+    }
+
+    public static boolean isControle(ItemStack s) {
+        if (!s.is(Items.COMPASS)) return false;
+        CustomData cd = s.get(DataComponents.CUSTOM_DATA);
+        return cd != null && cd.copyTag().getBooleanOr("futebol_controle", false);
+    }
+
     public static boolean isGraveto(ItemStack s) {
         if (!s.is(Items.STICK)) return false;
         CustomData cd = s.get(DataComponents.CUSTOM_DATA);
@@ -116,6 +145,7 @@ public class FutebolMod implements ModInitializer {
             Pitch p = match.pitch;
             pl.teleportTo(level, p.cx(), p.surf(), p.cz() + Pitch.HALF_W + 2.6, java.util.Set.of(), 180f, 25f, false);
             pl.getInventory().add(graveto());
+            pl.getInventory().add(controle());
         }
         src.sendSuccess(() -> Component.literal("§a⚽ Campo montado! Os times estão em campo.\n§eClique com o botão direito com o §6Graveto do Árbitro §epara começar o jogo.\n§7Botão esquerdo na bola = chutar · Graveto num jogador = ver estatísticas · Graveto + agachar = reiniciar."), false);
         return 1;
@@ -142,6 +172,72 @@ public class FutebolMod implements ModInitializer {
                     c.getSource().sendSuccess(() -> Component.literal("§f" + cl.id() + " §7— " + cl.nome() + " (" + cl.pais() + ", " + cl.formation().charAt(0) + "-" + cl.formation().substring(1).replaceAll("(.)", "$1-").replaceAll("-$", "") + ") §e★" + overallClube(cl)), false);
                 return 1;
             }))
+
+            .then(Commands.literal("camera").then(Commands.argument("modo", StringArgumentType.word()).suggests((ctx, b) -> net.minecraft.commands.SharedSuggestionProvider.suggest(java.util.stream.Stream.concat(java.util.Arrays.stream(Cameras.Mode.values()).map(m -> m.id), java.util.stream.Stream.of("normal")), b)).executes(c -> {
+                if (match == null) { c.getSource().sendFailure(Component.literal("Use /futebol ativar primeiro.")); return 0; }
+                ServerPlayer pl = c.getSource().getPlayerOrException();
+                String id = StringArgumentType.getString(c, "modo");
+                if (id.equals("normal")) { match.cameras.stop(pl); return 1; }
+                Cameras.Mode m = Cameras.Mode.of(id);
+                if (m == null) { c.getSource().sendFailure(Component.literal("Câmeras: tv, tatica, gol, bola, jogador, drone, arquibancada, auto, normal")); return 0; }
+                match.cameras.set(pl, m);
+                return 1;
+            })))
+            .then(Commands.literal("controle").executes(c -> { c.getSource().getPlayerOrException().getInventory().add(controle()); return 1; }))
+            .then(Commands.literal("replay").executes(c -> replay(c.getSource(), 8)).then(Commands.argument("segundos", IntegerArgumentType.integer(3, 20)).executes(c -> replay(c.getSource(), IntegerArgumentType.getInteger(c, "segundos")))))
+            .then(Commands.literal("telao").then(Commands.argument("escala", com.mojang.brigadier.arguments.FloatArgumentType.floatArg(0.5f, 12f)).executes(c -> {
+                if (match == null) return 0;
+                match.screens.setScale(com.mojang.brigadier.arguments.FloatArgumentType.getFloat(c, "escala")); return 1;
+            })))
+            .then(Commands.literal("torcida").then(Commands.argument("quantidade", IntegerArgumentType.integer(0, 400)).executes(c -> {
+                if (match == null) return 0;
+                int n = IntegerArgumentType.getInteger(c, "quantidade"); match.crowdSize = n; match.crowd.fill(n);
+                c.getSource().sendSuccess(() -> Component.literal("§a" + match.crowd.count + " torcedores (Villagers) no estádio."), false);
+                return 1;
+            })))
+            .then(Commands.literal("torcer").then(Commands.argument("clube", StringArgumentType.word()).suggests(CLUBES).executes(c -> {
+                Club cl = Clubs.get(StringArgumentType.getString(c, "clube"));
+                if (cl == null) { c.getSource().sendFailure(Component.literal("Clube inválido. Use /futebol times.")); return 0; }
+                Tickets.torcer(c.getSource().getPlayerOrException(), cl); return 1;
+            })))
+            .then(Commands.literal("bilheteria").executes(c -> { c.getSource().sendSuccess(Tickets::bilheteria, false); return 1; }))
+            .then(Commands.literal("ingresso")
+                .then(Commands.literal("setores").executes(c -> {
+                    for (Tickets.Sector s : Tickets.SECTORS) c.getSource().sendSuccess(() -> Component.literal("§f" + s.id() + " §7— " + s.nome() + " §e" + s.preco() + " esmeralda(s) §8(" + s.desc() + ")"), false);
+                    return 1;
+                }))
+                .then(Commands.literal("comprar").then(Commands.argument("setor", StringArgumentType.word()).suggests((ctx, b) -> net.minecraft.commands.SharedSuggestionProvider.suggest(java.util.Arrays.stream(Tickets.SECTORS).map(Tickets.Sector::id), b)).executes(c -> {
+                    if (match == null) { c.getSource().sendFailure(Component.literal("Use /futebol ativar primeiro.")); return 0; }
+                    Tickets.Sector sec = Tickets.sector(StringArgumentType.getString(c, "setor"));
+                    if (sec == null) { c.getSource().sendFailure(Component.literal("Setor inválido. Use /futebol ingresso setores")); return 0; }
+                    return Tickets.buy(match, c.getSource().getPlayerOrException(), sec) ? 1 : 0;
+                }))))
+            .then(Commands.literal("campeonato")
+                .then(Commands.literal("novo").then(Commands.argument("tipo", StringArgumentType.word()).suggests((ctx, b) -> net.minecraft.commands.SharedSuggestionProvider.suggest(Tournament.PRESETS, b))
+                    .then(Commands.argument("meuClube", StringArgumentType.word()).suggests(CLUBES).executes(c -> {
+                        Club me = Clubs.get(StringArgumentType.getString(c, "meuClube"));
+                        Tournament t = me == null ? null : Tournament.preset(StringArgumentType.getString(c, "tipo"), me);
+                        if (t == null || !t.has(me)) { c.getSource().sendFailure(Component.literal("Tipo: premier, brasileirao ou champions — e seu clube precisa estar nele. (/futebol campeonato clubes <tipo>)")); return 0; }
+                        Tournament.atual = t;
+                        c.getSource().sendSuccess(() -> Component.literal("§6🏆 " + t.nome + " criado! Seu clube: §f" + me.nome() + "\n§aPróximo: §f" + t.next().home().nome() + " x " + t.next().away().nome() + " §7— use §e/futebol campeonato jogar"), true);
+                        return 1;
+                    }))))
+                .then(Commands.literal("tabela").executes(c -> {
+                    if (Tournament.atual == null) { c.getSource().sendFailure(Component.literal("Nenhum campeonato. Use /futebol campeonato novo <tipo> <clube>")); return 0; }
+                    Tournament t = Tournament.atual;
+                    c.getSource().sendSuccess(() -> Component.literal(t.copa ? "§6§l" + t.nome + " §7— " + t.resumo() : t.tabela()), false); return 1;
+                }))
+                .then(Commands.literal("cancelar").executes(c -> { Tournament.atual = null; return 1; }))
+                .then(Commands.literal("jogar").executes(c -> {
+                    Tournament t = Tournament.atual;
+                    if (t == null || t.isFinished()) { c.getSource().sendFailure(Component.literal("Nenhum campeonato em andamento.")); return 0; }
+                    Tournament.Fixture f = t.next();
+                    if (match == null) ativar(c.getSource(), f.home(), f.away()); else match.swapClubs(f.home(), f.away());
+                    match.onFinish = m -> t.liveFinished(m.level, m.score[0], m.score[1]);
+                    match.boardInfo = t.nome + " · " + t.resumo();
+                    c.getSource().sendSuccess(() -> Component.literal("§a⚽ " + f.home().nome() + " x " + f.away().nome() + " — clique com o graveto para começar."), false);
+                    return 1;
+                })))
             .then(Commands.literal("recarregar").executes(c -> { Clubs.load(); c.getSource().sendSuccess(() -> Component.literal("§a" + Clubs.ALL.size() + " clubes carregados."), false); return 1; }))
             .then(Commands.literal("desativar").executes(c -> {
                 if (match == null) { c.getSource().sendFailure(Component.literal("Nenhum campo ativo.")); return 0; }
@@ -188,6 +284,11 @@ public class FutebolMod implements ModInitializer {
     static final com.mojang.brigadier.suggestion.SuggestionProvider<CommandSourceStack> CLUBES = (ctx, b) -> net.minecraft.commands.SharedSuggestionProvider.suggest(Clubs.ALL.keySet(), b);
 
     static int overallClube(Club c) { int s = 0; for (Roster.Def d : c.defs()) s += d.st().overall(d.pos()); return s / 11; }
+
+    static int replay(CommandSourceStack src, int sec) {
+        if (match == null || !match.startReplay(false, sec, 0.5)) { src.sendFailure(Component.literal("Ainda não há lance para repetir.")); return 0; }
+        return 1;
+    }
 
     static void sendCard(ServerPlayer pl, FPlayer p) { pl.sendSystemMessage(card(p.team, p.def, Roster.ATUAL[p.team])); }
 
