@@ -168,6 +168,9 @@ export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {})
         getGL();
         renderFrame(ctx, project, t, width / project.width, { final: true });
       }
+      // espera a GPU terminar o quadro antes de entregar ao codificador: com efeitos pesados o codificador ficava
+      // esperando a placa, a fila enchia e o app achava que o codificador tinha travado (exportação falhava)
+      ctx.getImageData(0, 0, 1, 1);
       const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
       ui.preview?.(canvas);
       // o próximo quadro começa a ser lido do vídeo enquanto este é codificado
@@ -175,9 +178,11 @@ export async function exportMP4(store, { scale = 1, bitrate, fpsOverride } = {})
       venc.encode(frame, { keyFrame: i % (fps * 2) === 0 });
       frame.close();
       // codificador parado (acontece no iPhone com pouca memória): não espera para sempre — avisa e tenta o modo tempo real
-      for (const tq = performance.now(); venc.encodeQueueSize > 6 && !failure; ) {
+      // só é "travado" se a fila não andar nada por 30 s (antes: 15 s no total, mesmo andando devagar)
+      for (let tq = performance.now(), q0 = venc.encodeQueueSize; venc.encodeQueueSize > 6 && !failure; ) {
         await new Promise((r) => setTimeout(r, 2));
-        if (performance.now() - tq > 15000) { failure = new Error('o codificador de vídeo do aparelho parou de responder'); break; }
+        if (venc.encodeQueueSize < q0) { q0 = venc.encodeQueueSize; tq = performance.now(); }
+        if (performance.now() - tq > 30000) { failure = new Error('o codificador de vídeo do aparelho parou de responder'); break; }
       }
       {
         const el = (performance.now() - t0) / 1000;

@@ -27,6 +27,11 @@ const CANVAS_BUDGET = IOS_R ? 120e6 : 400e6;
 let frameNo = 0;
 function trimCanvases() {
   let total = 0;
+  // telas de camadas que não aparecem há ~10 s de quadros (prévias do painel de transições, camadas apagadas, outro
+  // trecho da timeline) são liberadas mesmo abaixo do limite — no iPhone cada MB conta
+  if (frameNo % 60 === 0) {
+    for (const [id, c] of contentCanvases) if ((c._used || 0) < frameNo - 300) { c.width = 0; c.height = 0; contentCanvases.delete(id); }
+  }
   for (const c of contentCanvases.values()) total += c.width * c.height * 4;
   if (total <= CANVAS_BUDGET) return;
   const old = [...contentCanvases.entries()].filter(([, c]) => c._used !== frameNo).sort((a, b) => (a[1]._used || 0) - (b[1]._used || 0));

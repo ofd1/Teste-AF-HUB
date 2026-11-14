@@ -509,6 +509,7 @@ async function buildCache(project, layer, { key: baseKey = cacheKey(layer) + '|f
   }
   // Sensitivity (Topaz): mais alto = considera duplicados também quadros quase iguais (0,9 ≈ sensibilidade 20)
   const dupThr = 0.15 + (dedupeOf(layer)?.sens ?? 20) * 0.0375;
+  const wantDup = !!dedupeOf(layer);
   if (win) { lo = Math.max(lo, win[0]); hi = Math.min(hi, win[1]); }
   const entry = { key, baseKey, win, fps, t0: 0, frames: [], dup: [], sigs: [], ready: false, progress: 0, cancelled: false, quiet: swap };
   if (swap) pendingCaches.set(layer.id, entry); else caches.set(layer.id, entry);
@@ -557,10 +558,14 @@ async function buildCache(project, layer, { key: baseKey = cacheKey(layer) + '|f
       c.width = w; c.height = h;
       c.getContext('2d').drawImage(src, 0, 0, w, h);
     }
-    // assinatura pequena do quadro: detecta quadros repetidos (vídeos baixados do TikTok/IG costumam ter)
-    const sig = frameSignature(c);
-    entry.dup.push(i > 0 && entry.sigs.length && sigDiff(sig, entry.sigs[entry.sigs.length - 1]) < dupThr);
-    entry.sigs.push(sig);
+    // assinatura pequena do quadro: detecta quadros repetidos (vídeos baixados do TikTok/IG costumam ter). Só com
+    // "Substituir quadros duplicados" ligado: ler a imagem de volta da GPU para cada quadro travava a tela por
+    // segundos enquanto o cache era montado (era 96% do tempo travado no play com Twixtor)
+    if (wantDup) {
+      const sig = frameSignature(c);
+      entry.dup.push(i > 0 && entry.sigs.length && sigDiff(sig, entry.sigs[entry.sigs.length - 1]) < dupThr);
+      entry.sigs.push(sig);
+    }
     entry.frames.push(c);
     entry.progress = (i + 1) / n;
     if (i % 6 === 0) cacheListener();

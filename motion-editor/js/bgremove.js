@@ -35,6 +35,7 @@ export function bgStatus(model = 1) {
 
 // cache de máscaras (mesmo quadro = mesma máscara) e máscara anterior por camada (suavização no tempo)
 const cache = new Map();
+const MASK_KEEP = typeof navigator !== 'undefined' && /iP(hone|ad|od)|Android/.test(navigator.userAgent) ? 24 : 90;
 const prev = new Map();
 const work = typeof document !== 'undefined' ? document.createElement('canvas') : null;
 
@@ -97,7 +98,8 @@ export function personMask(source, { model = 1, key, layerKey, t = 0, smooth = 0
   for (let i = 0; i < arr.length; i++) { const v = Math.max(0, Math.min(255, arr[i] * 255)); img.data[i * 4] = v; img.data[i * 4 + 1] = v; img.data[i * 4 + 2] = v; img.data[i * 4 + 3] = 255; }
   ctx.putImageData(img, 0, 0);
   cache.set(ck, c);
-  if (cache.size > 6) cache.delete(cache.keys().next().value);
+  // guarda mais máscaras (pequenas, ~320 px): pré-renderização, play e exportação reaproveitam em vez de rodar a IA de novo
+  if (cache.size > MASK_KEEP) { const k0 = cache.keys().next().value, old = cache.get(k0); cache.delete(k0); if (old) { old.width = 0; old.height = 0; } }
   return c;
 }
 
