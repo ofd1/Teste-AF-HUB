@@ -8,7 +8,7 @@ import { setBgListener, ensureBgModel, bgStatus } from './bgremove.js';
 import { setGLLostListener, glLost } from './gl.js';
 import { createEffectInstance, setPluginLookup, upgradeLayerEffects, applyPreset } from './presets.js';
 import { renderFrame, hitTest, layerCorners, forgetLayer } from './renderer.js';
-import { prepare, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, cacheVersion, detectFps, mediaReady, framesDrawable, liveVideoAt } from './media.js';
+import { prepare, prepareEpoch, pauseAll, setMediaListener, videoThumb, ensureCaches, setCacheListener, cacheStatus, cacheVersion, detectFps, mediaReady, framesDrawable, liveVideoAt } from './media.js';
 import { loadAudio, playAudio, stopAudio, detectBeats, pruneAudio } from './audio.js';
 import { valueAt, setValue, setKey, anim } from './anim.js';
 import { setThreeD } from './three-d.js';
@@ -60,8 +60,8 @@ const octx = overlay.getContext('2d');
 let dirty = true;
 // "Auto": nítido (resolução cheia) parado; tocando, a resolução se adapta ao que o aparelho aguenta
 // (mede o tempo de cada quadro: se passar do tempo do fps, reduz; se sobrar folga, aumenta)
-const PLAY_STEPS = [0.33, 0.4, 0.5, 0.6, 0.75, 0.9, 1];
-let playStep = 4, renderMs = 0, fastFrames = 0;
+const PLAY_STEPS = [0.2, 0.25, 0.33, 0.4, 0.5, 0.6, 0.75, 0.9, 1];
+let playStep = 6, renderMs = 0, fastFrames = 0;
 // Prévia leve (como CapCut/Alight Motion): nunca renderiza mais pixels do que a tela mostra, e tocando fica em até 720p.
 // A exportação não usa isto (sai sempre na resolução escolhida).
 let dispQ = 1;
@@ -121,6 +121,68 @@ function frameCacheGet(key) {
   frameCache.delete(key); frameCache.set(key, e); // mais recente
   return e.c;
 }
+// ---- Pré-renderização (RAM Preview do After Effects / prévia suave do CapCut):
+// com a prévia PARADA e você sem mexer, o app renderiza em segundo plano os próximos segundos a partir do cursor,
+// lendo o vídeo em ordem (leitor rápido da exportação) e guardando no cache de RAM na resolução de reprodução.
+// No play esses quadros tocam do cache: liso mesmo com efeitos pesados. Qualquer edição invalida e recomeça.
+const preQ = () => Math.min(dispQ, playCap());
+let preScale = 0; // resolução da pré-renderização (0 = a de reprodução; diminui sozinha se o projeto for pesado)
+const preKey = (fi) => `${fi}|${(preScale || preQ()).toFixed(3)}|pre`;
+const preBuf = document.createElement('canvas');
+const preCtx = preBuf.getContext('2d', { alpha: false });
+let preGen = 0, preRunning = false, preIdleT = 0, preAhead = 0, slowN = 0;
+const PRE_MAX_S = 30; // até 30 s à frente (o cache de RAM limita antes em aparelhos com pouca memória)
+function preStop() { preGen++; clearTimeout(preIdleT); preIdleT = setTimeout(preStart, 700); }
+function preIdle() { return !store.playing && !store.exporting && !window.__mfAnalyzing && document.visibilityState === 'visible' && performance.now() - lastEdit > 600 && !gesture; }
+async function preStart() {
+  if (preRunning || !preIdle() || !store.project?.layers?.length) return;
+  preRunning = true;
+  const gen = preGen;
+  try {
+    const P = viewProject(), fps = P.fps || 30, q = preScale || preQ();
+    const W = Math.max(2, Math.round(P.width * q)), H = Math.max(2, Math.round(P.height * q));
+    if (W * H * 4 * 3 > FRAME_CACHE_BUDGET) return;
+    const room = Math.floor((FRAME_CACHE_BUDGET * 0.8) / (W * H * 4));
+    if (preBuf.width !== W || preBuf.height !== H) { preBuf.width = W; preBuf.height = H; }
+    const f0 = Math.round(store.time * fps + 1e-6), fEnd = Math.min(Math.ceil(P.duration * fps) - 1, f0 + Math.min(room, PRE_MAX_S * fps));
+    for (let fi = f0; fi <= fEnd; fi++) {
+      if (gen !== preGen || !preIdle()) return;
+      preAhead = (fi - f0) / fps;
+      if (frameCache.has(preKey(fi))) continue;
+      const t = fi / fps;
+      let ok = false;
+      for (let tries = 0; tries < 2 && !ok; tries++) {
+        await prepare(P, t, { exact: true });
+        const ep = prepareEpoch();
+        if (gen !== preGen || !preIdle()) return;
+        const r0 = performance.now();
+        try {
+          renderFrame(preCtx, P, t, q, { exact: true });
+          preCtx.getImageData(0, 0, 1, 1); // espera a GPU terminar: o tempo medido é o custo real do quadro
+          ok = ep === prepareEpoch() && !glLost();
+        } catch { ok = false; }
+        // projeto pesado (remover fundo, Twixtor, Shatter…): cada quadro travaria a tela por muito tempo — renderiza a
+        // prévia numa resolução menor (como o ½/¼ do AE) e recomeça; a tela nunca fica presa mais que alguns décimos
+        const ms = performance.now() - r0;
+        slowN = ok && ms > 350 ? slowN + 1 : 0; // 2 quadros lentos seguidos (o 1º pode ser só o modelo/shader carregando)
+        if (slowN >= 2 && q > 0.2) { slowN = 0; preScale = Math.max(0.2, q * Math.sqrt(250 / ms)); clearTimeout(preIdleT); preIdleT = setTimeout(preStart, 50); return; }
+      }
+      if (ok && gen === preGen) frameCachePut(preKey(fi), preBuf);
+      if (fi % 5 === 0) prePill(fi - f0 + 1, fEnd - f0 + 1, fps);
+      await new Promise((r) => setTimeout(r, 0)); // deixa a interface respirar entre um quadro e outro
+    }
+    prePill(1, 1, fps, true);
+  } finally { preRunning = false; if (gen !== preGen) { clearTimeout(preIdleT); preIdleT = setTimeout(preStart, 700); } }
+}
+let prePillEl = null, prePillT = 0;
+function prePill(n, total, fps, doneAll = false) {
+  if (!prePillEl) { prePillEl = document.createElement('div'); prePillEl.className = 'cache-pill pre-pill'; stage.appendChild(prePillEl); }
+  clearTimeout(prePillT);
+  prePillEl.textContent = doneAll ? `Prévia pronta para tocar liso` : `Renderizando prévia… ${(n / fps).toFixed(1)} de ${(total / fps).toFixed(1)} s`;
+  prePillEl.classList.add('show');
+  prePillT = setTimeout(() => prePillEl.classList.remove('show'), doneAll ? 1500 : 4000);
+}
+for (const ev of ['pointerdown', 'keydown', 'wheel']) window.addEventListener(ev, () => { if (preRunning) preStop(); else { clearTimeout(preIdleT); preIdleT = setTimeout(preStart, 700); } }, { capture: true, passive: true });
 const DRAFT_MS = IOS_M || /Android|Mobi/i.test(navigator.userAgent) ? 45 : 110;
 let glLosses = 0, lastEdit = 0, hqMs = 0, hqTimer = 0, holdSince = 0;
 setGLLostListener(() => { glLosses++; dirty = true; frameCacheClear(); if (!setGLLostListener.warned) { setGLLostListener.warned = true; toast('A GPU do aparelho reiniciou; o app recuperou a prévia.', 'warn', 3500); } });
@@ -186,6 +248,7 @@ function drawOverlay() {
 
 let lastFrame = performance.now();
 let shownKey = ''; // quadro que está na tela agora (tempo|qualidade|modo)
+let liveN = 0; // quadros renderizados ao vivo tocando (amostragem do custo real com a GPU)
 const playClock = { t0: 0, wall0: 0, last: 0 };
 function loop(now) {
   lastFrame = now;
@@ -212,7 +275,9 @@ function loop(now) {
     const draftK = window.__mfAnalyzing ? 0.35 : !store.playing && qualitySel.value === 'auto' && interacting && hqMs > DRAFT_MS ? Math.max(0.3, Math.min(0.8, Math.sqrt((DRAFT_MS * 0.65) / hqMs))) : 1;
     const key = `${fi}|${quality}|${store.playing ? 'p' : 'hq'}`;
     const live = store.playing && liveVideoAt(viewProject(), fi / fps);
-    const cached = live ? null : (store.playing && frameCacheGet(`${fi}|${quality}|hq`)) || frameCacheGet(key);
+    // tocando: quadros já pré-renderizados (RAM preview) tocam do cache, mesmo com vídeo — liso como no AE
+    const pre = store.playing ? frameCacheGet(preKey(fi)) : null;
+    const cached = pre || (live ? null : (store.playing && frameCacheGet(`${fi}|${quality}|hq`)) || frameCacheGet(key));
     const tq = store.playing ? fi / fps : store.time;
     // tocando: a tela atualiza a 60–120 Hz, mas o projeto tem 24–60 quadros/s — o mesmo quadro era renderizado de
     // novo a cada atualização da tela (2 a 4 vezes). Agora só renderiza quando o quadro muda (ou algo foi editado).
@@ -244,7 +309,10 @@ function loop(now) {
           if (!store.playing) hqMs = hqMs ? hqMs * 0.5 + ms * 0.5 : ms;
           if (mediaReady(viewProject(), tt, store.playing)) frameCachePut(key, backBuf);
         }
-        adaptQuality(ms);
+        // tocando: o custo real inclui a GPU, que termina depois (em paralelo). A cada 8 quadros espera a GPU acabar
+        // para medir de verdade (senão a resolução adaptativa achava que estava leve e a prévia engasgava)
+        if (store.playing && ++liveN % 8 === 0) { backCtx.getImageData(0, 0, 1, 1); adaptQuality(performance.now() - r0); }
+        else if (!store.playing) adaptQuality(ms);
       } else setTimeout(() => { dirty = true; }, 60); // GPU caiu: mantém o último quadro bom e refaz este
     }
     drawOverlay();
@@ -295,6 +363,8 @@ store.on((kind) => {
   // tocando, o próprio loop avança o tempo a cada atualização da tela: quem decide se precisa de quadro novo é o
   // número do quadro (shownKey), senão o mesmo quadro era renderizado 2–4× (tela de 60–120 Hz, projeto de 30 fps)
   if (!(kind === 'time' && store.playing)) dirty = true;
+  if (!store.playing) preStop(); // mexeu (tempo, edição): para e recomeça do cursor quando ficar parado
+  if (kind === 'structure' || kind === 'change') preScale = 0; // projeto mudou: volta a tentar a resolução cheia
   if (kind !== 'time' && kind !== 'selection' && kind !== 'keys') frameCacheClear();
   if (kind !== 'selection' && !store.playing) lastEdit = performance.now();
   if (kind === 'structure' || kind === 'change') scheduleCaches();

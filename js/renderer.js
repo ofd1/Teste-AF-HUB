@@ -432,7 +432,7 @@ function renderLayerImage(layer, t, scale0, extra) {
 
   let W = Math.ceil(w * scale + pad * 2), H = Math.ceil(h * scale + pad * 2);
   if (!Number.isFinite(W) || !Number.isFinite(H) || W < 1 || H < 1) { W = Math.max(1, Math.ceil(w * scale) || 1); H = Math.max(1, Math.ceil(h * scale) || 1); }
-  let vf = layer.type === 'video' ? videoFrames(layer, lt, project?.fps || 30, renderOpts.final && !extra?.offTime) : null;
+  let vf = layer.type === 'video' ? videoFrames(layer, lt, project?.fps || 30, (renderOpts.final || renderOpts.exact) && !extra?.offTime) : null;
   // pré-comp: o conteúdo segue o tempo da pré-comp (mover/aparar/velocidade/Time Remap, como no AE)
   let gtA = t, gtB = t;
   if (layer.type === 'group') {
@@ -941,7 +941,8 @@ export function renderFrame(ctx, proj, t, scale = 1, opts = {}) {
   project = proj;
   exprContext.fps = proj.fps || 30; exprContext.W = proj.width; exprContext.H = proj.height;
   frameNo++;
-  renderOpts = { final: !!opts.final, hq: !!opts.hq };
+  // exact: quadros exatos do vídeo (lidos em ordem, como na exportação) mas com a qualidade leve da prévia — pré-renderização
+  renderOpts = { final: !!opts.final, hq: !!opts.hq, exact: !!opts.exact };
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
