@@ -439,7 +439,8 @@ export class GLEngine {
    * mas a pirâmide reduzida é feita uma vez só e a soma é ampliada uma vez só (Deep Glow: 6 desfoques → ~3× mais rápido).
    */
   blurSum(src, items) {
-    const lv = (sg) => { let k = 0; while (sg / (1 << k) > 8 && k < 4) k++; return k; };
+    // desfoques acima de 4 px já vão para a metade da resolução (antes 8 px): ~1,4× mais rápido, diferença ≤ 2–5/255
+    const lv = (sg) => { let k = 0; while (sg / (1 << k) > 4 && k < 4) k++; return k; };
     const plan = items.map(({ sigma, w }) => ({ sigma, w, k: sigma < 0.3 ? -1 : lv(sigma) }));
     const K = Math.max(0, ...plan.map((q) => q.k));
     const chain = [src];

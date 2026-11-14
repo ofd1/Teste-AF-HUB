@@ -229,7 +229,11 @@ function activeVideos(project, t) {
  * exact=true (exportação): busca o quadro exato e aguarda (await).
  * exact=false (prévia): reprodução nativa com playbackRate quando tocando; busca quando pausado.
  */
+let prepEpoch = 0;
+/** Conta as chamadas de prepare(): a pré-renderização confere se ninguém trocou os quadros enquanto ela esperava. */
+export const prepareEpoch = () => prepEpoch;
 export function prepare(project, t, { exact = false, playing = false } = {}) {
+  prepEpoch++;
   const jobs = [];
   const active = new Set(activeVideos(project, t).map(({ l }) => l.id));
   for (const [id, e] of videos) {

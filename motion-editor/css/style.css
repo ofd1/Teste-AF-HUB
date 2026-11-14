@@ -260,6 +260,7 @@ details { margin-top: 8px; } summary { cursor: pointer; color: var(--muted); }
 
 .cache-pill { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 5px 12px; border-radius: 99px; background: #000c; color: var(--key); font-size: 12px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .2s; }
 .cache-pill.show { opacity: 1; }
+.pre-pill { bottom: 38px; color: #7dffa8; }
 
 /* ---------- ajustes para iPhone / telas de toque ---------- */
 html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
