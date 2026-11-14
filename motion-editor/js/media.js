@@ -8,8 +8,21 @@ const videos = new Map(); // layerId -> { src, a: HTMLVideoElement, b: HTMLVideo
 let onChange = () => {};
 export function setMediaListener(fn) { onChange = fn; }
 
+// Renderização num Worker (exportação sem travar a tela): não há <img>/<video>. As imagens chegam prontas como
+// ImageBitmap e os vídeos são lidos pelo leitor sequencial (WebCodecs), que funciona no Worker.
+export const IN_WORKER = typeof document === 'undefined';
+const NO_IMG = { complete: false, naturalWidth: 0, naturalHeight: 0, width: 0, height: 0 };
+export function setWorkerMedia({ images: imgs = {}, blobs = {} } = {}) {
+  for (const [src, bm] of Object.entries(imgs)) {
+    try { Object.assign(bm, { naturalWidth: bm.width, naturalHeight: bm.height, complete: true }); } catch { /* ok */ }
+    images.set(src, bm);
+  }
+  for (const [src, b] of Object.entries(blobs)) blobOf.set(src, b);
+}
+
 export function getImage(src) {
   let img = images.get(src);
+  if (!img && IN_WORKER) return NO_IMG;
   if (!img) {
     img = new Image();
     img.decoding = 'async';
@@ -105,7 +118,11 @@ export function setExporting(b) {
   if (b) for (const m of [caches, pendingCaches]) for (const [id, c] of m) if (!c.ready) { c.cancelled = true; m.delete(id); }
 }
 
+// Worker: "vídeo" de mentira — os quadros vêm do leitor sequencial; nada aqui é usado para decodificar
+const stubVideo = () => ({ paused: true, seeking: false, readyState: 0, videoWidth: 0, videoHeight: 0, duration: 0, currentTime: 0, dataset: {},
+  pause() {}, play() { return Promise.resolve(); }, addEventListener() {}, removeEventListener() {}, removeAttribute() {}, load() {}, remove() {} });
 function makeVideo(src, playback = false) {
+  if (IN_WORKER) return stubVideo();
   const v = document.createElement('video');
   if (playback) allVideos.add(v);
   videoHost()?.appendChild(v);
@@ -275,6 +292,7 @@ export function prepare(project, t, { exact = false, playing = false } = {}) {
               c._rd = true; e.snaps.set(key, c); continue;
             }
           }
+          if (IN_WORKER) throw new Error('vídeo sem leitor WebCodecs no Worker');
           await seekExact(e.a, st, l.props.sourceFps || project.fps || 30);
           if (e.a.readyState < 2) continue;
           let c = null;

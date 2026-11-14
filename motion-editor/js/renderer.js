@@ -572,9 +572,9 @@ function drawSapphireTimeSlice(ctx, layer, t, scale, extra, p, m, fps) {
   const sOf = (rel) => (rel - off + N / 2) / N;        // inverso
   const P = (s) => { const q = smin + s * span; return [dx * q * scale, dy * q * scale]; }; // ponto (px do conteúdo) na posição s
   const cw = Math.max(1, Math.ceil(w * scale)), ch = Math.max(1, Math.ceil(h * scale));
-  const acc = document.createElement('canvas'); acc.width = cw; acc.height = ch;
+  const acc = makeCanvas(cw, ch);
   const ac = acc.getContext('2d');
-  const tmp = document.createElement('canvas'); tmp.width = cw; tmp.height = ch;
+  const tmp = makeCanvas(cw, ch);
   const tc = tmp.getContext('2d');
   const f0 = Math.floor(Math.min(relAt(0), relAt(1))) - (p.interp ? 1 : 0), f1 = Math.ceil(Math.max(relAt(0), relAt(1))) + (p.interp ? 1 : 0);
   for (let fr = f0; fr <= f1; fr++) {

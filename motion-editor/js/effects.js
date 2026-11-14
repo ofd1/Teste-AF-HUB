@@ -49,7 +49,7 @@ export function getEffectDef(type) {
 }
 
 let canvasFactory = (w, h) => {
-  const c = document.createElement('canvas');
+  const c = typeof document !== 'undefined' ? document.createElement('canvas') : new OffscreenCanvas(w, h); // Worker: OffscreenCanvas
   c.width = w; c.height = h;
   return c;
 };
