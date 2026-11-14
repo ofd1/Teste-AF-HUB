@@ -1365,9 +1365,14 @@ public final class Match {
                     - Math.max(0, d - 22 * Pitch.SL) * (0.6 - c.st().pas() * 0.004)
                     + (r.def.pos().linha == 3 ? 3 : 0) + (r.isGK() ? -8 : 0)
                     + rnd.nextGaussian() * (2.5 - c.st().vis() * 0.02);
-            if (r.giveGoTicks > 0 && r.giveGoTarget == c) s += 16;
+            if (r.giveGoTicks > 0 && r.giveGoTarget == c && prog > -3) s += 16;
             if (lane < 1.1 && d < 24 * Pitch.SL) s -= 14;                              // linha de passe bloqueada
-            if (press >= 2 && prog < 0) s += 3; else if (prog < -2 && !safe) s -= 2.5;                              // sob pressão aceita recuar
+            if (prog < 0 && cu > 24 && !safe) {                           // no ataque não se recua a bola sem pressão forte
+                if (press < 3 && prog < -6) continue;
+                s -= 14 + (-prog) * 0.8;
+            } else if (press >= 3 && prog < 0) s += 2;
+            else if (prog < -2 && !safe) s -= 4;
+            if (prog > 3 && !safe) s += 2.5;                              // sob pressão aceita recuar
             if (s > bs) { bs = s; best = r; }
         }
         lastPassScore = bs;
@@ -1415,6 +1420,8 @@ public final class Match {
             kickLob(c, tg.x, tg.z, 24, 4);
             return;
         }
+        double passU = r != null ? U(c.team, r.pos().x) : 0;
+        if (r != null && passU < u - 1 && u > 28 && press < 3) passScore -= 12;             // recuo no ataque: só se não houver nada melhor
         if (r != null && passScore > carryScore - 3 + (c.ctrlTicks > 40 ? 9 : 0)) {
             carrier = null;
             double d = hd(c.pos(), r.pos());
